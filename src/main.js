@@ -118,6 +118,18 @@ function init() {
       e.preventDefault();
       viewer.selectAll();
     }
+    if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      viewer.undo();
+    }
+    if ((e.key === 'c' || e.key === 'C') && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      viewer.copySelected();
+    }
+    if ((e.key === 'v' || e.key === 'V') && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      viewer.paste();
+    }
   });
   
   const transformBtns = [moveBtn, rotateBtn, scaleBtn];
@@ -264,6 +276,27 @@ function init() {
 
   // Layer preview slider
   layerSlider.addEventListener('input', showLayer);
+
+  // Load default model
+  loadDefaultModel();
+}
+
+async function loadDefaultModel() {
+  try {
+    const response = await fetch(import.meta.env.BASE_URL + 'models/d20v2_thick.stl');
+    if (!response.ok) return;
+    const buffer = await response.arrayBuffer();
+    viewer.loadSTL(buffer, 2);
+    orientationPanel.hidden = false;
+    supportsPanel.hidden = false;
+    slicePanel.hidden = false;
+    layerPreviewPanel.hidden = true;
+    exportBtn.hidden = true;
+    slicedLayers = null;
+    updateEstimate();
+  } catch (e) {
+    console.warn('Could not load default model:', e);
+  }
 }
 
 // --- File loading ---

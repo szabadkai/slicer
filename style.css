@@ -102,7 +102,7 @@ body {
 #left-toolbar {
   position: absolute;
   left: 16px;
-  top: 16px;
+  top: 60px;
   width: auto;
   background: transparent;
   border: none;
@@ -195,7 +195,7 @@ body {
 
 #summary-panel {
   bottom: 24px;
-  left: 24px;
+  left: 90px;
   min-width: 260px;
   padding: 16px;
   border-radius: 8px;

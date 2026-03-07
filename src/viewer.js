@@ -11,6 +11,9 @@ export class Viewer {
     this.selected = [];
     this.printer = null;
     this.gridGroup = null;
+    this.undoStack = [];
+    this.clipboard = [];
+    this.MAX_UNDO = 30;
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xf0f2f5);
@@ -250,9 +253,12 @@ export class Viewer {
     this.renderer.render(this.scene, this.camera);
   }
 
-  loadSTL(buffer) {
+  loadSTL(buffer, scale = 1) {
     const loader = new STLLoader();
     const geometry = loader.parse(buffer);
+    if (scale !== 1) {
+      geometry.scale(scale, scale, scale);
+    }
     geometry.computeBoundingBox();
     geometry.computeVertexNormals();
 
@@ -302,6 +308,7 @@ export class Viewer {
 
   removeSelected() {
     if (this.selected.length === 0) return;
+    this._saveUndoState();
     this.transformControl.detach();
     const selectedIds = new Set(this.selected.map(s => s.id));
     this.objects.forEach(o => {
@@ -323,6 +330,8 @@ export class Viewer {
   }
 
   clearPlate() {
+    if (this.objects.length === 0) return;
+    this._saveUndoState();
     this.transformControl.detach();
     this.objects.forEach(o => {
       this.scene.remove(o.mesh);
@@ -342,6 +351,7 @@ export class Viewer {
 
   duplicateSelected() {
     if (this.selected.length === 0) return;
+    this._saveUndoState();
     this._bakeTransform();
     
     const newSelected = [];
@@ -505,8 +515,90 @@ export class Viewer {
     this.canvas.dispatchEvent(new CustomEvent('mesh-changed'));
   }
 
+  _saveUndoState() {
+    const snapshot = this.objects.map(o => ({
+      geometry: o.mesh.geometry.clone(),
+      material: o.mesh.material.clone(),
+      position: o.mesh.position.clone(),
+      rotation: o.mesh.rotation.clone(),
+      scale: o.mesh.scale.clone(),
+      elevation: o.elevation,
+    }));
+    this.undoStack.push(snapshot);
+    if (this.undoStack.length > this.MAX_UNDO) {
+      this.undoStack.shift();
+    }
+  }
+
+  undo() {
+    if (this.undoStack.length === 0) return;
+    const snapshot = this.undoStack.pop();
+
+    // Clear current scene
+    this.transformControl.detach();
+    this.objects.forEach(o => {
+      this.scene.remove(o.mesh);
+      o.mesh.geometry.dispose();
+      o.mesh.material.dispose();
+      if (o.supportsMesh) {
+        this.scene.remove(o.supportsMesh);
+        o.supportsMesh.geometry.dispose();
+        o.supportsMesh.material.dispose();
+      }
+    });
+    this.objects = [];
+    this.selected = [];
+
+    // Restore from snapshot
+    snapshot.forEach(s => {
+      const mesh = new THREE.Mesh(s.geometry, s.material);
+      mesh.position.copy(s.position);
+      mesh.rotation.copy(s.rotation);
+      mesh.scale.copy(s.scale);
+      const id = 'obj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+      mesh.userData.id = id;
+      this.scene.add(mesh);
+      this.objects.push({ id, mesh, supportsMesh: null, elevation: s.elevation });
+    });
+
+    this.canvas.dispatchEvent(new CustomEvent('selection-changed'));
+    this.canvas.dispatchEvent(new CustomEvent('mesh-changed'));
+  }
+
+  copySelected() {
+    if (this.selected.length === 0) return;
+    this.clipboard = this.selected.map(sel => ({
+      geometry: sel.mesh.geometry.clone(),
+      material: sel.mesh.material.clone(),
+      position: sel.mesh.position.clone(),
+      elevation: sel.elevation,
+    }));
+  }
+
+  paste() {
+    if (this.clipboard.length === 0) return;
+    this._saveUndoState();
+    const newSelected = [];
+    this.clipboard.forEach(item => {
+      const geo = item.geometry.clone();
+      const mat = item.material.clone();
+      const obj = this._addModelRaw(geo, mat, item.elevation);
+      obj.mesh.position.copy(item.position);
+      obj.mesh.position.x += 10;
+      obj.mesh.position.z += 10;
+      obj.mesh.updateMatrixWorld();
+      newSelected.push(obj);
+    });
+    this.selected = newSelected;
+    this._attachTransformControls();
+    this._updateSelectionVisuals();
+    this.canvas.dispatchEvent(new CustomEvent('selection-changed'));
+    this.canvas.dispatchEvent(new CustomEvent('mesh-changed'));
+  }
+
   fillPlatform() {
     if (this.selected.length !== 1) return false;
+    this._saveUndoState();
     this._bakeTransform();
     
     const sel = this.selected[0];
