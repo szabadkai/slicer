@@ -101,6 +101,24 @@ function init() {
   const rotateBtn = document.getElementById('rotate-btn');
   const scaleBtn = document.getElementById('scale-btn');
   const fillBtn = document.getElementById('fill-btn');
+  const duplicateBtn = document.getElementById('duplicate-btn');
+  const deleteBtn = document.getElementById('delete-btn');
+  const clearBtn = document.getElementById('clear-btn');
+  
+  duplicateBtn.addEventListener('click', () => viewer.duplicateSelected());
+  deleteBtn.addEventListener('click', () => viewer.removeSelected());
+  clearBtn.addEventListener('click', () => viewer.clearPlate());
+  
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      viewer.removeSelected();
+    }
+    if ((e.key === 'a' || e.key === 'A') && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      viewer.selectAll();
+    }
+  });
   
   const transformBtns = [moveBtn, rotateBtn, scaleBtn];
 
@@ -127,17 +145,72 @@ function init() {
     }
   });
 
-  canvas.addEventListener('mesh-changed', () => {
-    const info = viewer.getModelInfo();
-    if (info) {
-      modelInfo.textContent =
-        `${info.triangles.toLocaleString()} triangles | ${info.width} x ${info.depth} x ${info.height} mm`;
+  canvas.addEventListener('selection-changed', () => {
+    const singleSelected = viewer.selected.length === 1;
+    const hasSelection = viewer.selected.length > 0;
+    
+    // Visually toggle tools
+    [document.getElementById('orient-btn'), document.getElementById('support-tool-btn'),
+     document.getElementById('move-btn'), document.getElementById('rotate-btn'),
+     document.getElementById('scale-btn'), document.getElementById('fill-btn')].forEach(btn => {
+       if (btn) btn.style.opacity = singleSelected ? '1' : '0.3';
+       if (btn) btn.style.pointerEvents = singleSelected ? 'auto' : 'none';
+     });
+
+    [document.getElementById('duplicate-btn'), document.getElementById('delete-btn')].forEach(btn => {
+       if (btn) btn.style.opacity = hasSelection ? '1' : '0.3';
+       if (btn) btn.style.pointerEvents = hasSelection ? 'auto' : 'none';
+    });
+     
+    [orientationPanel, supportsPanel].forEach(o => {
+        if (!singleSelected) o.hidden = true;
+    });
+    
+    if (singleSelected) {
+        zElevationInput.value = viewer.selected[0].elevation;
+    }
+    
+    updateWorkspaceInfo();
+  });
+  
+  function updateWorkspaceInfo() {
+    const info = viewer.getOverallInfo();
+    const clearBtn = document.getElementById('clear-btn');
+    if (clearBtn) {
+       const hasObjs = viewer.objects.length > 0;
+       clearBtn.style.opacity = hasObjs ? '1' : '0.3';
+       clearBtn.style.pointerEvents = hasObjs ? 'auto' : 'none';
+    }
+
+    if (info && info.count > 0) {
+      if (viewer.selected.length === 1) {
+         modelInfo.innerHTML = `<b>Selected (1 of ${info.count}):</b> <br/>` + 
+           `${(viewer.selected[0].mesh.geometry.attributes.position.count / 3).toLocaleString()} tris`;
+      } else if (viewer.selected.length > 1) {
+         let subTris = 0;
+         viewer.selected.forEach(s => subTris += s.mesh.geometry.attributes.position.count / 3);
+         modelInfo.innerHTML = `<b>Selected (${viewer.selected.length} of ${info.count}):</b> <br/>` + 
+           `${subTris.toLocaleString()} tris`;
+        modelInfo.classList.add('visible');
+      } else {
+         modelInfo.innerHTML = `<b>Entire Plate (${info.count} items):</b> <br/>` + 
+           `${info.triangles.toLocaleString()} tris | ${info.width}x${info.depth}x${info.height} mm`;
+         modelInfo.classList.add('visible');
+      }
       updateEstimate();
       slicedLayers = null;
       exportBtn.hidden = true;
       layerPreviewPanel.hidden = true;
+    } else {
+      modelInfo.classList.remove('visible');
+      printEstimate.innerHTML = '';
+      slicedLayers = null;
+      exportBtn.hidden = true;
+      layerPreviewPanel.hidden = true;
     }
-  });
+  }
+
+  canvas.addEventListener('mesh-changed', updateWorkspaceInfo);
   
   // Toggle panels logically
   orientBtn.addEventListener('click', () => {
@@ -206,12 +279,9 @@ function handleFileLoad(e) {
     // Yield to allow UI to paint
     setTimeout(() => {
       const buffer = evt.target.result;
-      const info = viewer.loadSTL(buffer);
+      viewer.loadSTL(buffer);
 
-      if (info) {
-        modelInfo.textContent =
-          `${info.triangles.toLocaleString()} triangles | ${info.width} x ${info.depth} x ${info.height} mm`;
-
+      if (true) {
         // Show all panels
         orientationPanel.hidden = false;
         supportsPanel.hidden = false;
@@ -284,24 +354,21 @@ async function handleGenerateSupports() {
 
 // --- Slicing ---
 async function handleSlice() {
-  const geometry = viewer.getModelGeometry();
-  if (!geometry) return;
-
   const layerHeight = parseFloat(layerHeightInput.value);
-  const supportsMesh = viewer.getSupportsMesh();
-  const supportsGeo = supportsMesh ? supportsMesh.geometry : null;
 
-  showProgress('Uploading geometry...');
+  showProgress('Merging & Uploading geometry...');
   await new Promise(r => setTimeout(r, 50));
 
-  slicer.uploadGeometry(geometry, supportsGeo);
-
-  const modelMesh = viewer.getModelMesh();
-  if (modelMesh && modelMesh.isInstancedMesh) {
-    slicer.setInstances(modelMesh.count, modelMesh.instanceMatrix.array);
-  } else {
-    slicer.setInstances(0, null);
+  const mergedModelGeo = viewer.getMergedModelGeometry();
+  const mergedSupportGeo = viewer.getMergedSupportGeometry();
+  
+  if (!mergedModelGeo) {
+      hideProgress();
+      return;
   }
+
+  slicer.uploadGeometry(mergedModelGeo, mergedSupportGeo);
+  slicer.setInstances(0, null);
 
   showProgress('Slicing...');
   await new Promise(r => setTimeout(r, 50));
@@ -385,22 +452,21 @@ function getSettings() {
 }
 
 function updateEstimate() {
-  const geometry = viewer.getModelGeometry();
-  if (!geometry) {
+  const info = viewer.getOverallInfo();
+  if (!info || info.count === 0) {
     printEstimate.textContent = '';
     return;
   }
 
   const settings = getSettings();
-  const bb = geometry.boundingBox;
-  const modelHeight = Math.max(0, bb.max.y); // Printer starts at Y=0
+  const modelHeight = parseFloat(info.height);
   const layerCount = Math.ceil(modelHeight / settings.layerHeight);
-  const { hours, minutes } = estimatePrintTime(layerCount, settings);
+  const estimate = estimatePrintTime(layerCount, settings);
 
   printEstimate.innerHTML =
-    `Layers: ${layerCount}<br>` +
-    `Height: ${modelHeight.toFixed(1)} mm<br>` +
-    `Est. time: ${hours}h ${minutes}m`;
+    `<div class="estimate-row"><span class="estimate-label">Layers</span><span class="estimate-value">${layerCount}</span></div>` +
+    `<div class="estimate-row"><span class="estimate-label">Height</span><span class="estimate-value">${modelHeight.toFixed(1)} mm</span></div>` +
+    `<div class="estimate-row"><span class="estimate-label">Total Time</span><span class="estimate-value">${estimate.hours}h ${estimate.minutes}m</span></div>`;
 }
 
 // --- Progress UI ---

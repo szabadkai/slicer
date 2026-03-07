@@ -7,14 +7,13 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 export class Viewer {
   constructor(canvas) {
     this.canvas = canvas;
-    this.modelMesh = null;
-    this.supportsMesh = null;
-    this.elevation = 5;
+    this.objects = [];
+    this.selected = [];
     this.printer = null;
     this.gridGroup = null;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xe9ecef);
+    this.scene.background = new THREE.Color(0xf0f2f5);
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
@@ -34,11 +33,112 @@ export class Viewer {
     });
     this.scene.add(this.transformControl.getHelper());
 
+    this.raycaster = new THREE.Raycaster();
+    this.pointerDown = new THREE.Vector2();
+    this.canvas.addEventListener('pointerdown', (e) => {
+      this.pointerDown.set(e.clientX, e.clientY);
+    });
+    this.canvas.addEventListener('pointerup', (e) => {
+      const dist = Math.hypot(e.clientX - this.pointerDown.x, e.clientY - this.pointerDown.y);
+      if (dist < 5 && !this.transformControl.dragging) {
+        this._onClick(e);
+      }
+    });
+
     this._setupLights();
     this._setupGrid();
     this._resize();
     window.addEventListener('resize', () => this._resize());
     this._animate();
+  }
+
+  _onClick(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    this.raycaster.setFromCamera({x, y}, this.camera);
+    const meshes = this.objects.map(o => o.mesh);
+    const intersects = this.raycaster.intersectObjects(meshes, false);
+
+    const multi = e.shiftKey || e.ctrlKey || e.metaKey;
+
+    if (intersects.length > 0) {
+      const id = intersects[0].object.userData.id;
+      if (multi) {
+        this.toggleSelection(id);
+      } else {
+        this.selectObject(id);
+      }
+    } else {
+      if (!multi) {
+        this.clearSelection();
+      }
+    }
+  }
+
+  clearSelection() {
+    this.selected = [];
+    this._attachTransformControls();
+    this._updateSelectionVisuals();
+    this.canvas.dispatchEvent(new CustomEvent('selection-changed'));
+  }
+
+  toggleSelection(id) {
+    const idx = this.selected.findIndex(o => o.id === id);
+    if (idx !== -1) {
+      this.selected.splice(idx, 1);
+    } else {
+      const obj = this.objects.find(o => o.id === id);
+      if (obj) this.selected.push(obj);
+    }
+    this._attachTransformControls();
+    this._updateSelectionVisuals();
+    this.canvas.dispatchEvent(new CustomEvent('selection-changed'));
+  }
+
+  selectObject(id) {
+    if (!id) {
+      this.clearSelection();
+      return;
+    }
+    const obj = this.objects.find(o => o.id === id);
+    if (obj) {
+      this.selected = [obj];
+    } else {
+      this.selected = [];
+    }
+    this._attachTransformControls();
+    this._updateSelectionVisuals();
+    this.canvas.dispatchEvent(new CustomEvent('selection-changed'));
+  }
+
+  selectAll() {
+    this.selected = [...this.objects];
+    this._attachTransformControls();
+    this._updateSelectionVisuals();
+    this.canvas.dispatchEvent(new CustomEvent('selection-changed'));
+  }
+
+  _attachTransformControls() {
+    if (this.selected.length === 1) {
+      this.transformControl.attach(this.selected[0].mesh);
+      if (!this.transformControl.getMode()) {
+        this.transformControl.setMode('translate');
+      }
+    } else {
+      this.transformControl.detach();
+    }
+  }
+
+  _updateSelectionVisuals() {
+    const selectedIds = new Set(this.selected.map(o => o.id));
+    this.objects.forEach(o => {
+      if (selectedIds.has(o.id)) {
+         o.mesh.material.emissive.setHex(0x333333);
+      } else {
+         o.mesh.material.emissive.setHex(0x000000);
+      }
+    });
   }
 
   _setupLights() {
@@ -55,7 +155,7 @@ export class Viewer {
     this.printer = spec;
     this._setupGrid();
     
-    if (!this.modelMesh) {
+    if (this.objects.length === 0) {
       const maxDim = Math.max(spec.buildWidthMM, spec.buildHeightMM, spec.buildDepthMM);
       this.camera.position.set(maxDim * 0.8, maxDim * 0.8, maxDim * 0.8);
       this.controls.target.set(0, spec.buildHeightMM / 2, 0);
@@ -81,7 +181,6 @@ export class Viewer {
     const d = this.printer.buildDepthMM;
     const h = this.printer.buildHeightMM;
 
-    // Solid Build Plate underneath (Y < 0)
     const plateThickness = 1;
     const plateGeo = new THREE.BoxGeometry(w, plateThickness, d);
     const plateMat = new THREE.MeshPhongMaterial({ color: 0xffffff, specular: 0x111111, shininess: 5 });
@@ -89,7 +188,6 @@ export class Viewer {
     plateMesh.position.y = -plateThickness / 2;
     this.gridGroup.add(plateMesh);
 
-    // High resolution grid on top
     const lines = [];
     const colors = [];
     const colorMajor = new THREE.Color(0x666666);
@@ -119,23 +217,20 @@ export class Viewer {
     const gridGeo = new THREE.BufferGeometry();
     gridGeo.setAttribute('position', new THREE.Float32BufferAttribute(lines, 3));
     gridGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    gridGeo.translate(0, 0.01, 0); // Offset to avoid Z-fighting
+    gridGeo.translate(0, 0.01, 0);
     
     const gridMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.7 });
     const gridLines = new THREE.LineSegments(gridGeo, gridMat);
     this.gridGroup.add(gridLines);
 
-    // Build volume (Preform style)
     const volGeo = new THREE.BoxGeometry(w, h, d);
     volGeo.translate(0, h / 2, 0);
     
-    // Transparent volume is usually not visible or very very faint
     const volMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.1, depthWrite: false });
     const volMesh = new THREE.Mesh(volGeo, volMat);
     this.gridGroup.add(volMesh);
     
     const edges = new THREE.EdgesGeometry(volGeo);
-    // Dark grey wires for the bounding box
     const volLines = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x888888, transparent: true, opacity: 0.4 }));
     this.gridGroup.add(volLines);
   }
@@ -161,79 +256,170 @@ export class Viewer {
     geometry.computeBoundingBox();
     geometry.computeVertexNormals();
 
-    // Center on build plate, sitting on Y = elevation
+    const defaultElevation = 5;
     const bb = geometry.boundingBox;
     const center = new THREE.Vector3();
     bb.getCenter(center);
-    geometry.translate(-center.x, -bb.min.y + this.elevation, -center.z);
-
-    // Recompute after centering
+    geometry.translate(-center.x, -bb.min.y + defaultElevation, -center.z);
     geometry.computeBoundingBox();
 
-    this.setModelGeometry(geometry);
-    
-    // Fit camera
-    const size = new THREE.Vector3();
-    geometry.boundingBox.getSize(size);
-    const maxDim = Math.max(size.x, size.y, size.z);
-    this.camera.position.set(maxDim, maxDim * 0.8, maxDim);
-    this.controls.target.set(0, size.y / 2, 0);
-    this.controls.update();
+    this.addModel(geometry, defaultElevation);
 
-    return this.getModelInfo();
+    if (this.objects.length === 1) {
+        const size = new THREE.Vector3();
+        geometry.boundingBox.getSize(size);
+        const maxDim = Math.max(size.x, size.y, size.z);
+        this.camera.position.set(maxDim, maxDim * 0.8, maxDim);
+        this.controls.target.set(0, size.y / 2, 0);
+        this.controls.update();
+    }
   }
 
-  setModelGeometry(geometry) {
-    if (this.modelMesh) {
-      if (this.transformControl.object === this.modelMesh) {
-        this.transformControl.detach();
-      }
-      this.scene.remove(this.modelMesh);
-      this.modelMesh.geometry.dispose();
-      this.modelMesh.material.dispose();
+  _addModelRaw(geometry, material, elevation) {
+    if (!material) {
+      material = new THREE.MeshPhongMaterial({
+        color: 0x444444,
+        specular: 0x222222,
+        shininess: 30,
+        flatShading: false,
+      });
     }
+    const mesh = new THREE.Mesh(geometry, material);
+    const id = 'obj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    mesh.userData.id = id;
+    this.scene.add(mesh);
+    const obj = { id, mesh, supportsMesh: null, elevation };
+    this.objects.push(obj);
+    return obj;
+  }
 
-    const material = new THREE.MeshPhongMaterial({
-      color: 0x444444, // Preform dark grey
-      specular: 0x222222,
-      shininess: 30,
-      flatShading: false,
+  addModel(geometry, elevation = 5) {
+    const obj = this._addModelRaw(geometry, null, elevation);
+    this.selectObject(obj.id);
+    this.canvas.dispatchEvent(new CustomEvent('mesh-changed'));
+    return obj;
+  }
+
+  removeSelected() {
+    if (this.selected.length === 0) return;
+    this.transformControl.detach();
+    const selectedIds = new Set(this.selected.map(s => s.id));
+    this.objects.forEach(o => {
+      if (selectedIds.has(o.id)) {
+        this.scene.remove(o.mesh);
+        o.mesh.geometry.dispose();
+        o.mesh.material.dispose();
+        if (o.supportsMesh) {
+          this.scene.remove(o.supportsMesh);
+          o.supportsMesh.geometry.dispose();
+          o.supportsMesh.material.dispose();
+        }
+      }
     });
-
-    this.modelMesh = new THREE.Mesh(geometry, material);
-    this.scene.add(this.modelMesh);
-
-    this.clearSupports();
+    this.objects = this.objects.filter(o => !selectedIds.has(o.id));
+    this.selected = [];
+    this.canvas.dispatchEvent(new CustomEvent('selection-changed'));
     this.canvas.dispatchEvent(new CustomEvent('mesh-changed'));
   }
 
-  getModelInfo() {
-    if (!this.modelMesh) return null;
-    const bb = this.modelMesh.geometry.boundingBox;
+  clearPlate() {
+    this.transformControl.detach();
+    this.objects.forEach(o => {
+      this.scene.remove(o.mesh);
+      o.mesh.geometry.dispose();
+      o.mesh.material.dispose();
+      if (o.supportsMesh) {
+        this.scene.remove(o.supportsMesh);
+        o.supportsMesh.geometry.dispose();
+        o.supportsMesh.material.dispose();
+      }
+    });
+    this.objects = [];
+    this.selected = [];
+    this.canvas.dispatchEvent(new CustomEvent('selection-changed'));
+    this.canvas.dispatchEvent(new CustomEvent('mesh-changed'));
+  }
+
+  duplicateSelected() {
+    if (this.selected.length === 0) return;
+    this._bakeTransform();
+    
+    const newSelected = [];
+    this.selected.forEach(sel => {
+      const newObj = this._addModelRaw(sel.mesh.geometry, sel.mesh.material, sel.elevation);
+      newObj.mesh.position.copy(sel.mesh.position);
+      newObj.mesh.position.x += 10;
+      newObj.mesh.position.z += 10;
+      newObj.mesh.updateMatrixWorld();
+      newSelected.push(newObj);
+    });
+    this.selected = newSelected;
+    this._attachTransformControls();
+    this._updateSelectionVisuals();
+    this.canvas.dispatchEvent(new CustomEvent('selection-changed'));
+    this.canvas.dispatchEvent(new CustomEvent('mesh-changed'));
+  }
+
+  getOverallInfo() {
+    if (this.objects.length === 0) return null;
+    let tris = 0;
+    const bb = new THREE.Box3();
+    this.objects.forEach(o => {
+        tris += o.mesh.geometry.attributes.position.count / 3;
+        o.mesh.updateMatrixWorld();
+        const obb = o.mesh.geometry.boundingBox.clone();
+        obb.applyMatrix4(o.mesh.matrixWorld);
+        bb.union(obb);
+    });
     const size = new THREE.Vector3();
     bb.getSize(size);
-    let triCount = this.modelMesh.geometry.attributes.position.count / 3;
-    if (this.modelMesh.isInstancedMesh) {
-      triCount *= this.modelMesh.count;
-    }
     return {
-      triangles: triCount,
-      width: size.x.toFixed(1),
-      height: size.y.toFixed(1),
-      depth: size.z.toFixed(1),
-      boundingBox: bb,
+        triangles: tris,
+        width: size.x.toFixed(1),
+        height: size.y.toFixed(1),
+        depth: size.z.toFixed(1),
+        count: this.objects.length
     };
   }
 
   getModelGeometry() {
-    return this.modelMesh ? this.modelMesh.geometry : null;
+    return this.selected.length === 1 ? this.selected[0].mesh.geometry : null;
   }
 
   getModelMesh() {
-    return this.modelMesh;
+    return this.selected.length === 1 ? this.selected[0].mesh : null;
+  }
+
+  getMergedModelGeometry() {
+    if (this.objects.length === 0) return null;
+    const geos = [];
+    this.objects.forEach(o => {
+      const g = o.mesh.geometry.clone();
+      o.mesh.updateMatrix();
+      g.applyMatrix4(o.mesh.matrix);
+      geos.push(g);
+    });
+    if(geos.length === 1) return geos[0];
+    return BufferGeometryUtils.mergeGeometries(geos, false);
+  }
+
+  getMergedSupportGeometry() {
+    const geos = [];
+    this.objects.forEach(o => {
+      if (o.supportsMesh) {
+        const g = o.supportsMesh.geometry.clone();
+        o.supportsMesh.updateMatrix();
+        g.applyMatrix4(o.supportsMesh.matrix);
+        geos.push(g);
+      }
+    });
+    if(geos.length === 0) return null;
+    if(geos.length === 1) return geos[0];
+    return BufferGeometryUtils.mergeGeometries(geos, false);
   }
 
   setSupports(supportGeometry) {
+    if (this.selected.length !== 1) return;
     this.clearSupports();
     const material = new THREE.MeshPhongMaterial({
       color: 0x777777,
@@ -243,51 +429,48 @@ export class Viewer {
       opacity: 0.8,
     });
 
-    if (this.modelMesh && this.modelMesh.isInstancedMesh) {
-      this.supportsMesh = new THREE.InstancedMesh(supportGeometry, material, this.modelMesh.count);
-      this.supportsMesh.instanceMatrix.copy(this.modelMesh.instanceMatrix);
-      this.supportsMesh.instanceMatrix.needsUpdate = true;
-    } else {
-      this.supportsMesh = new THREE.Mesh(supportGeometry, material);
-    }
-
-    this.scene.add(this.supportsMesh);
+    const mesh = new THREE.Mesh(supportGeometry, material);
+    this.selected[0].supportsMesh = mesh;
+    this.scene.add(mesh);
   }
 
   clearSupports() {
-    if (this.supportsMesh) {
-      this.scene.remove(this.supportsMesh);
-      this.supportsMesh.geometry.dispose();
-      this.supportsMesh.material.dispose();
-      this.supportsMesh = null;
-    }
+    this.selected.forEach(sel => {
+      if (sel.supportsMesh) {
+        this.scene.remove(sel.supportsMesh);
+        sel.supportsMesh.geometry.dispose();
+        sel.supportsMesh.material.dispose();
+        sel.supportsMesh = null;
+      }
+    });
   }
 
   getSupportsMesh() {
-    return this.supportsMesh;
+    return this.selected.length === 1 ? this.selected[0].supportsMesh : null;
   }
 
   setElevation(elevation) {
-    if (this.elevation === elevation) return;
-    const deltaY = elevation - this.elevation;
-    this.elevation = elevation;
-    if (this.modelMesh) {
-      this.modelMesh.geometry.translate(0, deltaY, 0);
-      this.modelMesh.geometry.computeBoundingBox();
-      this.clearSupports();
-    }
+    if (this.selected.length === 0) return;
+    this.selected.forEach(sel => {
+        if (sel.elevation === elevation) return;
+        const deltaY = elevation - sel.elevation;
+        sel.elevation = elevation;
+        sel.mesh.geometry.translate(0, deltaY, 0);
+        sel.mesh.geometry.computeBoundingBox();
+    });
+    this.clearSupports();
   }
 
   applyRotation(quaternion) {
-    if (!this.modelMesh) return;
-    this.modelMesh.geometry.applyQuaternion(quaternion);
-    // Re-center on build plate
-    this.modelMesh.geometry.computeBoundingBox();
-    const bb = this.modelMesh.geometry.boundingBox;
+    if (this.selected.length !== 1) return;
+    const sel = this.selected[0];
+    sel.mesh.geometry.applyQuaternion(quaternion);
+    sel.mesh.geometry.computeBoundingBox();
+    const bb = sel.mesh.geometry.boundingBox;
     const center = new THREE.Vector3();
     bb.getCenter(center);
-    this.modelMesh.geometry.translate(-center.x, -bb.min.y + this.elevation, -center.z);
-    this.modelMesh.geometry.computeBoundingBox();
+    sel.mesh.geometry.translate(-center.x, -bb.min.y + sel.elevation, -center.z);
+    sel.mesh.geometry.computeBoundingBox();
     
     this.clearSupports();
     this.canvas.dispatchEvent(new CustomEvent('mesh-changed'));
@@ -295,43 +478,47 @@ export class Viewer {
 
   setTransformMode(mode) {
     if (!mode) {
-      this.transformControl.detach();
+       this.transformControl.detach();
     } else {
-      if (this.modelMesh) {
-        this.transformControl.attach(this.modelMesh);
-        this.transformControl.setMode(mode);
-      }
+       if (this.selected.length === 1) {
+           this.transformControl.attach(this.selected[0].mesh);
+           this.transformControl.setMode(mode);
+       } else if (this.objects.length > 0 && this.selected.length === 0) {
+           this.selectObject(this.objects[0].id);
+           this.transformControl.setMode(mode);
+       }
     }
   }
 
   _bakeTransform() {
-    if (!this.modelMesh) return;
-    this.modelMesh.updateMatrix();
-    this.modelMesh.geometry.applyMatrix4(this.modelMesh.matrix);
-    this.modelMesh.position.set(0, 0, 0);
-    this.modelMesh.rotation.set(0, 0, 0);
-    this.modelMesh.scale.set(1, 1, 1);
-    this.modelMesh.updateMatrix();
-    this.modelMesh.geometry.computeBoundingBox();
+    if (this.selected.length !== 1) return;
+    const smesh = this.selected[0].mesh;
+    smesh.updateMatrix();
+    smesh.geometry.applyMatrix4(smesh.matrix);
+    smesh.position.set(0, 0, 0);
+    smesh.rotation.set(0, 0, 0);
+    smesh.scale.set(1, 1, 1);
+    smesh.updateMatrix();
+    smesh.geometry.computeBoundingBox();
     
     this.clearSupports();
     this.canvas.dispatchEvent(new CustomEvent('mesh-changed'));
   }
 
   fillPlatform() {
-    if (!this.modelMesh || this.modelMesh.isInstancedMesh) return false;
-    const geo = this.modelMesh.geometry;
-    geo.computeBoundingBox();
+    if (this.selected.length !== 1) return false;
+    this._bakeTransform();
     
-    // Bounds of the model
+    const sel = this.selected[0];
+    const sourceGeo = sel.mesh.geometry;
+    sourceGeo.computeBoundingBox();
     const size = new THREE.Vector3();
-    geo.boundingBox.getSize(size);
+    sourceGeo.boundingBox.getSize(size);
     
-    // Printer bed bounds
     const maxW = this.printer ? this.printer.buildWidthMM : 130;
     const maxD = this.printer ? this.printer.buildDepthMM : 80;
     
-    const padding = 2; // 2mm padding between models
+    const padding = 2;
     const itemW = size.x + padding;
     const itemD = size.z + padding;
     
@@ -339,53 +526,41 @@ export class Viewer {
     const countZ = Math.floor(maxD / itemD);
     
     if (countX <= 1 && countZ <= 1) {
-      // It's too big to duplicate, cannot fill
       return false;
     }
     
-    const totalCount = countX * countZ;
-    
-    // Calculate start offset to center the grid
     const totalW = countX * itemW - padding;
     const totalD = countZ * itemD - padding;
     
     const startX = -totalW / 2 + itemW / 2;
     const startZ = -totalD / 2 + itemD / 2;
     
-    // Align geometry to exactly 0,0 for X and Z temporarily:
     const center = new THREE.Vector3();
-    geo.boundingBox.getCenter(center);
-    geo.translate(-center.x, 0, -center.z);
-    geo.computeBoundingBox();
-
-    const material = this.modelMesh.material;
-    const instancedMesh = new THREE.InstancedMesh(geo, material, totalCount);
+    sourceGeo.boundingBox.getCenter(center);
     
-    const dummy = new THREE.Object3D();
-    let idx = 0;
+    // Instead of translating the source geometry, we leave it untouched
+    // and reposition all models via `mesh.position` during cloning loop.
+    const sourceElevation = sel.elevation;
+    const sharedMaterial = sel.mesh.material;
+    
+    // Keep internal transform centering identical to what we had before replacing.
+    sourceGeo.translate(-center.x, 0, -center.z);
+    sourceGeo.computeBoundingBox();
+    
+    this.removeSelected();
     
     for (let i = 0; i < countX; i++) {
       for (let j = 0; j < countZ; j++) {
         const px = startX + i * itemW;
         const pz = startZ + j * itemD;
         
-        dummy.position.set(px, 0, pz);
-        dummy.updateMatrix();
-        instancedMesh.setMatrixAt(idx++, dummy.matrix);
+        const newObj = this._addModelRaw(sourceGeo, sharedMaterial, sourceElevation);
+        newObj.mesh.position.set(px, 0, pz);
+        newObj.mesh.updateMatrixWorld();
       }
     }
     
-    instancedMesh.instanceMatrix.needsUpdate = true;
-    
-    if (this.transformControl.object === this.modelMesh) {
-      this.transformControl.detach();
-    }
-    this.scene.remove(this.modelMesh);
-    
-    this.modelMesh = instancedMesh;
-    this.scene.add(this.modelMesh);
-    
-    this.clearSupports();
+    this.clearSelection();
     this.canvas.dispatchEvent(new CustomEvent('mesh-changed'));
     return true;
   }

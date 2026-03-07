@@ -5,16 +5,16 @@
 }
 
 :root {
-  --bg: #eceef2;
+  --bg: #e6e8eb;
   --surface: #ffffff;
-  --surface-2: #f4f5f7;
-  --header-bg: #2d3440;
-  --header-text: #ffffff;
-  --accent: #2e7af1;
-  --accent-hover: #1760ce;
-  --text: #363c45;
-  --text-dim: #747d88;
-  --border: #d4d7dc;
+  --surface-2: #f8f9fa;
+  --header-bg: #ffffff;
+  --header-text: #333333;
+  --accent: #0070f3;
+  --accent-hover: #005bb5;
+  --text: #333333;
+  --text-dim: #666666;
+  --border: #e0e0e0;
   --tool-bg: #ffffff;
   --tool-hover: #f0f2f5;
 }
@@ -43,6 +43,7 @@ body {
   color: var(--header-text);
   flex-shrink: 0;
   z-index: 10;
+  border-bottom: 1px solid var(--border);
 }
 
 #toolbar .logo {
@@ -99,28 +100,42 @@ body {
 }
 
 #left-toolbar {
-  width: 65px;
-  background: #f8f9fa;
-  border-right: 1px solid var(--border);
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  width: auto;
+  background: transparent;
+  border: none;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding-top: 12px;
-  gap: 8px;
+  align-items: flex-start;
+  padding: 0;
+  gap: 12px;
   z-index: 5;
-  box-shadow: 1px 0 5px rgba(0, 0, 0, 0.02);
+  box-shadow: none;
+}
+
+.toolbar-group {
+  background: var(--surface);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
 }
 
 .tool-btn {
-  width: 50px;
-  height: 50px;
+  width: 60px;
+  height: 60px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
   color: var(--text-dim);
   cursor: pointer;
   font-size: 10px;
@@ -128,16 +143,19 @@ body {
   transition: all 0.15s ease;
 }
 
+.toolbar-group .tool-btn:last-child {
+  border-bottom: none;
+}
+
 .tool-btn svg {
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
 
 .tool-btn:hover,
 .tool-btn.active {
-  background: var(--tool-bg);
+  background: var(--tool-hover);
   color: var(--accent);
-  border-color: var(--border);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: none;
 }
 
 #viewport-container {
@@ -164,37 +182,63 @@ body {
 
 #model-info {
   top: 16px;
-  left: 16px;
+  left: 90px;
   font-size: 13px;
   color: var(--text);
   font-weight: 500;
+  display: none;
+}
+
+#model-info.visible {
+  display: block;
 }
 
 #summary-panel {
   bottom: 24px;
   left: 24px;
-  min-width: 220px;
+  min-width: 260px;
+  padding: 16px;
+  border-radius: 8px;
 }
 
 #summary-panel h3 {
   font-size: 14px;
-  margin-bottom: 8px;
+  font-weight: 600;
+  margin-bottom: 12px;
   color: var(--text);
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 4px;
+  border-bottom: none;
+  padding-bottom: 0;
 }
 
 #print-estimate {
   font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.estimate-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.estimate-label {
   color: var(--text-dim);
-  line-height: 1.6;
+}
+
+.estimate-value {
+  font-weight: 500;
+  text-align: right;
 }
 
 #sidebar {
-  width: 320px;
+  width: 340px;
   background: var(--surface);
   border-left: 1px solid var(--border);
-  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.03);
+  box-shadow: -2px 0 16px rgba(0, 0, 0, 0.04);
   display: flex;
   flex-direction: column;
   z-index: 5;
@@ -213,6 +257,52 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.preset-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.preset-btn {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.preset-btn img {
+  width: 60px;
+  height: 60px;
+  border-radius: 4px;
+  object-fit: cover;
+  background: var(--surface-2);
+}
+
+.preset-btn span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.preset-btn:hover {
+  background: var(--tool-hover);
+  border-color: #adb5bd;
+}
+
+.preset-btn:focus,
+.preset-btn:active {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(0, 112, 243, 0.2);
 }
 
 .badge {
@@ -301,11 +391,13 @@ body {
   padding: 12px;
   font-size: 14px;
   background: #e6e6e6;
-  color: #888;
+  color: var(--text-dim);
   border: none;
   border-radius: 6px;
   font-weight: 600;
   box-shadow: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .slice-big-btn:hover {
