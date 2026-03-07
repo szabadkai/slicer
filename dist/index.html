@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SLA Slicer</title>
+  <script type="module" crossorigin src="/assets/index-BoiSoq0q.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-F0BXIUoB.css">
+</head>
+
+<body>
+  <div id="app">
+    <header id="toolbar">
+      <div id="toolbar-left">
+        <div class="logo">SLA Slicer</div>
+      </div>
+      <div id="toolbar-right">
+        <select id="printer-select" class="val-box" style="margin-right: 10px;"></select>
+      </div>
+    </header>
+
+    <main id="workspace">
+      <aside id="left-toolbar">
+        <label id="load-btn" class="tool-btn" title="Load Model">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+          </svg>
+          <span>Load</span>
+          <input type="file" id="stl-input" accept=".stl" hidden>
+        </label>
+        <button class="tool-btn" id="move-btn" title="Translate">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M12 2L8 6h3v5H6V8L2 12l4 4v-3h5v5H8l4 4 4-4h-3v-5h5v3l4-4-4-4v3h-5V6h3z" />
+          </svg>
+          <span>Move</span>
+        </button>
+        <button class="tool-btn" id="rotate-btn" title="Rotate">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path
+              d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z" />
+          </svg>
+          <span>Rotate</span>
+        </button>
+        <button class="tool-btn" id="scale-btn" title="Scale">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M21 3H3v18h18V3zM19 19H5V5h14v14zm-4-4h-4v4h-2v-4H5v-2h4V9H7V7h8v2h-4v4h4v2z" />
+          </svg>
+          <span>Scale</span>
+        </button>
+        <button class="tool-btn" id="fill-btn" title="Fill Platform">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path
+              d="M2 2h20v20H2V2zm2 2v4h4V4H4zm6 0v4h4V4h-4zm6 0v4h4V4h-4zM4 10v4h4v-4H4zm6 0v4h4v-4h-4zm6 0v4h4v-4h-4zM4 16v4h4v-4H4zm6 0v4h4v-4h-4zm6 0v4h4v-4h-4z" />
+          </svg>
+          <span>Fill</span>
+        </button>
+        <button class="tool-btn" id="orient-btn" title="Orientation">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z" />
+          </svg>
+          <span>Orient</span>
+        </button>
+        <button class="tool-btn" id="support-tool-btn" title="Supports">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M3 3h18v18H3zM5 5v14h14V5zm2 2h4v4H7zm6 0h4v4h-4zm-6 6h4v4H7zm6 0h4v4h-4z" />
+          </svg>
+          <span>Supports</span>
+        </button>
+      </aside>
+
+      <div id="viewport-container">
+        <canvas id="viewport"></canvas>
+        <div id="model-info" class="floating-panel"></div>
+        <div id="summary-panel" class="floating-panel">
+          <h3>Summary</h3>
+          <div id="print-estimate">No active slice</div>
+        </div>
+      </div>
+
+      <aside id="sidebar">
+        <section id="orientation-panel" class="panel" hidden>
+          <h2>Orientation</h2>
+          <div class="preset-buttons">
+            <button class="btn" data-preset="fastest">Fastest</button>
+            <button class="btn" data-preset="least-support">Least Support</button>
+            <button class="btn" data-preset="best-quality">Best Quality</button>
+          </div>
+        </section>
+
+        <section id="supports-panel" class="panel" hidden>
+          <h2>Supports <span class="badge">Auto</span></h2>
+          <div class="control-group">
+            <label>Z Elevation (mm)
+              <input type="number" id="z-elevation" value="5" min="0" max="50" step="1" class="val-box">
+            </label>
+          </div>
+          <div class="control-group">
+            <label>Overhang Angle</label>
+            <div class="flex-row">
+              <input type="range" id="overhang-angle" min="10" max="60" value="30">
+              <span id="overhang-angle-val" class="val-box">30&deg;</span>
+            </div>
+          </div>
+          <div class="control-group">
+            <label>Support Density</label>
+            <div class="flex-row">
+              <input type="range" id="support-density" min="1" max="10" value="5">
+              <span id="support-density-val" class="val-box">5</span>
+            </div>
+          </div>
+          <div class="control-group">
+            <label>Auto Thickness
+              <input type="checkbox" id="auto-thickness" checked class="val-box">
+            </label>
+          </div>
+          <div class="control-group" id="tip-diameter-group" style="opacity: 0.5; pointer-events: none;">
+            <label>Tip Diameter (mm)
+              <input type="number" id="tip-diameter" value="0.4" min="0.1" max="2" step="0.1" class="val-box" disabled>
+            </label>
+          </div>
+          <div class="control-group" id="support-thickness-group" style="opacity: 0.5; pointer-events: none;">
+            <label>Support Thickness (mm)
+              <input type="number" id="support-thickness" value="0.8" min="0.2" max="5" step="0.1" class="val-box"
+                disabled>
+            </label>
+          </div>
+          <div class="control-group">
+            <label>Internal Supports
+              <input type="checkbox" id="internal-supports" checked class="val-box">
+            </label>
+          </div>
+          <div class="control-group">
+            <label>Cross Bracing
+              <input type="checkbox" id="cross-bracing" checked class="val-box">
+            </label>
+          </div>
+          <div class="action-buttons">
+            <button class="btn btn-secondary" id="clear-supports-btn">Clear</button>
+            <button class="btn btn-primary" id="generate-supports-btn">Auto-Generate</button>
+          </div>
+        </section>
+
+        <section id="slice-panel" class="panel">
+          <h2>Job Settings</h2>
+          <div class="control-group">
+            <label>Layer Height (mm)
+              <input type="number" id="layer-height" value="0.05" min="0.01" max="0.15" step="0.01" class="val-box">
+            </label>
+          </div>
+          <div class="control-group">
+            <label>Normal Exposure (s)
+              <input type="number" id="normal-exposure" value="2" min="0.5" max="20" step="0.5" class="val-box">
+            </label>
+          </div>
+          <div class="control-group">
+            <label>Bottom Layers
+              <input type="number" id="bottom-layers" value="6" min="1" max="20" step="1" class="val-box">
+            </label>
+          </div>
+          <div class="control-group">
+            <label>Bottom Exposure (s)
+              <input type="number" id="bottom-exposure" value="60" min="10" max="120" step="5" class="val-box">
+            </label>
+          </div>
+          <div class="control-group">
+            <label>Lift Height (mm)
+              <input type="number" id="lift-height" value="5" min="1" max="15" step="0.5" class="val-box">
+            </label>
+          </div>
+          <div class="control-group">
+            <label>Lift Speed (mm/s)
+              <input type="number" id="lift-speed" value="1" min="0.5" max="5" step="0.5" class="val-box">
+            </label>
+          </div>
+        </section>
+
+        <section id="layer-preview-panel" class="panel" hidden>
+          <h2>Layer Preview</h2>
+          <canvas id="layer-canvas" width="512" height="324"></canvas>
+          <div class="control-group">
+            <input type="range" id="layer-slider" min="0" max="0" value="0">
+            <span id="layer-info" class="val-box">0 / 0</span>
+          </div>
+        </section>
+
+        <div id="footer-actions">
+          <button class="btn btn-primary slice-big-btn" id="slice-btn">Slice & Print</button>
+          <button class="btn export-btn" id="export-btn" hidden>Export ZIP</button>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <div id="progress-overlay" hidden>
+    <div id="progress-box">
+      <div id="progress-text">Slicing...</div>
+      <div id="progress-bar-container">
+        <div id="progress-bar"></div>
+      </div>
+      <div id="progress-percent">0%</div>
+    </div>
+  </div>
+
+</body>
+
+</html>
