@@ -284,7 +284,7 @@ export class Viewer {
   _addModelRaw(geometry, material, elevation) {
     if (!material) {
       material = new THREE.MeshPhongMaterial({
-        color: 0x444444,
+        color: 0x4a90d9,
         specular: 0x222222,
         shininess: 30,
         flatShading: false,
@@ -432,11 +432,11 @@ export class Viewer {
     if (this.selected.length !== 1) return;
     this.clearSupports();
     const material = new THREE.MeshPhongMaterial({
-      color: 0x777777,
+      color: 0x9b59b6,
       specular: 0x222222,
       shininess: 30,
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.55,
     });
 
     const mesh = new THREE.Mesh(supportGeometry, material);

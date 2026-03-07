@@ -252,6 +252,8 @@ function init() {
     supportThicknessGroup.style.pointerEvents = autoThicknessInput.checked ? 'none' : 'auto';
   });
   generateSupportsBtn.addEventListener('click', handleGenerateSupports);
+  document.getElementById('orient-all-btn').addEventListener('click', () => handleOrientAll('fastest'));
+  document.getElementById('support-all-btn').addEventListener('click', handleSupportAll);
   clearSupportsBtn.addEventListener('click', () => {
     viewer.clearSupports();
     updateEstimate();
@@ -378,6 +380,77 @@ async function handleGenerateSupports() {
     viewer.clearSupports();
   }
 
+  slicedLayers = null;
+  exportBtn.hidden = true;
+  layerPreviewPanel.hidden = true;
+  updateEstimate();
+  hideProgress();
+}
+
+// --- Batch Orient All ---
+async function handleOrientAll(preset = 'fastest') {
+  const allObjects = [...viewer.objects];
+  if (allObjects.length === 0) return;
+
+  showProgress('Orienting all models...');
+  for (let i = 0; i < allObjects.length; i++) {
+    const obj = allObjects[i];
+    viewer.selectObject(obj.id);
+    const geometry = viewer.getModelGeometry();
+    if (!geometry) continue;
+
+    updateProgress(i / allObjects.length, `Orienting model ${i + 1} / ${allObjects.length}`);
+
+    try {
+      const quaternion = await optimizeOrientationAsync(geometry, preset, (fraction) => {
+        const overall = (i + fraction) / allObjects.length;
+        updateProgress(overall, `Orienting model ${i + 1} / ${allObjects.length}`);
+      });
+      viewer.applyRotation(quaternion);
+    } catch (error) {
+      console.error(`Failed to orient model ${i + 1}`, error);
+    }
+  }
+  viewer.clearSelection();
+  hideProgress();
+}
+
+// --- Batch Support All ---
+async function handleSupportAll() {
+  const allObjects = [...viewer.objects];
+  if (allObjects.length === 0) return;
+
+  showProgress('Generating supports for all models...');
+  for (let i = 0; i < allObjects.length; i++) {
+    const obj = allObjects[i];
+    viewer.selectObject(obj.id);
+    const geometry = viewer.getModelGeometry();
+    if (!geometry) continue;
+
+    updateProgress(i / allObjects.length, `Supporting model ${i + 1} / ${allObjects.length}`);
+
+    const supportGeo = await generateSupports(geometry, {
+      overhangAngle: parseFloat(overhangAngleInput.value),
+      density: parseFloat(supportDensityInput.value),
+      tipDiameter: parseFloat(tipDiameterInput.value),
+      supportThickness: parseFloat(supportThicknessInput.value),
+      autoThickness: autoThicknessInput.checked,
+      internalSupports: internalSupportsInput.checked,
+      crossBracing: crossBracingInput.checked,
+      onProgress: (fraction) => {
+        const overall = (i + fraction) / allObjects.length;
+        updateProgress(overall, `Supporting model ${i + 1} / ${allObjects.length}`);
+      }
+    });
+
+    if (supportGeo.attributes.position && supportGeo.attributes.position.count > 0) {
+      viewer.setSupports(supportGeo);
+    } else {
+      viewer.clearSupports();
+    }
+  }
+
+  viewer.clearSelection();
   slicedLayers = null;
   exportBtn.hidden = true;
   layerPreviewPanel.hidden = true;
