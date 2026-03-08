@@ -49,13 +49,12 @@ export const PRINTERS = {
   }
 };
 
-let currentPrinter = PRINTERS['photon-mono'];
-
 export class Slicer {
   constructor() {
+    this.printer = PRINTERS['photon-mono'];
     this.canvas = document.createElement('canvas');
-    this.canvas.width = currentPrinter.resolutionX;
-    this.canvas.height = currentPrinter.resolutionY;
+    this.canvas.width = this.printer.resolutionX;
+    this.canvas.height = this.printer.resolutionY;
     this.gl = this.canvas.getContext('webgl', {
       stencil: true,
       preserveDrawingBuffer: true,
@@ -175,10 +174,10 @@ export class Slicer {
 
   setPrinter(printerKey) {
     if (PRINTERS[printerKey]) {
-      currentPrinter = PRINTERS[printerKey];
-      this.canvas.width = currentPrinter.resolutionX;
-      this.canvas.height = currentPrinter.resolutionY;
-      
+      this.printer = PRINTERS[printerKey];
+      this.canvas.width = this.printer.resolutionX;
+      this.canvas.height = this.printer.resolutionY;
+
       // We might need to adjust viewport if gl is already bound to a size
       this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     }
@@ -200,8 +199,8 @@ export class Slicer {
     const layers = [];
 
     // Orthographic projection matching printer build area
-    const halfW = currentPrinter.buildWidthMM / 2;
-    const halfD = currentPrinter.buildDepthMM / 2;
+    const halfW = this.printer.buildWidthMM / 2;
+    const halfD = this.printer.buildDepthMM / 2;
     // Ortho: left, right, bottom, top, near, far
     const projection = this._ortho(-halfW, halfW, -halfD, halfD, -500, 500);
 
@@ -216,8 +215,8 @@ export class Slicer {
       this._renderSlice(projection, z, layerHeightMM);
 
       // Read pixels
-      const pixels = new Uint8Array(currentPrinter.resolutionX * currentPrinter.resolutionY * 4);
-      gl.readPixels(0, 0, currentPrinter.resolutionX, currentPrinter.resolutionY, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+      const pixels = new Uint8Array(this.printer.resolutionX * this.printer.resolutionY * 4);
+      gl.readPixels(0, 0, this.printer.resolutionX, this.printer.resolutionY, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
       layers.push(pixels);
 
       if (onProgress) {
@@ -235,8 +234,8 @@ export class Slicer {
 
   _renderSlice(projection, sliceY, layerHeight) {
     const gl = this.gl;
-    const w = currentPrinter.resolutionX;
-    const h = currentPrinter.resolutionY;
+    const w = this.printer.resolutionX;
+    const h = this.printer.resolutionY;
     gl.viewport(0, 0, w, h);
 
     // Clear
@@ -259,8 +258,8 @@ export class Slicer {
 
     const near = sliceY;
     const far = this.maxY + 1;
-    const halfW = currentPrinter.buildWidthMM / 2;
-    const halfD = currentPrinter.buildDepthMM / 2;
+    const halfW = this.printer.buildWidthMM / 2;
+    const halfD = this.printer.buildDepthMM / 2;
     const proj = this._ortho(-halfW, halfW, -halfD, halfD, near, far);
 
     // --- Pass 1: Front faces, increment stencil ---
@@ -382,6 +381,6 @@ export class Slicer {
   }
 
   getPrinterSpec() {
-    return currentPrinter;
+    return this.printer;
   }
 }

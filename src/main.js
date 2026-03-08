@@ -16,17 +16,23 @@ window.__debug = { get viewer() { return viewer; }, get slicer() { return slicer
 // --- DOM refs ---
 const stlInput = document.getElementById('stl-input');
 const modelInfo = document.getElementById('model-info');
+const transformPanel = document.getElementById('transform-panel');
 const orientationPanel = document.getElementById('orientation-panel');
 const supportsPanel = document.getElementById('supports-panel');
+const editPanel = document.getElementById('edit-panel');
 const slicePanel = document.getElementById('slice-panel');
 const layerPreviewPanel = document.getElementById('layer-preview-panel');
+
+const toolPanels = { transform: transformPanel, orient: orientationPanel, supports: supportsPanel, edit: editPanel };
 
 const printerSelect = document.getElementById('printer-select');
 
 const overhangAngleInput = document.getElementById('overhang-angle');
 const overhangAngleVal = document.getElementById('overhang-angle-val');
+const autoDensityInput = document.getElementById('auto-density');
 const supportDensityInput = document.getElementById('support-density');
 const supportDensityVal = document.getElementById('support-density-val');
+const supportDensityGroup = document.getElementById('support-density-group');
 const tipDiameterInput = document.getElementById('tip-diameter');
 const tipDiameterGroup = document.getElementById('tip-diameter-group');
 const supportThicknessInput = document.getElementById('support-thickness');
@@ -71,19 +77,23 @@ function init() {
     printerSelect.appendChild(opt);
   }
   
+  printerSelect.value = 'photon-mono';
+
   printerSelect.addEventListener('change', () => {
     const printerKey = printerSelect.value;
     slicer.setPrinter(printerKey);
     viewer.setPrinter(PRINTERS[printerKey]);
-    
+
     // Clear out sliced output because bounds/resolution changed
     slicedLayers = null;
     exportBtn.hidden = true;
     layerPreviewPanel.hidden = true;
     updateEstimate();
+    viewer.updateBoundsWarning();
   });
-  
-  // Initialize viewer with the default printer
+
+  // Initialize both viewer and slicer with the default printer
+  slicer.setPrinter(printerSelect.value);
   viewer.setPrinter(PRINTERS[printerSelect.value]);
 
   stlInput.addEventListener('change', handleFileLoad);
@@ -94,20 +104,25 @@ function init() {
   });
 
   // Toolbar tools
+  const transformBtn = document.getElementById('transform-btn');
   const orientBtn = document.getElementById('orient-btn');
   const supportToolBtn = document.getElementById('support-tool-btn');
-  
-  const moveBtn = document.getElementById('move-btn');
-  const rotateBtn = document.getElementById('rotate-btn');
-  const scaleBtn = document.getElementById('scale-btn');
-  const fillBtn = document.getElementById('fill-btn');
+  const editBtn = document.getElementById('edit-btn');
+
   const duplicateBtn = document.getElementById('duplicate-btn');
   const deleteBtn = document.getElementById('delete-btn');
   const clearBtn = document.getElementById('clear-btn');
-  
+  const fillBtn = document.getElementById('fill-btn');
+
+  // Edit panel actions
   duplicateBtn.addEventListener('click', () => viewer.duplicateSelected());
   deleteBtn.addEventListener('click', () => viewer.removeSelected());
   clearBtn.addEventListener('click', () => viewer.clearPlate());
+  fillBtn.addEventListener('click', () => {
+    if (!viewer.fillPlatform()) {
+      alert("Model may be too large to duplicate on the platform.");
+    }
+  });
   
   document.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT') return;
@@ -132,67 +147,183 @@ function init() {
     }
   });
   
-  const transformBtns = [moveBtn, rotateBtn, scaleBtn];
+  // --- Panel toggle logic ---
+  const toolButtons = { transform: transformBtn, orient: orientBtn, supports: supportToolBtn, edit: editBtn };
+  let activeToolPanel = null;
 
-  function toggleTransformMode(mode, btn) {
-    // If the tool is already active, turn it off
-    const isActive = btn.classList.contains('active');
-    transformBtns.forEach(b => b.classList.remove('active'));
-    
-    if (isActive) {
-      viewer.setTransformMode(null);
+  function showToolPanel(name) {
+    // If already active, toggle off
+    if (activeToolPanel === name) {
+      toolPanels[name].hidden = true;
+      toolButtons[name].classList.remove('active');
+      activeToolPanel = null;
+      if (name === 'transform') viewer.setTransformMode(null);
+      return;
+    }
+
+    // Hide all tool panels, deactivate all buttons
+    Object.keys(toolPanels).forEach(k => {
+      toolPanels[k].hidden = true;
+      toolButtons[k].classList.remove('active');
+    });
+
+    // Show the selected panel
+    toolPanels[name].hidden = false;
+    toolButtons[name].classList.add('active');
+    activeToolPanel = name;
+
+    // When opening transform, activate the currently-selected mode
+    if (name === 'transform') {
+      const activeMode = transformPanel.querySelector('.mode-btn.active');
+      if (activeMode) viewer.setTransformMode(activeMode.dataset.mode);
     } else {
-      viewer.setTransformMode(mode);
-      btn.classList.add('active');
+      viewer.setTransformMode(null);
     }
   }
 
-  moveBtn.addEventListener('click', () => toggleTransformMode('translate', moveBtn));
-  rotateBtn.addEventListener('click', () => toggleTransformMode('rotate', rotateBtn));
-  scaleBtn.addEventListener('click', () => toggleTransformMode('scale', scaleBtn));
-  
-  fillBtn.addEventListener('click', () => {
-    if (!viewer.fillPlatform()) {
-      alert("Model may be too large to duplicate on the platform.");
+  transformBtn.addEventListener('click', () => showToolPanel('transform'));
+  orientBtn.addEventListener('click', () => showToolPanel('orient'));
+  supportToolBtn.addEventListener('click', () => showToolPanel('supports'));
+  editBtn.addEventListener('click', () => showToolPanel('edit'));
+
+  // --- Transform panel mode toggles ---
+  const modeBtns = transformPanel.querySelectorAll('.mode-btn');
+  const transformFieldSets = {
+    translate: document.getElementById('transform-move-fields'),
+    scale: document.getElementById('transform-scale-fields'),
+    rotate: document.getElementById('transform-rotate-fields'),
+  };
+
+  modeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      modeBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const mode = btn.dataset.mode;
+      Object.values(transformFieldSets).forEach(f => f.hidden = true);
+      transformFieldSets[mode].hidden = false;
+      viewer.setTransformMode(mode);
+    });
+  });
+
+  // Transform numeric inputs
+  const moveXInput = document.getElementById('move-x');
+  const moveYInput = document.getElementById('move-y');
+  const moveZInput = document.getElementById('move-z');
+  const scaleXInput = document.getElementById('scale-x');
+  const scaleYInput = document.getElementById('scale-y');
+  const scaleZInput = document.getElementById('scale-z');
+  const rotateXInput = document.getElementById('rotate-x');
+  const rotateYInput = document.getElementById('rotate-y');
+  const rotateZInput = document.getElementById('rotate-z');
+  const uniformScaleInput = document.getElementById('uniform-scale');
+
+  function applyTransformFromInputs() {
+    if (viewer.selected.length !== 1) return;
+    const mesh = viewer.selected[0].mesh;
+    mesh.position.set(
+      parseFloat(moveXInput.value) || 0,
+      parseFloat(moveYInput.value) || 0,
+      parseFloat(moveZInput.value) || 0,
+    );
+  }
+
+  [moveXInput, moveYInput, moveZInput].forEach(el => {
+    el.addEventListener('change', applyTransformFromInputs);
+  });
+
+  function applyScaleFromInputs(changedAxis) {
+    if (viewer.selected.length !== 1) return;
+    const sx = parseFloat(scaleXInput.value) / 100 || 1;
+    const sy = parseFloat(scaleYInput.value) / 100 || 1;
+    const sz = parseFloat(scaleZInput.value) / 100 || 1;
+
+    if (uniformScaleInput.checked) {
+      const val = changedAxis === 'x' ? sx : changedAxis === 'y' ? sy : sz;
+      scaleXInput.value = Math.round(val * 100);
+      scaleYInput.value = Math.round(val * 100);
+      scaleZInput.value = Math.round(val * 100);
+      viewer.selected[0].mesh.scale.set(val, val, val);
+    } else {
+      viewer.selected[0].mesh.scale.set(sx, sy, sz);
     }
+  }
+
+  scaleXInput.addEventListener('change', () => applyScaleFromInputs('x'));
+  scaleYInput.addEventListener('change', () => applyScaleFromInputs('y'));
+  scaleZInput.addEventListener('change', () => applyScaleFromInputs('z'));
+
+  function applyRotationFromInputs() {
+    if (viewer.selected.length !== 1) return;
+    const deg2rad = Math.PI / 180;
+    viewer.selected[0].mesh.rotation.set(
+      (parseFloat(rotateXInput.value) || 0) * deg2rad,
+      (parseFloat(rotateYInput.value) || 0) * deg2rad,
+      (parseFloat(rotateZInput.value) || 0) * deg2rad,
+    );
+  }
+
+  [rotateXInput, rotateYInput, rotateZInput].forEach(el => {
+    el.addEventListener('change', applyRotationFromInputs);
   });
 
   canvas.addEventListener('selection-changed', () => {
     const singleSelected = viewer.selected.length === 1;
     const hasSelection = viewer.selected.length > 0;
-    
-    // Visually toggle tools
-    [document.getElementById('orient-btn'), document.getElementById('support-tool-btn'),
-     document.getElementById('move-btn'), document.getElementById('rotate-btn'),
-     document.getElementById('scale-btn'), document.getElementById('fill-btn')].forEach(btn => {
-       if (btn) btn.style.opacity = singleSelected ? '1' : '0.3';
-       if (btn) btn.style.pointerEvents = singleSelected ? 'auto' : 'none';
-     });
 
-    [document.getElementById('duplicate-btn'), document.getElementById('delete-btn')].forEach(btn => {
-       if (btn) btn.style.opacity = hasSelection ? '1' : '0.3';
-       if (btn) btn.style.pointerEvents = hasSelection ? 'auto' : 'none';
+    // Single-object tools in left toolbar
+    [transformBtn, orientBtn, supportToolBtn].forEach(btn => {
+       btn.style.opacity = singleSelected ? '1' : '0.3';
+       btn.style.pointerEvents = singleSelected ? 'auto' : 'none';
     });
-     
-    [orientationPanel, supportsPanel].forEach(o => {
-        if (!singleSelected) o.hidden = true;
-    });
-    
+
+    // Edit button: needs at least some objects on the plate
+    editBtn.style.opacity = (hasSelection || viewer.objects.length > 0) ? '1' : '0.3';
+    editBtn.style.pointerEvents = (hasSelection || viewer.objects.length > 0) ? 'auto' : 'none';
+
+    // Within edit panel, enable/disable individual buttons
+    duplicateBtn.style.opacity = hasSelection ? '1' : '0.5';
+    duplicateBtn.style.pointerEvents = hasSelection ? 'auto' : 'none';
+    fillBtn.style.opacity = singleSelected ? '1' : '0.5';
+    fillBtn.style.pointerEvents = singleSelected ? 'auto' : 'none';
+    deleteBtn.style.opacity = hasSelection ? '1' : '0.5';
+    deleteBtn.style.pointerEvents = hasSelection ? 'auto' : 'none';
+
+    // Close single-object panels when no single selection
+    if (!singleSelected && activeToolPanel && (activeToolPanel === 'transform' || activeToolPanel === 'orient' || activeToolPanel === 'supports')) {
+      toolPanels[activeToolPanel].hidden = true;
+      toolButtons[activeToolPanel].classList.remove('active');
+      activeToolPanel = null;
+      viewer.setTransformMode(null);
+    }
+
     if (singleSelected) {
         zElevationInput.value = viewer.selected[0].elevation;
+        updateTransformInputs();
     }
-    
+
     updateWorkspaceInfo();
   });
+
+  function updateTransformInputs() {
+    if (viewer.selected.length !== 1) return;
+    const mesh = viewer.selected[0].mesh;
+    moveXInput.value = Math.round(mesh.position.x * 100) / 100;
+    moveYInput.value = Math.round(mesh.position.y * 100) / 100;
+    moveZInput.value = Math.round(mesh.position.z * 100) / 100;
+    scaleXInput.value = Math.round(mesh.scale.x * 100);
+    scaleYInput.value = Math.round(mesh.scale.y * 100);
+    scaleZInput.value = Math.round(mesh.scale.z * 100);
+    const rad2deg = 180 / Math.PI;
+    rotateXInput.value = Math.round(mesh.rotation.x * rad2deg);
+    rotateYInput.value = Math.round(mesh.rotation.y * rad2deg);
+    rotateZInput.value = Math.round(mesh.rotation.z * rad2deg);
+  }
   
   function updateWorkspaceInfo() {
     const info = viewer.getOverallInfo();
-    const clearBtn = document.getElementById('clear-btn');
-    if (clearBtn) {
-       const hasObjs = viewer.objects.length > 0;
-       clearBtn.style.opacity = hasObjs ? '1' : '0.3';
-       clearBtn.style.pointerEvents = hasObjs ? 'auto' : 'none';
-    }
+    const hasObjs = viewer.objects.length > 0;
+    clearBtn.style.opacity = hasObjs ? '1' : '0.5';
+    clearBtn.style.pointerEvents = hasObjs ? 'auto' : 'none';
 
     if (info && info.count > 0) {
       if (viewer.selected.length === 1) {
@@ -220,21 +351,13 @@ function init() {
       exportBtn.hidden = true;
       layerPreviewPanel.hidden = true;
     }
+    viewer.updateBoundsWarning();
   }
 
   canvas.addEventListener('mesh-changed', updateWorkspaceInfo);
   
-  // Toggle panels logically
-  orientBtn.addEventListener('click', () => {
-    orientationPanel.hidden = false;
-    supportsPanel.hidden = true;
-    slicePanel.hidden = true;
-  });
-  supportToolBtn.addEventListener('click', () => {
-    orientationPanel.hidden = true;
-    supportsPanel.hidden = false;
-    slicePanel.hidden = true;
-  });
+  // Slice panel is always visible (not part of tool toggle)
+  slicePanel.hidden = false;
 
   // Support controls
   overhangAngleInput.addEventListener('input', () => {
@@ -242,6 +365,11 @@ function init() {
   });
   supportDensityInput.addEventListener('input', () => {
     supportDensityVal.textContent = supportDensityInput.value;
+  });
+  autoDensityInput.addEventListener('change', () => {
+    supportDensityInput.disabled = autoDensityInput.checked;
+    supportDensityGroup.style.opacity = autoDensityInput.checked ? '0.5' : '1';
+    supportDensityGroup.style.pointerEvents = autoDensityInput.checked ? 'none' : 'auto';
   });
   autoThicknessInput.addEventListener('change', () => {
     tipDiameterInput.disabled = autoThicknessInput.checked;
@@ -289,9 +417,6 @@ async function loadDefaultModel() {
     if (!response.ok) return;
     const buffer = await response.arrayBuffer();
     viewer.loadSTL(buffer, 2);
-    orientationPanel.hidden = false;
-    supportsPanel.hidden = false;
-    slicePanel.hidden = false;
     layerPreviewPanel.hidden = true;
     exportBtn.hidden = true;
     slicedLayers = null;
@@ -316,17 +441,11 @@ function handleFileLoad(e) {
       const buffer = evt.target.result;
       viewer.loadSTL(buffer);
 
-      if (true) {
-        // Show all panels
-        orientationPanel.hidden = false;
-        supportsPanel.hidden = false;
-        slicePanel.hidden = false;
-        layerPreviewPanel.hidden = true;
-        exportBtn.hidden = true;
-        slicedLayers = null;
+      layerPreviewPanel.hidden = true;
+      exportBtn.hidden = true;
+      slicedLayers = null;
 
-        updateEstimate();
-      }
+      updateEstimate();
       hideProgress();
     }, 50);
   };
@@ -364,6 +483,7 @@ async function handleGenerateSupports() {
   const supportGeo = await generateSupports(geometry, {
     overhangAngle: parseFloat(overhangAngleInput.value),
     density: parseFloat(supportDensityInput.value),
+    autoDensity: autoDensityInput.checked,
     tipDiameter: parseFloat(tipDiameterInput.value),
     supportThickness: parseFloat(supportThicknessInput.value),
     autoThickness: autoThicknessInput.checked,
@@ -432,6 +552,7 @@ async function handleSupportAll() {
     const supportGeo = await generateSupports(geometry, {
       overhangAngle: parseFloat(overhangAngleInput.value),
       density: parseFloat(supportDensityInput.value),
+      autoDensity: autoDensityInput.checked,
       tipDiameter: parseFloat(tipDiameterInput.value),
       supportThickness: parseFloat(supportThicknessInput.value),
       autoThickness: autoThicknessInput.checked,
@@ -460,6 +581,11 @@ async function handleSupportAll() {
 
 // --- Slicing ---
 async function handleSlice() {
+  const { inBounds } = viewer.checkBounds();
+  if (!inBounds) {
+    if (!confirm('Model extends beyond the build volume. Slice anyway?')) return;
+  }
+
   const layerHeight = parseFloat(layerHeightInput.value);
 
   showProgress('Merging & Uploading geometry...');
@@ -503,10 +629,14 @@ function showLayer() {
   const spec = slicer.getPrinterSpec();
   const pixels = slicedLayers[idx];
 
-  // Draw to preview canvas (scaled down)
+  // Size preview canvas to match printer aspect ratio
+  const aspectRatio = spec.resolutionX / spec.resolutionY;
+  const previewW = 512;
+  const previewH = Math.round(previewW / aspectRatio);
+  layerCanvas.width = previewW;
+  layerCanvas.height = previewH;
+
   const ctx = layerCanvas.getContext('2d');
-  const previewW = layerCanvas.width;
-  const previewH = layerCanvas.height;
 
   // Create full-res ImageData, flip vertically (WebGL is bottom-up)
   const tempCanvas = document.createElement('canvas');

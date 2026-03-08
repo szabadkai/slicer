@@ -35,6 +35,7 @@ export async function generateSupports(geometry, options = {}) {
   const {
     overhangAngle = 30,
     density = 5,
+    autoDensity = false,
     tipDiameter = 0.4,
     supportThickness = 0.8,
     autoThickness = true,
@@ -43,9 +44,28 @@ export async function generateSupports(geometry, options = {}) {
     onProgress,
   } = options;
 
+  // Compute effective density
+  let effectiveDensity = density;
+  if (autoDensity) {
+    geometry.computeBoundingBox();
+    const bb = geometry.boundingBox;
+    const maxDim = Math.max(
+      bb.max.x - bb.min.x,
+      bb.max.y - bb.min.y,
+      bb.max.z - bb.min.z
+    );
+    // Small models (~10mm) → density 8 (tight spacing)
+    // Medium models (~50mm) → density 5
+    // Large models (~200mm) → density 3 (wide spacing)
+    effectiveDensity = THREE.MathUtils.clamp(
+      Math.round(9 - (maxDim - 10) * (5 / 190)),
+      2, 9
+    );
+  }
+
   if (onProgress) onProgress(0, "Finding contact points...");
   await new Promise(r => setTimeout(r, 0));
-  const contactPoints = await findContactPoints(geometry, overhangAngle, density, (text) => {
+  const contactPoints = await findContactPoints(geometry, overhangAngle, effectiveDensity, (text) => {
     if (onProgress) onProgress(0, text);
   });
   if (contactPoints.length === 0) return new THREE.BufferGeometry();

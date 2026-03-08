@@ -236,6 +236,7 @@ export class Viewer {
     const edges = new THREE.EdgesGeometry(volGeo);
     const volLines = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x888888, transparent: true, opacity: 0.4 }));
     this.gridGroup.add(volLines);
+    this.buildVolumeEdges = volLines;
   }
 
   _resize() {
@@ -390,6 +391,37 @@ export class Viewer {
         depth: size.z.toFixed(1),
         count: this.objects.length
     };
+  }
+
+  checkBounds() {
+    if (!this.printer || this.objects.length === 0) return { inBounds: true };
+
+    const bb = new THREE.Box3();
+    this.objects.forEach(o => {
+      o.mesh.updateMatrixWorld();
+      const obb = o.mesh.geometry.boundingBox.clone();
+      obb.applyMatrix4(o.mesh.matrixWorld);
+      bb.union(obb);
+    });
+
+    const halfW = this.printer.buildWidthMM / 2;
+    const halfD = this.printer.buildDepthMM / 2;
+    const maxH = this.printer.buildHeightMM;
+
+    const inBounds = (
+      bb.min.x >= -halfW && bb.max.x <= halfW &&
+      bb.min.z >= -halfD && bb.max.z <= halfD &&
+      bb.max.y <= maxH
+    );
+
+    return { inBounds };
+  }
+
+  updateBoundsWarning() {
+    if (!this.buildVolumeEdges) return;
+    const { inBounds } = this.checkBounds();
+    this.buildVolumeEdges.material.color.setHex(inBounds ? 0x888888 : 0xff4444);
+    this.buildVolumeEdges.material.opacity = inBounds ? 0.4 : 0.8;
   }
 
   getModelGeometry() {
@@ -597,18 +629,18 @@ export class Viewer {
   }
 
   fillPlatform() {
-    if (this.selected.length !== 1) return false;
+    if (this.selected.length !== 1 || !this.printer) return false;
     this._saveUndoState();
     this._bakeTransform();
-    
+
     const sel = this.selected[0];
     const sourceGeo = sel.mesh.geometry;
     sourceGeo.computeBoundingBox();
     const size = new THREE.Vector3();
     sourceGeo.boundingBox.getSize(size);
-    
-    const maxW = this.printer ? this.printer.buildWidthMM : 130;
-    const maxD = this.printer ? this.printer.buildDepthMM : 80;
+
+    const maxW = this.printer.buildWidthMM;
+    const maxD = this.printer.buildDepthMM;
     
     const padding = 2;
     const itemW = size.x + padding;

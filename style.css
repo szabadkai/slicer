@@ -242,6 +242,7 @@ body {
   display: flex;
   flex-direction: column;
   z-index: 5;
+  overflow-y: auto;
 }
 
 .panel {
@@ -471,4 +472,59 @@ body {
   font-size: 13px;
   color: var(--text-dim);
   margin-top: 8px;
+}
+
+/* Transform panel mode toggles */
+.mode-toggles {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.mode-btn {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.mode-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+/* Edit panel action buttons */
+.edit-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.edit-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  justify-content: flex-start;
+}
+
+.edit-action-btn svg {
+  flex-shrink: 0;
+}
+
+.edit-action-danger {
+  color: #dc3545;
+  border-color: #f5c6cb;
+  background: #fff5f5;
+}
+
+.edit-action-danger:hover {
+  background: #fde8e8;
+  border-color: #dc3545;
 }

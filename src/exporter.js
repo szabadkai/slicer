@@ -58,7 +58,7 @@ export async function exportZip(layers, settings, printerSpec, onProgress) {
 
   // Metadata
   const metadata = {
-    printer: 'Anycubic Photon Mono',
+    printer: printerSpec.name,
     resolutionX,
     resolutionY,
     layerCount: layers.length,
@@ -81,7 +81,8 @@ export async function exportZip(layers, settings, printerSpec, onProgress) {
   const url = URL.createObjectURL(content);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `sla_print_${layers.length}layers.zip`;
+  const safeName = printerSpec.name.replace(/\s+/g, '-').toLowerCase();
+  a.download = `${safeName}_${layers.length}layers.zip`;
   a.click();
   URL.revokeObjectURL(url);
 }

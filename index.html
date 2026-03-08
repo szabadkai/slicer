@@ -33,11 +33,11 @@
         </div>
 
         <div class="toolbar-group">
-          <button class="tool-btn" id="scale-btn" title="Size">
+          <button class="tool-btn" id="transform-btn" title="Transform">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-              <path d="M21 3H3v18h18V3zM19 19H5V5h14v14zm-4-4h-4v4h-2v-4H5v-2h4V9H7V7h8v2h-4v4h4v2z" />
+              <path d="M12 2L8 6h3v5H6V8L2 12l4 4v-3h5v5H8l4 4 4-4h-3v-5h5v3l4-4-4-4v3h-5V6h3z" />
             </svg>
-            <span>Size</span>
+            <span>Transform</span>
           </button>
           <button class="tool-btn" id="orient-btn" title="Orient">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
@@ -45,56 +45,20 @@
             </svg>
             <span>Orient</span>
           </button>
-          <button class="tool-btn" id="move-btn" title="Move">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-              <path d="M12 2L8 6h3v5H6V8L2 12l4 4v-3h5v5H8l4 4 4-4h-3v-5h5v3l4-4-4-4v3h-5V6h3z" />
-            </svg>
-            <span>Move</span>
-          </button>
-          <button class="tool-btn" id="rotate-btn" title="Rotate">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-              <path
-                d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z" />
-            </svg>
-            <span>Rotate</span>
-          </button>
-        </div>
-
-        <div class="toolbar-group">
           <button class="tool-btn" id="support-tool-btn" title="Supports">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
               <path d="M3 3h18v18H3zM5 5v14h14V5zm2 2h4v4H7zm6 0h4v4h-4zm-6 6h4v4H7zm6 0h4v4h-4z" />
             </svg>
             <span>Supports</span>
           </button>
-          <button class="tool-btn" id="fill-btn" title="Fill Platform">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-              <path
-                d="M2 2h20v20H2V2zm2 2v4h4V4H4zm6 0v4h4V4h-4zm6 0v4h4V4h-4zM4 10v4h4v-4H4zm6 0v4h4v-4h-4zm6 0v4h4v-4h-4zM4 16v4h4v-4H4zm6 0v4h4v-4h-4zm6 0v4h4v-4h-4z" />
-            </svg>
-            <span>Fill</span>
-          </button>
         </div>
 
         <div class="toolbar-group">
-          <button class="tool-btn" id="duplicate-btn" title="Duplicate">
+          <button class="tool-btn" id="edit-btn" title="Edit">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-              <path
-                d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
+              <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
             </svg>
-            <span>Dup</span>
-          </button>
-          <button class="tool-btn" id="delete-btn" title="Delete">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
-            </svg>
-            <span>Del</span>
-          </button>
-          <button class="tool-btn" id="clear-btn" title="Clear Plate">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z" />
-            </svg>
-            <span>Clear</span>
+            <span>Edit</span>
           </button>
         </div>
       </aside>
@@ -109,6 +73,51 @@
       </div>
 
       <aside id="sidebar">
+        <section id="transform-panel" class="panel" hidden>
+          <h2>Transform</h2>
+          <div class="mode-toggles">
+            <button class="btn mode-btn active" data-mode="translate">Move</button>
+            <button class="btn mode-btn" data-mode="scale">Size</button>
+            <button class="btn mode-btn" data-mode="rotate">Rotate</button>
+          </div>
+          <div id="transform-move-fields" class="transform-fields">
+            <div class="control-group">
+              <label>X (mm) <input type="number" id="move-x" value="0" step="1" class="val-box"></label>
+            </div>
+            <div class="control-group">
+              <label>Y (mm) <input type="number" id="move-y" value="0" step="1" class="val-box"></label>
+            </div>
+            <div class="control-group">
+              <label>Z (mm) <input type="number" id="move-z" value="0" step="1" class="val-box"></label>
+            </div>
+          </div>
+          <div id="transform-scale-fields" class="transform-fields" hidden>
+            <div class="control-group">
+              <label>Uniform <input type="checkbox" id="uniform-scale" checked class="val-box"></label>
+            </div>
+            <div class="control-group">
+              <label>X % <input type="number" id="scale-x" value="100" min="1" step="1" class="val-box"></label>
+            </div>
+            <div class="control-group">
+              <label>Y % <input type="number" id="scale-y" value="100" min="1" step="1" class="val-box"></label>
+            </div>
+            <div class="control-group">
+              <label>Z % <input type="number" id="scale-z" value="100" min="1" step="1" class="val-box"></label>
+            </div>
+          </div>
+          <div id="transform-rotate-fields" class="transform-fields" hidden>
+            <div class="control-group">
+              <label>X (&deg;) <input type="number" id="rotate-x" value="0" step="5" class="val-box"></label>
+            </div>
+            <div class="control-group">
+              <label>Y (&deg;) <input type="number" id="rotate-y" value="0" step="5" class="val-box"></label>
+            </div>
+            <div class="control-group">
+              <label>Z (&deg;) <input type="number" id="rotate-z" value="0" step="5" class="val-box"></label>
+            </div>
+          </div>
+        </section>
+
         <section id="orientation-panel" class="panel" hidden>
           <h2>Orientation</h2>
           <div class="preset-buttons">
@@ -145,9 +154,14 @@
             </div>
           </div>
           <div class="control-group">
+            <label>Auto Density
+              <input type="checkbox" id="auto-density" checked class="val-box">
+            </label>
+          </div>
+          <div class="control-group" id="support-density-group" style="opacity: 0.5; pointer-events: none;">
             <label>Support Density</label>
             <div class="flex-row">
-              <input type="range" id="support-density" min="1" max="10" value="5">
+              <input type="range" id="support-density" min="1" max="10" value="5" disabled>
               <span id="support-density-val" class="val-box">5</span>
             </div>
           </div>
@@ -183,6 +197,36 @@
           </div>
           <div class="action-buttons" style="margin-top: 4px;">
             <button class="btn btn-primary" id="support-all-btn" style="width: 100%;">Support All</button>
+          </div>
+        </section>
+
+        <section id="edit-panel" class="panel" hidden>
+          <h2>Edit</h2>
+          <div class="edit-actions">
+            <button class="btn btn-secondary edit-action-btn" id="duplicate-btn">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
+              </svg>
+              Duplicate
+            </button>
+            <button class="btn btn-secondary edit-action-btn" id="fill-btn">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M2 2h20v20H2V2zm2 2v4h4V4H4zm6 0v4h4V4h-4zm6 0v4h4V4h-4zM4 10v4h4v-4H4zm6 0v4h4v-4h-4zm6 0v4h4v-4h-4zM4 16v4h4v-4H4zm6 0v4h4v-4h-4zm6 0v4h4v-4h-4z" />
+              </svg>
+              Fill Platform
+            </button>
+            <button class="btn edit-action-btn edit-action-danger" id="delete-btn">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
+              </svg>
+              Delete Selected
+            </button>
+            <button class="btn edit-action-btn edit-action-danger" id="clear-btn">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z" />
+              </svg>
+              Clear All
+            </button>
           </div>
         </section>
 
@@ -222,7 +266,7 @@
 
         <section id="layer-preview-panel" class="panel" hidden>
           <h2>Layer Preview</h2>
-          <canvas id="layer-canvas" width="512" height="324"></canvas>
+          <canvas id="layer-canvas"></canvas>
           <div class="control-group">
             <input type="range" id="layer-slider" min="0" max="0" value="0">
             <span id="layer-info" class="val-box">0 / 0</span>
