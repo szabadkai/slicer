@@ -27,6 +27,15 @@ THREE.Mesh.prototype.raycast = acceleratedRaycast;
 const UP = new THREE.Vector3(0, 1, 0);
 const DOWN = new THREE.Vector3(0, -1, 0);
 const SUPPORT_SEGMENTS = 6; // polygon sides for cylinders/cones
+const EXTERIOR_RAY_DIRECTIONS = [
+  new THREE.Vector3(1, 0, 0),
+  new THREE.Vector3(-1, 0, 0),
+  new THREE.Vector3(0, 1, 0),
+  new THREE.Vector3(0, -1, 0),
+  new THREE.Vector3(0, 0, 1),
+  new THREE.Vector3(0, 0, -1),
+];
+const ROUTE_DIRECTIONS = 16;
 
 /**
  * Generate support structures for the given geometry.
@@ -40,6 +49,11 @@ export async function generateSupports(geometry, options = {}) {
     supportThickness = 0.8,
     autoThickness = true,
     internalSupports = false,
+    supportScope = internalSupports ? 'all' : 'outside-only',
+    approachMode = 'angled-needed',
+    maxPillarAngle = 45,
+    modelClearance = 1.5,
+    maxContactOffset = 18,
     crossBracing = false,
     onProgress,
   } = options;
@@ -84,6 +98,10 @@ export async function generateSupports(geometry, options = {}) {
     new THREE.MeshBasicMaterial()
   );
   tempMesh.updateMatrixWorld(true);
+  geometry.computeBoundingBox();
+  const modelBounds = geometry.boundingBox.clone();
+  const modelCenter = new THREE.Vector3();
+  modelBounds.getCenter(modelCenter);
   const raycaster = new THREE.Raycaster();
   raycaster.firstHitOnly = false; // We need all hits to filter out the contact point itself
 
@@ -106,18 +124,39 @@ export async function generateSupports(geometry, options = {}) {
   const baseRadius = pillarRadius * 2.5;
   const baseHeight = 0.6;
   const minSupportHeight = tipHeight + baseHeight + 0.5;
+  const routeOptions = {
+    allowInternalSupports: supportScope === 'all',
+    allowCavityContacts: supportScope === 'all',
+    approachMode,
+    maxPillarAngle,
+    modelClearance: Math.max(modelClearance, pillarRadius * 1.5),
+    supportCollisionRadius: Math.max(pillarRadius * 1.1, 0.2),
+    maxContactOffset,
+  };
+  const routeContext = { mesh: tempMesh, raycaster, modelBounds, modelCenter };
+
+  let supportPoints = contactPoints;
+  if (!routeOptions.allowCavityContacts) {
+    if (onProgress) {
+      onProgress(0.08, "Filtering interior contact points...");
+      await new Promise(r => setTimeout(r, 0));
+    }
+    supportPoints = contactPoints.filter(point =>
+      isExteriorContact(point, routeContext, routeOptions.modelClearance)
+    );
+  }
 
   const geometries = [];
   const routes = [];
 
-  const totalPoints = contactPoints.length;
+  const totalPoints = supportPoints.length;
   for (let i = 0; i < totalPoints; i++) {
-    const point = contactPoints[i];
+    const point = supportPoints[i];
     const { position } = point;
     if (position.y > minSupportHeight) {
       // Raycast straight down from contact point to find obstructions
       const route = planSupportRoute(
-        position, tempMesh, raycaster, pillarRadius, baseHeight, actualTipDiameter, tipHeight, internalSupports
+        point, routeContext, pillarRadius, baseHeight, tipHeight, routeOptions
       );
 
       if (route) routes.push(route);
@@ -148,7 +187,10 @@ export async function generateSupports(geometry, options = {}) {
       onProgress(0.9, "Generating cross bracing...");
       await new Promise(r => setTimeout(r, 0));
     }
-    generateCrossBracing(routes, geometries, pillarRadius, baseHeight, tipHeight);
+    generateCrossBracing(
+      routes, geometries, pillarRadius, baseHeight, tipHeight,
+      routeContext, routeOptions.supportCollisionRadius
+    );
   }
 
   if (onProgress) {
@@ -165,8 +207,12 @@ export async function generateSupports(geometry, options = {}) {
  * Returns an array of waypoints [{x, y, z}] from top (contact) to bottom (base).
  * The route may include an angled section to avoid model collision.
  */
-function planSupportRoute(contactPos, mesh, raycaster, pillarRadius, baseHeight, tipDiameter, tipHeight, internalSupports) {
-  const clearance = pillarRadius * 3; // min distance from model surface
+function planSupportRoute(point, context, pillarRadius, baseHeight, tipHeight, options) {
+  const { mesh, raycaster } = context;
+  const contactPos = point.position;
+  const clearance = options.modelClearance;
+  const maxAngleRad = THREE.MathUtils.degToRad(options.maxPillarAngle);
+  const maxHorizontalPerVertical = Math.tan(maxAngleRad);
 
   // Cast ray straight down from contact point
   raycaster.set(
@@ -180,10 +226,28 @@ function planSupportRoute(contactPos, mesh, raycaster, pillarRadius, baseHeight,
   const validHits = hits.filter(h => h.point.y < contactPos.y - 0.5);
 
   if (validHits.length === 0) {
+    if (options.approachMode === 'prefer-angled') {
+      const angled = findAngledRoute(
+        contactPos, context, baseHeight, tipHeight, clearance, maxHorizontalPerVertical,
+        options.maxContactOffset, null, null, options.supportCollisionRadius
+      );
+      if (angled) return angled;
+    }
+
     // Clear path straight down — simple vertical support
-    return [
+    const route = [
       { x: contactPos.x, y: contactPos.y, z: contactPos.z },
       { x: contactPos.x, y: baseHeight, z: contactPos.z },
+    ];
+    return routeCollides(route, context, tipHeight, baseHeight, options.supportCollisionRadius) ? null : route;
+  }
+
+  if (options.approachMode === 'vertical') {
+    if (!options.allowInternalSupports) return null;
+    const obstruction = validHits[0];
+    return [
+      { x: contactPos.x, y: contactPos.y, z: contactPos.z },
+      { x: contactPos.x, y: obstruction.point.y, z: contactPos.z, internalResting: true }
     ];
   }
 
@@ -209,9 +273,6 @@ function planSupportRoute(contactPos, mesh, raycaster, pillarRadius, baseHeight,
   }
   escapeDir.normalize();
 
-  // Calculate offset distance: enough to clear the obstruction
-  let offsetDist = clearance * 2;
-
   // Tip segment goes straight down. Angled section starts from right below the tip.
   const tipBottom = contactPos.y - tipHeight;
   const angleStartY = Math.min(
@@ -220,46 +281,184 @@ function planSupportRoute(contactPos, mesh, raycaster, pillarRadius, baseHeight,
   );
 
   const verticalDrop = tipBottom - angleStartY;
+  const maxOffsetForSlope = Math.max(0, verticalDrop * maxHorizontalPerVertical);
+  const maxUsableOffset = Math.min(options.maxContactOffset, maxOffsetForSlope);
 
-  // Enforce max slope of 45 degrees (dy >= dx => verticalDrop >= offsetDist)
-  if (offsetDist > verticalDrop) {
-      if (internalSupports) {
-          // Fallback to resting on the internal model
-          return [
-            { x: contactPos.x, y: contactPos.y, z: contactPos.z },
-            { x: contactPos.x, y: obstructionY, z: contactPos.z, internalResting: true }
-          ];
-      }
-      // Limit horizontal span to maintain 45deg
-      offsetDist = verticalDrop;
+  if (maxUsableOffset >= clearance * 1.5) {
+    const preferredAngle = Math.atan2(escapeDir.z, escapeDir.x);
+    const route = findAngledRoute(
+      contactPos, context, baseHeight, tipHeight, clearance, maxHorizontalPerVertical,
+      maxUsableOffset, angleStartY, preferredAngle, options.supportCollisionRadius
+    );
+    if (route) return route;
   }
 
-  // The vertical shaft drops from the angled section endpoint to the base
-  const shaftX = contactPos.x + escapeDir.x * offsetDist;
-  const shaftZ = contactPos.z + escapeDir.z * offsetDist;
+  if (options.allowInternalSupports) {
+    return [
+      { x: contactPos.x, y: contactPos.y, z: contactPos.z },
+      { x: contactPos.x, y: obstructionY, z: contactPos.z, internalResting: true }
+    ];
+  }
 
-  // Verify the offset path is clear by raycasting from the new position
-  raycaster.set(
-    new THREE.Vector3(shaftX, angleStartY, shaftZ),
-    DOWN
-  );
-  raycaster.far = angleStartY;
-  const shaftHits = raycaster.intersectObject(mesh);
-  const shaftBlocked = shaftHits.some(h => h.point.y < angleStartY - 0.5 && h.point.y > baseHeight);
+  return null;
+}
 
-  if (shaftBlocked || offsetDist < clearance * 1.5) {
-    if (internalSupports) {
-        return [
-          { x: contactPos.x, y: contactPos.y, z: contactPos.z },
-          { x: contactPos.x, y: obstructionY, z: contactPos.z, internalResting: true }
-        ];
+function isExteriorContact(point, context, clearance) {
+  const normal = point.normal?.clone().normalize() || DOWN.clone();
+  if (!isOutwardFacingSurface(point.position, normal, context.modelCenter)) {
+    return false;
+  }
+
+  const start = point.position.clone().addScaledVector(normal, Math.max(0.05, clearance * 0.1));
+  const directions = [normal, ...EXTERIOR_RAY_DIRECTIONS];
+
+  return directions.some(dir => rayEscapesModel(start, dir, context));
+}
+
+function isOutwardFacingSurface(position, normal, modelCenter) {
+  const radial = new THREE.Vector3().subVectors(position, modelCenter);
+  if (radial.lengthSq() < 1e-6) return true;
+  radial.normalize();
+
+  // Inner shell/cavity surfaces exposed through windows are still connected to
+  // outside air, but their normals point back toward the model center. Outside
+  // only mode should reject those contact points.
+  return normal.dot(radial) > -0.1;
+}
+
+function rayEscapesModel(start, direction, context) {
+  const dir = direction.clone().normalize();
+  if (dir.lengthSq() === 0) return false;
+
+  const far = rayDistancePastBounds(start, dir, context.modelBounds);
+  if (far <= 0) return true;
+
+  context.raycaster.set(start, dir);
+  context.raycaster.far = far;
+  const hits = context.raycaster.intersectObject(context.mesh);
+  return hits.every(hit => hit.distance < 0.05);
+}
+
+function rayDistancePastBounds(start, direction, bounds) {
+  const expanded = bounds.clone().expandByScalar(1);
+  const boxHit = new THREE.Vector3();
+  const ray = new THREE.Ray(start, direction);
+  if (!ray.intersectBox(expanded, boxHit)) return 0;
+  return start.distanceTo(boxHit) + 1;
+}
+
+function findAngledRoute(
+  contactPos, context, baseHeight, tipHeight, clearance, maxHorizontalPerVertical,
+  maxContactOffset, forcedAngleStartY = null, preferredAngle = null, collisionRadius = clearance
+) {
+  const tipBottomY = contactPos.y - tipHeight;
+  const angleStartY = forcedAngleStartY ?? Math.max(baseHeight + clearance, tipBottomY - clearance * 3);
+  const verticalDrop = tipBottomY - angleStartY;
+  if (verticalDrop <= 0.1) return null;
+
+  const slopeLimitedOffset = verticalDrop * maxHorizontalPerVertical;
+  const maxOffset = Math.min(maxContactOffset, slopeLimitedOffset);
+  if (maxOffset < clearance) return null;
+
+  const distances = [
+    clearance * 1.5,
+    clearance * 2.5,
+    clearance * 4,
+    maxOffset,
+  ].filter((dist, index, arr) => dist <= maxOffset && arr.indexOf(dist) === index);
+
+  const candidates = [];
+  for (const dist of distances) {
+    for (let i = 0; i < ROUTE_DIRECTIONS; i++) {
+      const angle = preferredAngle === null
+        ? (i / ROUTE_DIRECTIONS) * Math.PI * 2
+        : preferredAngle + directionOffset(i);
+      const dir = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+      const shaftX = contactPos.x + dir.x * dist;
+      const shaftZ = contactPos.z + dir.z * dist;
+      const route = [
+        { x: contactPos.x, y: contactPos.y, z: contactPos.z },
+        { x: shaftX, y: angleStartY, z: shaftZ },
+        { x: shaftX, y: baseHeight, z: shaftZ },
+      ];
+
+      if (!routeCollides(route, context, tipHeight, baseHeight, collisionRadius)) {
+        const preferencePenalty = preferredAngle === null ? 0 : Math.abs(normalizedAngleDelta(angle, preferredAngle));
+        candidates.push({ route, score: dist + preferencePenalty * clearance });
+      }
     }
   }
 
+  candidates.sort((a, b) => a.score - b.score);
+  return candidates[0]?.route || null;
+}
+
+function directionOffset(index) {
+  if (index === 0) return 0;
+  const step = Math.ceil(index / 2);
+  const sign = index % 2 === 0 ? 1 : -1;
+  return sign * step * (Math.PI * 2 / ROUTE_DIRECTIONS);
+}
+
+function normalizedAngleDelta(a, b) {
+  let delta = a - b;
+  while (delta > Math.PI) delta -= Math.PI * 2;
+  while (delta < -Math.PI) delta += Math.PI * 2;
+  return delta;
+}
+
+function routeCollides(route, context, tipHeight, baseHeight, clearance) {
+  const top = route[0];
+  const tipBottom = { x: top.x, y: top.y - tipHeight, z: top.z };
+
+  for (let i = 0; i < route.length - 1; i++) {
+    const from = i === 0 ? tipBottom : route[i];
+    const to = route[i + 1];
+    const isLast = i === route.length - 2;
+    const targetY = isLast
+      ? (to.internalResting ? to.y + tipHeight : baseHeight)
+      : to.y;
+
+    const fromVec = new THREE.Vector3(from.x, from.y, from.z);
+    const toVec = new THREE.Vector3(to.x, targetY, to.z);
+    if (segmentCollides(fromVec, toVec, context, clearance)) return true;
+  }
+
+  return false;
+}
+
+function segmentCollides(from, to, context, clearance) {
+  const dir = new THREE.Vector3().subVectors(to, from);
+  const length = dir.length();
+  if (length < 0.1) return false;
+  dir.normalize();
+
+  for (const start of clearanceSampleStarts(from, dir, clearance)) {
+    context.raycaster.set(start, dir);
+    context.raycaster.far = length;
+    const hits = context.raycaster.intersectObject(context.mesh);
+    if (hits.some(hit => hit.distance > 0.05 && hit.distance < length - 0.05)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function clearanceSampleStarts(origin, axis, clearance) {
+  const radius = Math.max(0, clearance * 0.5);
+  if (radius === 0) return [origin];
+
+  const tangent = Math.abs(axis.dot(UP)) < 0.9
+    ? new THREE.Vector3().crossVectors(axis, UP).normalize()
+    : new THREE.Vector3(1, 0, 0);
+  const bitangent = new THREE.Vector3().crossVectors(axis, tangent).normalize();
+
   return [
-    { x: contactPos.x, y: contactPos.y, z: contactPos.z },
-    { x: shaftX, y: angleStartY, z: shaftZ },
-    { x: shaftX, y: baseHeight, z: shaftZ },
+    origin,
+    origin.clone().addScaledVector(tangent, radius),
+    origin.clone().addScaledVector(tangent, -radius),
+    origin.clone().addScaledVector(bitangent, radius),
+    origin.clone().addScaledVector(bitangent, -radius),
   ];
 }
 
@@ -354,7 +553,9 @@ function buildSupportGeometry(
 /**
  * Generate structural trusses between adjacent vertical supports.
  */
-function generateCrossBracing(routes, geometries, pillarRadius, baseHeight, tipHeight) {
+function generateCrossBracing(
+  routes, geometries, pillarRadius, baseHeight, tipHeight, context, clearance
+) {
   const shafts = [];
   
   // 1. Gather all vertical shafts
@@ -446,17 +647,20 @@ function generateCrossBracing(routes, geometries, pillarRadius, baseHeight, tipH
          
          // Only connect if they have significant vertical overlap
          if (overlapTop - overlapBottom > zInterval) {
-             connections.set(i, connections.get(i) + 1);
-             connections.set(neighbor.index, connections.get(neighbor.index) + 1);
-             connectedCount++;
-
              let yStart = overlapBottom + zInterval / 3;
              let direction = 1;
+             let addedBrace = false;
              while (yStart + zInterval < overlapTop) {
                 const yEnd = yStart + zInterval;
                 const p1 = new THREE.Vector3(s1.x, direction === 1 ? yStart : yEnd, s1.z);
                 const p2 = new THREE.Vector3(s2.x, direction === 1 ? yEnd : yStart, s2.z);
-                
+
+                if (segmentCollides(p1, p2, context, Math.max(clearance, pillarRadius * 2))) {
+                  yStart += zInterval;
+                  direction *= -1;
+                  continue;
+                }
+
                 const braceLength = p1.distanceTo(p2);
                 const braceGeo = new THREE.CylinderGeometry(braceRadius, braceRadius, braceLength, Math.max(3, SUPPORT_SEGMENTS));
                 
@@ -471,9 +675,16 @@ function generateCrossBracing(routes, geometries, pillarRadius, baseHeight, tipH
                 );
                 
                 geometries.push(braceGeo);
+                addedBrace = true;
                 
                 yStart += zInterval;
                 direction *= -1;
+             }
+
+             if (addedBrace) {
+                connections.set(i, connections.get(i) + 1);
+                connections.set(neighbor.index, connections.get(neighbor.index) + 1);
+                connectedCount++;
              }
          }
      }
@@ -522,21 +733,23 @@ async function findContactPoints(geometry, overhangAngleDeg, density, onProgress
     b.set(pos.getX(idxB), pos.getY(idxB), pos.getZ(idxB));
     c.set(pos.getX(idxC), pos.getY(idxC), pos.getZ(idxC));
 
-    if (normals) {
-      // Using first vertex normal as an approximation for the face
-      n.set(normals.getX(idxA), normals.getY(idxA), normals.getZ(idxA)).normalize();
-    } else {
-      edge1.subVectors(b, a);
-      edge2.subVectors(c, a);
-      n.crossVectors(edge1, edge2).normalize();
+    edge1.subVectors(b, a);
+    edge2.subVectors(c, a);
+    cross.crossVectors(edge1, edge2);
+    n.copy(cross).normalize();
+
+    if (normals && n.dot(new THREE.Vector3(
+      normals.getX(idxA),
+      normals.getY(idxA),
+      normals.getZ(idxA)
+    )) < 0) {
+      n.multiplyScalar(-1);
+      cross.multiplyScalar(-1);
     }
 
     const dot = n.dot(UP);
     if (dot >= -overhangThreshold) continue;
 
-    edge1.subVectors(b, a);
-    edge2.subVectors(c, a);
-    cross.crossVectors(edge1, edge2);
     const area = cross.length() * 0.5;
 
     const numSamples = Math.max(1, Math.round(area / (spacing * spacing)));

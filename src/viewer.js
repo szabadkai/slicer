@@ -4,6 +4,25 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { computeMeshVolume } from './volume.js';
+import { DEFAULT_RESIN_MATERIAL_ID, RESIN_MATERIALS } from './materials.js';
+
+const DEFAULT_RESIN_MATERIAL = RESIN_MATERIALS.find(m => m.id === DEFAULT_RESIN_MATERIAL_ID) || RESIN_MATERIALS[0];
+
+function createResinMaterial(preset = DEFAULT_RESIN_MATERIAL) {
+  return new THREE.MeshPhysicalMaterial({
+    color: preset.color,
+    roughness: preset.roughness,
+    metalness: preset.metalness,
+    transparent: preset.opacity < 1,
+    opacity: preset.opacity,
+    transmission: preset.transmission,
+    ior: preset.ior,
+    thickness: preset.transmission > 0 ? 2 : 0,
+    clearcoat: preset.transmission > 0 ? 0.35 : 0.08,
+    clearcoatRoughness: Math.min(0.6, preset.roughness + 0.12),
+    side: THREE.DoubleSide,
+  });
+}
 
 export class Viewer {
   constructor(canvas) {
@@ -21,6 +40,7 @@ export class Viewer {
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer.sortObjects = true;
 
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 2000);
     this.camera.position.set(100, 100, 100);
@@ -167,6 +187,24 @@ export class Viewer {
     this.scene.add(dir2);
   }
 
+  getActiveMaterialPreset() {
+    const obj = this.selected[0] || this.objects[0];
+    return obj?.materialPreset || DEFAULT_RESIN_MATERIAL;
+  }
+
+  setMaterialPreset(preset, target = 'selection') {
+    if (!preset) return;
+    const targets = target === 'all' || this.selected.length === 0 ? this.objects : this.selected;
+    targets.forEach(obj => {
+      const previousMaterial = obj.mesh.material;
+      obj.mesh.material = createResinMaterial(preset);
+      obj.materialPreset = preset;
+      previousMaterial?.dispose?.();
+    });
+    this._updateSelectionVisuals();
+    this.canvas.dispatchEvent(new CustomEvent('material-changed', { detail: { preset, target } }));
+  }
+
   setPrinter(spec) {
     this.printer = spec;
     this._setupGrid();
@@ -297,18 +335,13 @@ export class Viewer {
 
   _addModelRaw(geometry, material, elevation) {
     if (!material) {
-      material = new THREE.MeshPhongMaterial({
-        color: 0x4a90d9,
-        specular: 0x222222,
-        shininess: 30,
-        flatShading: false,
-      });
+      material = createResinMaterial(DEFAULT_RESIN_MATERIAL);
     }
     const mesh = new THREE.Mesh(geometry, material);
     const id = 'obj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
     mesh.userData.id = id;
     this.scene.add(mesh);
-    const obj = { id, mesh, supportsMesh: null, elevation };
+    const obj = { id, mesh, supportsMesh: null, elevation, materialPreset: DEFAULT_RESIN_MATERIAL };
     this.objects.push(obj);
     return obj;
   }
@@ -371,7 +404,8 @@ export class Viewer {
     
     const newSelected = [];
     this.selected.forEach(sel => {
-      const newObj = this._addModelRaw(sel.mesh.geometry, sel.mesh.material, sel.elevation);
+      const newObj = this._addModelRaw(sel.mesh.geometry, sel.mesh.material.clone(), sel.elevation);
+      newObj.materialPreset = sel.materialPreset || DEFAULT_RESIN_MATERIAL;
       newObj.mesh.position.copy(sel.mesh.position);
       newObj.mesh.position.x += 10;
       newObj.mesh.position.z += 10;
@@ -600,6 +634,7 @@ export class Viewer {
     const snapshot = this.objects.map(o => ({
       geometry: o.mesh.geometry.clone(),
       material: o.mesh.material.clone(),
+      materialPreset: o.materialPreset,
       position: o.mesh.position.clone(),
       rotation: o.mesh.rotation.clone(),
       scale: o.mesh.scale.clone(),
@@ -639,7 +674,7 @@ export class Viewer {
       const id = 'obj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
       mesh.userData.id = id;
       this.scene.add(mesh);
-      this.objects.push({ id, mesh, supportsMesh: null, elevation: s.elevation });
+      this.objects.push({ id, mesh, supportsMesh: null, elevation: s.elevation, materialPreset: s.materialPreset || DEFAULT_RESIN_MATERIAL });
     });
 
     this.canvas.dispatchEvent(new CustomEvent('selection-changed'));
@@ -651,6 +686,7 @@ export class Viewer {
     this.clipboard = this.selected.map(sel => ({
       geometry: sel.mesh.geometry.clone(),
       material: sel.mesh.material.clone(),
+      materialPreset: sel.materialPreset,
       position: sel.mesh.position.clone(),
       elevation: sel.elevation,
     }));
@@ -664,6 +700,7 @@ export class Viewer {
       const geo = item.geometry.clone();
       const mat = item.material.clone();
       const obj = this._addModelRaw(geo, mat, item.elevation);
+      obj.materialPreset = item.materialPreset || DEFAULT_RESIN_MATERIAL;
       obj.mesh.position.copy(item.position);
       obj.mesh.position.x += 10;
       obj.mesh.position.z += 10;
@@ -715,6 +752,7 @@ export class Viewer {
     // and reposition all models via `mesh.position` during cloning loop.
     const sourceElevation = sel.elevation;
     const sharedMaterial = sel.mesh.material;
+    const materialPreset = sel.materialPreset || DEFAULT_RESIN_MATERIAL;
     
     // Keep internal transform centering identical to what we had before replacing.
     sourceGeo.translate(-center.x, 0, -center.z);
@@ -727,7 +765,8 @@ export class Viewer {
         const px = startX + i * itemW;
         const pz = startZ + j * itemD;
         
-        const newObj = this._addModelRaw(sourceGeo, sharedMaterial, sourceElevation);
+        const newObj = this._addModelRaw(sourceGeo, sharedMaterial.clone(), sourceElevation);
+        newObj.materialPreset = materialPreset;
         newObj.mesh.position.set(px, 0, pz);
         newObj.mesh.updateMatrixWorld();
       }

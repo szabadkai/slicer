@@ -4,6 +4,7 @@ import { optimizeOrientationAsync, analyzeCurrentOrientation } from './orientati
 import { generateSupports } from './supports.js';
 import { exportZip, estimatePrintTime } from './exporter.js';
 import { computeSlicedVolume, mm3ToMl } from './volume.js';
+import { DEFAULT_RESIN_MATERIAL_ID, RESIN_MATERIALS } from './materials.js';
 
 // --- State ---
 let viewer;
@@ -11,6 +12,7 @@ let slicer;
 let slicedLayers = null;
 // Set after slicing completes; falsy means "use mesh-based pre-slice estimate".
 let slicedVolumes = null; // { model: mm³, supports: mm³ }
+let selectedMaterialId = DEFAULT_RESIN_MATERIAL_ID;
 
 // Debug access
 import * as THREE from 'three';
@@ -25,6 +27,9 @@ const supportsPanel = document.getElementById('supports-panel');
 const editPanel = document.getElementById('edit-panel');
 const slicePanel = document.getElementById('slice-panel');
 const layerPreviewPanel = document.getElementById('layer-preview-panel');
+const materialPicker = document.getElementById('material-picker');
+const materialDetail = document.getElementById('material-detail');
+const applyMaterialAllBtn = document.getElementById('apply-material-all-btn');
 
 const toolPanels = { transform: transformPanel, orient: orientationPanel, supports: supportsPanel, edit: editPanel };
 
@@ -41,7 +46,11 @@ const tipDiameterGroup = document.getElementById('tip-diameter-group');
 const supportThicknessInput = document.getElementById('support-thickness');
 const supportThicknessGroup = document.getElementById('support-thickness-group');
 const autoThicknessInput = document.getElementById('auto-thickness');
-const internalSupportsInput = document.getElementById('internal-supports');
+const supportScopeInput = document.getElementById('support-scope');
+const supportApproachInput = document.getElementById('support-approach');
+const supportMaxAngleInput = document.getElementById('support-max-angle');
+const supportClearanceInput = document.getElementById('support-clearance');
+const supportMaxOffsetInput = document.getElementById('support-max-offset');
 const crossBracingInput = document.getElementById('cross-bracing');
 const generateSupportsBtn = document.getElementById('generate-supports-btn');
 const clearSupportsBtn = document.getElementById('clear-supports-btn');
@@ -99,6 +108,7 @@ function init() {
   // Initialize both viewer and slicer with the default printer
   slicer.setPrinter(printerSelect.value);
   viewer.setPrinter(PRINTERS[printerSelect.value]);
+  initMaterialPicker();
 
   stlInput.addEventListener('change', handleFileLoad);
 
@@ -126,6 +136,10 @@ function init() {
     if (!viewer.fillPlatform()) {
       alert("Model may be too large to duplicate on the platform.");
     }
+  });
+  applyMaterialAllBtn.addEventListener('click', () => {
+    const preset = RESIN_MATERIALS.find(m => m.id === selectedMaterialId);
+    viewer.setMaterialPreset(preset, 'all');
   });
   
   document.addEventListener('keydown', (e) => {
@@ -216,6 +230,9 @@ function init() {
   const scaleXInput = document.getElementById('scale-x');
   const scaleYInput = document.getElementById('scale-y');
   const scaleZInput = document.getElementById('scale-z');
+  const sizeXInput = document.getElementById('size-x');
+  const sizeYInput = document.getElementById('size-y');
+  const sizeZInput = document.getElementById('size-z');
   const rotateXInput = document.getElementById('rotate-x');
   const rotateYInput = document.getElementById('rotate-y');
   const rotateZInput = document.getElementById('rotate-z');
@@ -264,9 +281,47 @@ function init() {
     commitTransform();
   }
 
+  function getSelectedWorldSize() {
+    if (viewer.selected.length !== 1) return null;
+    const mesh = viewer.selected[0].mesh;
+    mesh.geometry.computeBoundingBox();
+    mesh.updateMatrixWorld(true);
+    const box = mesh.geometry.boundingBox.clone().applyMatrix4(mesh.matrixWorld);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    return size;
+  }
+
+  function applySizeFromInputs(changedAxis) {
+    if (viewer.selected.length !== 1) return;
+    const currentSize = getSelectedWorldSize();
+    if (!currentSize || currentSize.x <= 0 || currentSize.y <= 0 || currentSize.z <= 0) return;
+
+    const targetX = parseFloat(sizeXInput.value);
+    const targetY = parseFloat(sizeYInput.value);
+    const targetZ = parseFloat(sizeZInput.value);
+    if (uniformScaleInput.checked) {
+      const currentAxisSize = changedAxis === 'x' ? currentSize.x : changedAxis === 'y' ? currentSize.y : currentSize.z;
+      const targetAxisSize = changedAxis === 'x' ? targetX : changedAxis === 'y' ? targetY : targetZ;
+      if (!Number.isFinite(targetAxisSize) || targetAxisSize <= 0 || currentAxisSize <= 0) return;
+      const factor = targetAxisSize / currentAxisSize;
+      viewer.selected[0].mesh.scale.multiplyScalar(factor);
+    } else {
+      viewer.selected[0].mesh.scale.set(
+        Number.isFinite(targetX) && targetX > 0 ? targetX / currentSize.x : 1,
+        Number.isFinite(targetY) && targetY > 0 ? targetY / currentSize.y : 1,
+        Number.isFinite(targetZ) && targetZ > 0 ? targetZ / currentSize.z : 1,
+      );
+    }
+    commitTransform();
+  }
+
   scaleXInput.addEventListener('change', () => applyScaleFromInputs('x'));
   scaleYInput.addEventListener('change', () => applyScaleFromInputs('y'));
   scaleZInput.addEventListener('change', () => applyScaleFromInputs('z'));
+  sizeXInput.addEventListener('change', () => applySizeFromInputs('x'));
+  sizeYInput.addEventListener('change', () => applySizeFromInputs('y'));
+  sizeZInput.addEventListener('change', () => applySizeFromInputs('z'));
 
   function applyRotationFromInputs() {
     if (viewer.selected.length !== 1) return;
@@ -319,6 +374,12 @@ function init() {
     }
 
     updateWorkspaceInfo();
+    syncMaterialPicker();
+  });
+
+  canvas.addEventListener('material-changed', () => {
+    selectedMaterialId = viewer.getActiveMaterialPreset().id;
+    syncMaterialPicker();
   });
 
   function updateTransformInputs() {
@@ -330,6 +391,12 @@ function init() {
     scaleXInput.value = Math.round(mesh.scale.x * 100);
     scaleYInput.value = Math.round(mesh.scale.y * 100);
     scaleZInput.value = Math.round(mesh.scale.z * 100);
+    const size = getSelectedWorldSize();
+    if (size) {
+      sizeXInput.value = Math.round(size.x * 100) / 100;
+      sizeYInput.value = Math.round(size.y * 100) / 100;
+      sizeZInput.value = Math.round(size.z * 100) / 100;
+    }
     const rad2deg = 180 / Math.PI;
     rotateXInput.value = Math.round(mesh.rotation.x * rad2deg);
     rotateYInput.value = Math.round(mesh.rotation.y * rad2deg);
@@ -431,6 +498,55 @@ function init() {
   loadDefaultModel();
 }
 
+function initMaterialPicker() {
+  materialPicker.innerHTML = '';
+  RESIN_MATERIALS.forEach((material) => {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'material-card';
+    card.dataset.materialId = material.id;
+    card.innerHTML = `
+      <span class="material-card-top">
+        <span class="material-swatch" style="background:${material.swatch}"></span>
+        <span class="material-brand">${material.brand}</span>
+      </span>
+      <span class="material-product">${material.product}</span>
+      <span class="material-color">${material.colorName}</span>
+    `;
+    card.addEventListener('click', () => {
+      selectedMaterialId = material.id;
+      viewer.setMaterialPreset(material, 'selection');
+      syncMaterialPicker();
+    });
+    materialPicker.appendChild(card);
+  });
+  syncMaterialPicker();
+}
+
+function syncMaterialPicker() {
+  if (!materialPicker) return;
+  const activePreset = viewer?.getActiveMaterialPreset?.();
+  const activeId = activePreset?.id || selectedMaterialId;
+  selectedMaterialId = activeId;
+  materialPicker.querySelectorAll('.material-card').forEach(card => {
+    card.classList.toggle('active', card.dataset.materialId === activeId);
+  });
+
+  const material = RESIN_MATERIALS.find(m => m.id === activeId) || RESIN_MATERIALS[0];
+  const opacityPct = Math.round(material.opacity * 100);
+  const reflectivenessPct = Math.round((1 - material.roughness) * 100);
+  const translucentLabel = material.transmission > 0.45 ? 'transparent' : material.opacity < 0.85 ? 'translucent' : 'opaque';
+  materialDetail.innerHTML = `
+    <div class="material-detail-title">${material.brand} ${material.colorName}</div>
+    <div>${material.description}</div>
+    <div class="material-metrics">
+      <span>Opacity ${opacityPct}%</span>
+      <span>Reflect ${reflectivenessPct}%</span>
+      <span>${translucentLabel}</span>
+    </div>
+  `;
+}
+
 async function loadDefaultModel() {
   try {
     const response = await fetch(import.meta.env.BASE_URL + 'models/d20v2_thick.stl');
@@ -509,7 +625,11 @@ async function handleGenerateSupports() {
     tipDiameter: parseFloat(tipDiameterInput.value),
     supportThickness: parseFloat(supportThicknessInput.value),
     autoThickness: autoThicknessInput.checked,
-    internalSupports: internalSupportsInput.checked,
+    supportScope: supportScopeInput.value,
+    approachMode: supportApproachInput.value,
+    maxPillarAngle: parseFloat(supportMaxAngleInput.value),
+    modelClearance: parseFloat(supportClearanceInput.value),
+    maxContactOffset: parseFloat(supportMaxOffsetInput.value),
     crossBracing: crossBracingInput.checked,
     onProgress: (fraction, text) => {
       updateProgress(fraction, text);
@@ -579,7 +699,11 @@ async function handleSupportAll() {
       tipDiameter: parseFloat(tipDiameterInput.value),
       supportThickness: parseFloat(supportThicknessInput.value),
       autoThickness: autoThicknessInput.checked,
-      internalSupports: internalSupportsInput.checked,
+      supportScope: supportScopeInput.value,
+      approachMode: supportApproachInput.value,
+      maxPillarAngle: parseFloat(supportMaxAngleInput.value),
+      modelClearance: parseFloat(supportClearanceInput.value),
+      maxContactOffset: parseFloat(supportMaxOffsetInput.value),
       crossBracing: crossBracingInput.checked,
       onProgress: (fraction) => {
         const overall = (i + fraction) / allObjects.length;
