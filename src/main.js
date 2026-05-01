@@ -3,11 +3,14 @@ import { Slicer, PRINTERS } from './slicer.js';
 import { optimizeOrientationAsync, analyzeCurrentOrientation } from './orientation.js';
 import { generateSupports } from './supports.js';
 import { exportZip, estimatePrintTime } from './exporter.js';
+import { computeSlicedVolume, mm3ToMl } from './volume.js';
 
 // --- State ---
 let viewer;
 let slicer;
 let slicedLayers = null;
+// Set after slicing completes; falsy means "use mesh-based pre-slice estimate".
+let slicedVolumes = null; // { model: mm³, supports: mm³ }
 
 // Debug access
 import * as THREE from 'three';
@@ -86,6 +89,7 @@ function init() {
 
     // Clear out sliced output because bounds/resolution changed
     slicedLayers = null;
+    slicedVolumes = null;
     exportBtn.hidden = true;
     layerPreviewPanel.hidden = true;
     updateEstimate();
@@ -217,6 +221,16 @@ function init() {
   const rotateZInput = document.getElementById('rotate-z');
   const uniformScaleInput = document.getElementById('uniform-scale');
 
+  // After mutating mesh.position/rotation/scale from a panel input, commit it
+  // by baking the transform — same behavior as releasing the transform gizmo.
+  // Without this, supports (which are a sibling mesh in the scene, not a child
+  // of the model) stay attached at the original 1:1 dimensions while the
+  // model visually changes.
+  function commitTransform() {
+    viewer._bakeTransform();
+    updateTransformInputs();
+  }
+
   function applyTransformFromInputs() {
     if (viewer.selected.length !== 1) return;
     const mesh = viewer.selected[0].mesh;
@@ -225,6 +239,7 @@ function init() {
       parseFloat(moveYInput.value) || 0,
       parseFloat(moveZInput.value) || 0,
     );
+    commitTransform();
   }
 
   [moveXInput, moveYInput, moveZInput].forEach(el => {
@@ -246,6 +261,7 @@ function init() {
     } else {
       viewer.selected[0].mesh.scale.set(sx, sy, sz);
     }
+    commitTransform();
   }
 
   scaleXInput.addEventListener('change', () => applyScaleFromInputs('x'));
@@ -260,6 +276,7 @@ function init() {
       (parseFloat(rotateYInput.value) || 0) * deg2rad,
       (parseFloat(rotateZInput.value) || 0) * deg2rad,
     );
+    commitTransform();
   }
 
   [rotateXInput, rotateYInput, rotateZInput].forEach(el => {
@@ -342,12 +359,14 @@ function init() {
       }
       updateEstimate();
       slicedLayers = null;
+      slicedVolumes = null;
       exportBtn.hidden = true;
       layerPreviewPanel.hidden = true;
     } else {
       modelInfo.classList.remove('visible');
       printEstimate.innerHTML = '';
       slicedLayers = null;
+      slicedVolumes = null;
       exportBtn.hidden = true;
       layerPreviewPanel.hidden = true;
     }
@@ -389,6 +408,7 @@ function init() {
   zElevationInput.addEventListener('change', () => {
     viewer.setElevation(parseFloat(zElevationInput.value));
     slicedLayers = null;
+    slicedVolumes = null;
     exportBtn.hidden = true;
     layerPreviewPanel.hidden = true;
     updateEstimate();
@@ -420,6 +440,7 @@ async function loadDefaultModel() {
     layerPreviewPanel.hidden = true;
     exportBtn.hidden = true;
     slicedLayers = null;
+    slicedVolumes = null;
     updateEstimate();
   } catch (e) {
     console.warn('Could not load default model:', e);
@@ -444,6 +465,7 @@ function handleFileLoad(e) {
       layerPreviewPanel.hidden = true;
       exportBtn.hidden = true;
       slicedLayers = null;
+      slicedVolumes = null;
 
       updateEstimate();
       hideProgress();
@@ -501,6 +523,7 @@ async function handleGenerateSupports() {
   }
 
   slicedLayers = null;
+  slicedVolumes = null;
   exportBtn.hidden = true;
   layerPreviewPanel.hidden = true;
   updateEstimate();
@@ -573,6 +596,7 @@ async function handleSupportAll() {
 
   viewer.clearSelection();
   slicedLayers = null;
+  slicedVolumes = null;
   exportBtn.hidden = true;
   layerPreviewPanel.hidden = true;
   updateEstimate();
@@ -608,6 +632,54 @@ async function handleSlice() {
   slicedLayers = await slicer.slice(layerHeight, (current, total) => {
     updateProgress(current / total, `Slicing layer ${current} / ${total}`);
   });
+
+  // Compute exact post-slice volumes by re-slicing each component on its own.
+  // The combined slice above is still what the user previews/exports — these
+  // extra passes only feed the volume estimate, so they stream layer pixels
+  // through a counter without retaining buffers (otherwise tall jobs can
+  // allocate gigabytes; see slicer.slice() options).
+  const printerSpec = slicer.getPrinterSpec();
+  const pxArea =
+    (printerSpec.buildWidthMM / printerSpec.resolutionX) *
+    (printerSpec.buildDepthMM / printerSpec.resolutionY);
+  const countWhitePixels = (pixels) => {
+    let c = 0;
+    for (let i = 0; i < pixels.length; i += 4) {
+      if (pixels[i] > 127) c++;
+    }
+    return c;
+  };
+
+  let modelVolMm3 = 0;
+  let supportVolMm3 = 0;
+  if (mergedSupportGeo) {
+    showProgress('Measuring model volume...');
+    await new Promise(r => setTimeout(r, 50));
+    slicer.uploadGeometry(mergedModelGeo, null);
+    let modelPx = 0;
+    await slicer.slice(
+      layerHeight,
+      (current, total) => updateProgress(current / total, `Measuring model ${current} / ${total}`),
+      { collect: false, onLayer: (pixels) => { modelPx += countWhitePixels(pixels); } },
+    );
+    modelVolMm3 = modelPx * pxArea * layerHeight;
+
+    showProgress('Measuring supports volume...');
+    await new Promise(r => setTimeout(r, 50));
+    slicer.uploadGeometry(mergedSupportGeo, null);
+    let supportPx = 0;
+    await slicer.slice(
+      layerHeight,
+      (current, total) => updateProgress(current / total, `Measuring supports ${current} / ${total}`),
+      { collect: false, onLayer: (pixels) => { supportPx += countWhitePixels(pixels); } },
+    );
+    supportVolMm3 = supportPx * pxArea * layerHeight;
+  } else {
+    // No supports — the combined slice IS the model, no extra pass needed.
+    modelVolMm3 = computeSlicedVolume(slicedLayers, printerSpec, layerHeight);
+  }
+  slicedVolumes = { model: modelVolMm3, supports: supportVolMm3 };
+  updateEstimate();
 
   hideProgress();
 
@@ -663,6 +735,10 @@ async function handleExport() {
   if (!slicedLayers) return;
 
   const settings = getSettings();
+  if (slicedVolumes) {
+    settings.modelVolumeMm3 = slicedVolumes.model;
+    settings.supportVolumeMm3 = slicedVolumes.supports;
+  }
   const spec = slicer.getPrinterSpec();
 
   showProgress('Exporting...');
@@ -699,10 +775,33 @@ function updateEstimate() {
   const layerCount = Math.ceil(modelHeight / settings.layerHeight);
   const estimate = estimatePrintTime(layerCount, settings);
 
-  printEstimate.innerHTML =
-    `<div class="estimate-row"><span class="estimate-label">Layers</span><span class="estimate-value">${layerCount}</span></div>` +
-    `<div class="estimate-row"><span class="estimate-label">Height</span><span class="estimate-value">${modelHeight.toFixed(1)} mm</span></div>` +
-    `<div class="estimate-row"><span class="estimate-label">Total Time</span><span class="estimate-value">${estimate.hours}h ${estimate.minutes}m</span></div>`;
+  const exact = !!slicedVolumes;
+  const modelMl = mm3ToMl(exact ? slicedVolumes.model : (info.modelVolume || 0));
+  const supportMl = mm3ToMl(exact ? slicedVolumes.supports : (info.supportVolume || 0));
+  const totalMl = modelMl + supportMl;
+  const pourMl = totalMl * 1.05;
+  const suffix = exact ? '' : ' (est.)';
+
+  const rows = [
+    `<div class="estimate-row"><span class="estimate-label">Layers</span><span class="estimate-value">${layerCount}</span></div>`,
+    `<div class="estimate-row"><span class="estimate-label">Height</span><span class="estimate-value">${modelHeight.toFixed(1)} mm</span></div>`,
+    `<div class="estimate-row"><span class="estimate-label">Model${suffix}</span><span class="estimate-value">${modelMl.toFixed(1)} mL</span></div>`,
+  ];
+  if (supportMl > 0 || exact) {
+    rows.push(
+      `<div class="estimate-row"><span class="estimate-label">Supports${suffix}</span><span class="estimate-value">${supportMl.toFixed(1)} mL</span></div>`,
+    );
+  }
+  if (exact) {
+    rows.push(
+      `<div class="estimate-row"><span class="estimate-label">Total</span><span class="estimate-value">${totalMl.toFixed(1)} mL <small>(pour ≥${Math.ceil(pourMl)} mL)</small></span></div>`,
+    );
+  }
+  rows.push(
+    `<div class="estimate-row"><span class="estimate-label">Total Time</span><span class="estimate-value">${estimate.hours}h ${estimate.minutes}m</span></div>`,
+  );
+
+  printEstimate.innerHTML = rows.join('');
 }
 
 // --- Progress UI ---

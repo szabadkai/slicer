@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+import { computeMeshVolume } from './volume.js';
 
 export class Viewer {
   constructor(canvas) {
@@ -131,6 +132,18 @@ export class Viewer {
     } else {
       this.transformControl.detach();
     }
+  }
+
+  _recenterMeshOrigin(mesh) {
+    mesh.geometry.computeBoundingBox();
+    const center = new THREE.Vector3();
+    mesh.geometry.boundingBox.getCenter(center);
+    if (center.lengthSq() === 0) return;
+
+    mesh.geometry.translate(-center.x, -center.y, -center.z);
+    mesh.position.add(center);
+    mesh.geometry.computeBoundingBox();
+    mesh.updateMatrixWorld(true);
   }
 
   _updateSelectionVisuals() {
@@ -302,6 +315,7 @@ export class Viewer {
 
   addModel(geometry, elevation = 5) {
     const obj = this._addModelRaw(geometry, null, elevation);
+    this._recenterMeshOrigin(obj.mesh);
     this.selectObject(obj.id);
     this.canvas.dispatchEvent(new CustomEvent('mesh-changed'));
     return obj;
@@ -374,6 +388,8 @@ export class Viewer {
   getOverallInfo() {
     if (this.objects.length === 0) return null;
     let tris = 0;
+    let modelVolume = 0;
+    let supportVolume = 0;
     const bb = new THREE.Box3();
     this.objects.forEach(o => {
         tris += o.mesh.geometry.attributes.position.count / 3;
@@ -381,6 +397,22 @@ export class Viewer {
         const obb = o.mesh.geometry.boundingBox.clone();
         obb.applyMatrix4(o.mesh.matrixWorld);
         bb.union(obb);
+
+        // Cache local-space mesh volume per object; multiply by det(world) so
+        // translation/rotation are free, and only re-traverse triangles when
+        // geometry changes (e.g. on _bakeTransform, which clears the cache).
+        if (o._cachedLocalVolume === undefined) {
+          o._cachedLocalVolume = computeMeshVolume(o.mesh.geometry);
+        }
+        modelVolume += o._cachedLocalVolume * Math.abs(o.mesh.matrixWorld.determinant());
+
+        if (o.supportsMesh) {
+          if (o._cachedLocalSupportVolume === undefined) {
+            o._cachedLocalSupportVolume = computeMeshVolume(o.supportsMesh.geometry);
+          }
+          o.supportsMesh.updateMatrixWorld();
+          supportVolume += o._cachedLocalSupportVolume * Math.abs(o.supportsMesh.matrixWorld.determinant());
+        }
     });
     const size = new THREE.Vector3();
     bb.getSize(size);
@@ -389,7 +421,9 @@ export class Viewer {
         width: size.x.toFixed(1),
         height: size.y.toFixed(1),
         depth: size.z.toFixed(1),
-        count: this.objects.length
+        count: this.objects.length,
+        modelVolume,    // mm³
+        supportVolume,  // mm³
     };
   }
 
@@ -425,7 +459,13 @@ export class Viewer {
   }
 
   getModelGeometry() {
-    return this.selected.length === 1 ? this.selected[0].mesh.geometry : null;
+    if (this.selected.length !== 1) return null;
+    const mesh = this.selected[0].mesh;
+    const geometry = mesh.geometry.clone();
+    mesh.updateMatrix();
+    geometry.applyMatrix4(mesh.matrix);
+    geometry.computeBoundingBox();
+    return geometry;
   }
 
   getModelMesh() {
@@ -473,6 +513,7 @@ export class Viewer {
 
     const mesh = new THREE.Mesh(supportGeometry, material);
     this.selected[0].supportsMesh = mesh;
+    this.selected[0]._cachedLocalSupportVolume = undefined;
     this.scene.add(mesh);
   }
 
@@ -484,6 +525,7 @@ export class Viewer {
         sel.supportsMesh.material.dispose();
         sel.supportsMesh = null;
       }
+      sel._cachedLocalSupportVolume = undefined;
     });
   }
 
@@ -495,10 +537,10 @@ export class Viewer {
     if (this.selected.length === 0) return;
     this.selected.forEach(sel => {
         if (sel.elevation === elevation) return;
-        const deltaY = elevation - sel.elevation;
         sel.elevation = elevation;
-        sel.mesh.geometry.translate(0, deltaY, 0);
         sel.mesh.geometry.computeBoundingBox();
+        sel.mesh.position.y = elevation - sel.mesh.geometry.boundingBox.min.y;
+        sel.mesh.updateMatrixWorld(true);
     });
     this.clearSupports();
   }
@@ -511,8 +553,12 @@ export class Viewer {
     const bb = sel.mesh.geometry.boundingBox;
     const center = new THREE.Vector3();
     bb.getCenter(center);
-    sel.mesh.geometry.translate(-center.x, -bb.min.y + sel.elevation, -center.z);
+    sel.mesh.geometry.translate(-center.x, -center.y, -center.z);
     sel.mesh.geometry.computeBoundingBox();
+    sel.mesh.position.x += center.x;
+    sel.mesh.position.z += center.z;
+    sel.mesh.position.y = sel.elevation - sel.mesh.geometry.boundingBox.min.y;
+    sel.mesh.updateMatrixWorld(true);
     
     this.clearSupports();
     this.canvas.dispatchEvent(new CustomEvent('mesh-changed'));
@@ -534,7 +580,8 @@ export class Viewer {
 
   _bakeTransform() {
     if (this.selected.length !== 1) return;
-    const smesh = this.selected[0].mesh;
+    const sel = this.selected[0];
+    const smesh = sel.mesh;
     smesh.updateMatrix();
     smesh.geometry.applyMatrix4(smesh.matrix);
     smesh.position.set(0, 0, 0);
@@ -542,7 +589,9 @@ export class Viewer {
     smesh.scale.set(1, 1, 1);
     smesh.updateMatrix();
     smesh.geometry.computeBoundingBox();
-    
+    this._recenterMeshOrigin(smesh);
+    sel._cachedLocalVolume = undefined;
+
     this.clearSupports();
     this.canvas.dispatchEvent(new CustomEvent('mesh-changed'));
   }

@@ -190,13 +190,25 @@ export class Slicer {
 
   /**
    * Slice the uploaded geometry into layer images.
-   * Returns an array of ImageData objects.
+   *
+   * @param {number} layerHeightMM
+   * @param {Function} onProgress (current, total)
+   * @param {{collect?: boolean, onLayer?: (pixels: Uint8Array, index: number) => void}} [options]
+   *   When `collect` is false, the per-layer buffer is reused and not retained;
+   *   the caller must consume `pixels` synchronously inside `onLayer`. This is
+   *   required for streaming consumers (e.g. volume measurement) to avoid
+   *   allocating gigabytes of layer data on tall jobs.
+   * @returns {Promise<Uint8Array[]|null>} Array of layer buffers when collecting; null otherwise.
    */
-  async slice(layerHeightMM, onProgress) {
+  async slice(layerHeightMM, onProgress, options = {}) {
+    const { collect = true, onLayer = null } = options;
     const gl = this.gl;
     const totalHeight = this.maxY - this.minY;
     const layerCount = Math.ceil(totalHeight / layerHeightMM);
-    const layers = [];
+    const layers = collect ? [] : null;
+    const pixelByteCount = this.printer.resolutionX * this.printer.resolutionY * 4;
+    // Reused scratch buffer when not collecting — saves ~16-130 MB per layer.
+    const reusable = collect ? null : new Uint8Array(pixelByteCount);
 
     // Orthographic projection matching printer build area
     const halfW = this.printer.buildWidthMM / 2;
@@ -204,20 +216,14 @@ export class Slicer {
     // Ortho: left, right, bottom, top, near, far
     const projection = this._ortho(-halfW, halfW, -halfD, halfD, -500, 500);
 
-    // Model-view: looking down Y axis (top-down view)
-    // Model sits on XZ plane, Y is up. Camera looks down -Y.
-    // But we want to slice along Y, so we look along -Y.
-    // Actually: we want the slice plane at a given Y.
-    // We'll use the camera looking along Y, clipping near/far around the slice.
-
     for (let i = 0; i < layerCount; i++) {
       const z = this.minY + (i + 0.5) * layerHeightMM;
       this._renderSlice(projection, z, layerHeightMM);
 
-      // Read pixels
-      const pixels = new Uint8Array(this.printer.resolutionX * this.printer.resolutionY * 4);
+      const pixels = collect ? new Uint8Array(pixelByteCount) : reusable;
       gl.readPixels(0, 0, this.printer.resolutionX, this.printer.resolutionY, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-      layers.push(pixels);
+      if (collect) layers.push(pixels);
+      if (onLayer) onLayer(pixels, i);
 
       if (onProgress) {
         onProgress(i + 1, layerCount);
