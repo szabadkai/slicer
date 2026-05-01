@@ -241,7 +241,8 @@ export async function exportZip(layers, settings, printerSpec, onProgress) {
   if (settings.modelVolumeMm3 !== undefined) {
     metadata.modelVolume_mm3 = settings.modelVolumeMm3;
     metadata.supportVolume_mm3 = settings.supportVolumeMm3 || 0;
-    metadata.totalVolume_mL = (settings.modelVolumeMm3 + (settings.supportVolumeMm3 || 0)) / 1000;
+    metadata.volumeBreakdownExact = settings.volumeBreakdownExact !== false;
+    metadata.totalVolume_mL = (settings.totalVolumeMm3 ?? (settings.modelVolumeMm3 + (settings.supportVolumeMm3 || 0))) / 1000;
   }
   zip.file('metadata.json', JSON.stringify(metadata, null, 2));
 

@@ -140,22 +140,22 @@ export class Slicer {
   uploadGeometry(geometry, supportsGeometry = null) {
     const gl = this.gl;
 
-    // Collect all positions
+    // Collect all triangles. Some generated support meshes are indexed while
+    // STL uploads are usually not, and WebGL drawArrays needs expanded vertices.
+    //
+    // Keep connected shells as separate draw ranges. The stencil pass computes
+    // solid parity for one closed shell; if intersecting shells share a stencil
+    // pass, supports can subtract from a base pan instead of unioning with it.
     const positions = [];
-    const pos = geometry.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      positions.push(pos.getX(i), pos.getY(i), pos.getZ(i));
-    }
-
-    if (supportsGeometry) {
-      const spos = supportsGeometry.attributes.position;
-      for (let i = 0; i < spos.count; i++) {
-        positions.push(spos.getX(i), spos.getY(i), spos.getZ(i));
-      }
-    }
+    const drawRanges = [];
+    this._appendGeometryPositions(positions, drawRanges, geometry);
+    this._appendGeometryPositions(positions, drawRanges, supportsGeometry);
 
     const data = new Float32Array(positions);
     this.vertexCount = data.length / 3;
+    this.drawRanges = drawRanges.length > 0
+      ? drawRanges
+      : [{ start: 0, count: this.vertexCount }];
 
     if (this.meshBuffer) gl.deleteBuffer(this.meshBuffer);
     this.meshBuffer = gl.createBuffer();
@@ -170,6 +170,107 @@ export class Slicer {
     }
     this.minY = minY;
     this.maxY = maxY;
+  }
+
+  _appendGeometryPositions(positions, drawRanges, geometry) {
+    if (!geometry?.attributes?.position) return;
+
+    const pos = geometry.attributes.position;
+    const index = geometry.index;
+    const components = this._findTriangleComponents(geometry);
+    const appendVertex = (vertexIndex) => {
+      positions.push(pos.getX(vertexIndex), pos.getY(vertexIndex), pos.getZ(vertexIndex));
+    };
+
+    for (const component of components) {
+      const start = positions.length / 3;
+      for (const tri of component) {
+        if (index) {
+          appendVertex(index.getX(tri * 3));
+          appendVertex(index.getX(tri * 3 + 1));
+          appendVertex(index.getX(tri * 3 + 2));
+        } else {
+          appendVertex(tri * 3);
+          appendVertex(tri * 3 + 1);
+          appendVertex(tri * 3 + 2);
+        }
+      }
+      const count = positions.length / 3 - start;
+      if (count > 0) drawRanges.push({ start, count });
+    }
+  }
+
+  _findTriangleComponents(geometry) {
+    const pos = geometry.attributes.position;
+    const index = geometry.index;
+    const triCount = index ? Math.floor(index.count / 3) : Math.floor(pos.count / 3);
+    if (triCount === 0) return [];
+
+    const parent = new Int32Array(triCount);
+    const rank = new Uint8Array(triCount);
+    for (let i = 0; i < triCount; i++) parent[i] = i;
+
+    const find = (x) => {
+      let root = x;
+      while (parent[root] !== root) root = parent[root];
+      while (parent[x] !== x) {
+        const next = parent[x];
+        parent[x] = root;
+        x = next;
+      }
+      return root;
+    };
+
+    const union = (a, b) => {
+      let rootA = find(a);
+      let rootB = find(b);
+      if (rootA === rootB) return;
+      if (rank[rootA] < rank[rootB]) {
+        const tmp = rootA;
+        rootA = rootB;
+        rootB = tmp;
+      }
+      parent[rootB] = rootA;
+      if (rank[rootA] === rank[rootB]) rank[rootA]++;
+    };
+
+    const vertexToTriangle = new Map();
+    const vertexIndexForTriangle = (tri, corner) => index
+      ? index.getX(tri * 3 + corner)
+      : tri * 3 + corner;
+
+    for (let tri = 0; tri < triCount; tri++) {
+      for (let corner = 0; corner < 3; corner++) {
+        const vertexIndex = vertexIndexForTriangle(tri, corner);
+        const key = this._vertexKey(
+          pos.getX(vertexIndex),
+          pos.getY(vertexIndex),
+          pos.getZ(vertexIndex)
+        );
+        const previousTri = vertexToTriangle.get(key);
+        if (previousTri === undefined) {
+          vertexToTriangle.set(key, tri);
+        } else {
+          union(tri, previousTri);
+        }
+      }
+    }
+
+    const byRoot = new Map();
+    for (let tri = 0; tri < triCount; tri++) {
+      const root = find(tri);
+      const component = byRoot.get(root);
+      if (component) {
+        component.push(tri);
+      } else {
+        byRoot.set(root, [tri]);
+      }
+    }
+    return [...byRoot.values()];
+  }
+
+  _vertexKey(x, y, z) {
+    return `${Math.round(x * 1e5)},${Math.round(y * 1e5)},${Math.round(z * 1e5)}`;
   }
 
   setPrinter(printerKey) {
@@ -268,46 +369,53 @@ export class Slicer {
     const halfD = this.printer.buildDepthMM / 2;
     const proj = this._ortho(-halfW, halfW, -halfD, halfD, near, far);
 
-    // --- Pass 1: Front faces, increment stencil ---
-    // Note: The MV matrix includes a reflection (Z_eye = -Y_model) which
-    // flips triangle winding. So we swap cull faces: FRONT = original front.
-    gl.enable(gl.STENCIL_TEST);
-    gl.stencilFunc(gl.ALWAYS, 0, 0xff);
-    gl.stencilOp(gl.KEEP, gl.KEEP, gl.INCR);
-    gl.colorMask(false, false, false, false);
-    gl.depthMask(false);
-    gl.disable(gl.DEPTH_TEST);
+    for (const range of this.drawRanges || [{ start: 0, count: this.vertexCount }]) {
+      gl.clearStencil(0);
+      gl.clear(gl.STENCIL_BUFFER_BIT);
 
-    gl.enable(gl.CULL_FACE);
-    gl.cullFace(gl.FRONT); // render original front faces (swapped due to reflection)
+      // --- Pass 1: Front faces, increment stencil ---
+      // Note: The MV matrix includes a reflection (Z_eye = -Y_model) which
+      // flips triangle winding. So we swap cull faces: FRONT = original front.
+      gl.enable(gl.STENCIL_TEST);
+      gl.stencilFunc(gl.ALWAYS, 0, 0xff);
+      gl.stencilOp(gl.KEEP, gl.KEEP, gl.INCR_WRAP);
+      gl.colorMask(false, false, false, false);
+      gl.depthMask(false);
+      gl.disable(gl.DEPTH_TEST);
 
-    this._drawMesh(proj, modelView);
+      gl.enable(gl.CULL_FACE);
+      gl.cullFace(gl.FRONT); // render original front faces (swapped due to reflection)
 
-    // --- Pass 2: Back faces, decrement stencil ---
-    gl.stencilOp(gl.KEEP, gl.KEEP, gl.DECR);
-    gl.cullFace(gl.BACK); // render original back faces (swapped due to reflection)
+      this._drawMesh(proj, modelView, range);
 
-    this._drawMesh(proj, modelView);
+      // --- Pass 2: Back faces, decrement stencil ---
+      gl.stencilOp(gl.KEEP, gl.KEEP, gl.DECR_WRAP);
+      gl.cullFace(gl.BACK); // render original back faces (swapped due to reflection)
 
-    // --- Pass 3: Draw white where stencil != 0 ---
-    gl.disable(gl.CULL_FACE);
-    gl.colorMask(true, true, true, true);
-    gl.stencilFunc(gl.NOTEQUAL, 0, 0xff);
-    gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
+      this._drawMesh(proj, modelView, range);
 
-    gl.useProgram(this.quadProgram);
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
-    const qPos = gl.getAttribLocation(this.quadProgram, 'aPosition');
-    gl.enableVertexAttribArray(qPos);
-    gl.vertexAttribPointer(qPos, 2, gl.FLOAT, false, 0, 0);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      // --- Pass 3: Add this shell to the output image ---
+      gl.disable(gl.CULL_FACE);
+      gl.colorMask(true, true, true, true);
+      gl.stencilFunc(gl.NOTEQUAL, 0, 0xff);
+      gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
+
+      gl.useProgram(this.quadProgram);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
+      const qPos = gl.getAttribLocation(this.quadProgram, 'aPosition');
+      gl.enableVertexAttribArray(qPos);
+      gl.vertexAttribPointer(qPos, 2, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
 
     gl.disable(gl.STENCIL_TEST);
     gl.depthMask(true);
   }
 
-  _drawMesh(projection, modelView) {
+  _drawMesh(projection, modelView, range = null) {
     const gl = this.gl;
+    const start = range?.start || 0;
+    const count = range?.count || this.vertexCount;
     gl.useProgram(this.meshProgram);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.meshBuffer);
@@ -329,11 +437,11 @@ export class Slicer {
         instMat.fromArray(this.instanceMatrix, i * 16);
         finalMV.multiplyMatrices(baseMV, instMat);
         gl.uniformMatrix4fv(uMV, false, finalMV.elements);
-        gl.drawArrays(gl.TRIANGLES, 0, this.vertexCount);
+        gl.drawArrays(gl.TRIANGLES, start, count);
       }
     } else {
       gl.uniformMatrix4fv(uMV, false, modelView);
-      gl.drawArrays(gl.TRIANGLES, 0, this.vertexCount);
+      gl.drawArrays(gl.TRIANGLES, start, count);
     }
   }
 

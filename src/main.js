@@ -3,7 +3,7 @@ import { Slicer, PRINTERS } from './slicer.js';
 import { optimizeOrientationAsync, analyzeCurrentOrientation } from './orientation.js';
 import { generateSupports } from './supports.js';
 import { exportMesh, exportZip, estimatePrintTime } from './exporter.js';
-import { computeSlicedVolume, mm3ToMl } from './volume.js';
+import { mm3ToMl } from './volume.js';
 import { DEFAULT_RESIN_MATERIAL_ID, RESIN_MATERIALS } from './materials.js';
 
 // --- State ---
@@ -11,7 +11,7 @@ let viewer;
 let slicer;
 let slicedLayers = null;
 // Set after slicing completes; falsy means "use mesh-based pre-slice estimate".
-let slicedVolumes = null; // { model: mm³, supports: mm³ }
+let slicedVolumes = null; // { model: mm³, supports: mm³, total: mm³, exactTotal: boolean, exactBreakdown: boolean }
 let selectedMaterialId = DEFAULT_RESIN_MATERIAL_ID;
 
 // Debug access
@@ -815,19 +815,11 @@ async function handleSlice() {
   showProgress('Slicing...');
   await new Promise(r => setTimeout(r, 50));
 
-  slicedLayers = await slicer.slice(layerHeight, (current, total) => {
-    updateProgress(current / total, `Slicing layer ${current} / ${total}`);
-  });
-
-  // Compute exact post-slice volumes by re-slicing each component on its own.
-  // The combined slice above is still what the user previews/exports — these
-  // extra passes only feed the volume estimate, so they stream layer pixels
-  // through a counter without retaining buffers (otherwise tall jobs can
-  // allocate gigabytes; see slicer.slice() options).
   const printerSpec = slicer.getPrinterSpec();
   const pxArea =
     (printerSpec.buildWidthMM / printerSpec.resolutionX) *
     (printerSpec.buildDepthMM / printerSpec.resolutionY);
+  let filledPx = 0;
   const countWhitePixels = (pixels) => {
     let c = 0;
     for (let i = 0; i < pixels.length; i += 4) {
@@ -836,35 +828,34 @@ async function handleSlice() {
     return c;
   };
 
-  let modelVolMm3 = 0;
-  let supportVolMm3 = 0;
-  if (mergedSupportGeo) {
-    showProgress('Measuring model volume...');
-    await new Promise(r => setTimeout(r, 50));
-    slicer.uploadGeometry(mergedModelGeo, null);
-    let modelPx = 0;
-    await slicer.slice(
-      layerHeight,
-      (current, total) => updateProgress(current / total, `Measuring model ${current} / ${total}`),
-      { collect: false, onLayer: (pixels) => { modelPx += countWhitePixels(pixels); } },
-    );
-    modelVolMm3 = modelPx * pxArea * layerHeight;
+  slicedLayers = await slicer.slice(layerHeight, (current, total) => {
+    updateProgress(current / total, `Slicing layer ${current} / ${total}`);
+  }, {
+    onLayer: (pixels) => { filledPx += countWhitePixels(pixels); },
+  });
 
-    showProgress('Measuring supports volume...');
-    await new Promise(r => setTimeout(r, 50));
-    slicer.uploadGeometry(mergedSupportGeo, null);
-    let supportPx = 0;
-    await slicer.slice(
-      layerHeight,
-      (current, total) => updateProgress(current / total, `Measuring supports ${current} / ${total}`),
-      { collect: false, onLayer: (pixels) => { supportPx += countWhitePixels(pixels); } },
-    );
-    supportVolMm3 = supportPx * pxArea * layerHeight;
-  } else {
-    // No supports — the combined slice IS the model, no extra pass needed.
-    modelVolMm3 = computeSlicedVolume(slicedLayers, printerSpec, layerHeight);
+  const totalVolMm3 = filledPx * pxArea * layerHeight;
+  let modelVolMm3 = totalVolMm3;
+  let supportVolMm3 = 0;
+  let exactBreakdown = true;
+  if (mergedSupportGeo) {
+    const info = viewer.getOverallInfo();
+    const estimatedModel = info?.modelVolume || 0;
+    const estimatedSupports = info?.supportVolume || 0;
+    const estimatedTotal = estimatedModel + estimatedSupports;
+    if (estimatedTotal > 0) {
+      modelVolMm3 = totalVolMm3 * (estimatedModel / estimatedTotal);
+      supportVolMm3 = totalVolMm3 - modelVolMm3;
+    }
+    exactBreakdown = false;
   }
-  slicedVolumes = { model: modelVolMm3, supports: supportVolMm3 };
+  slicedVolumes = {
+    model: modelVolMm3,
+    supports: supportVolMm3,
+    total: totalVolMm3,
+    exactTotal: true,
+    exactBreakdown,
+  };
   updateEstimate();
 
   hideProgress();
@@ -924,6 +915,8 @@ async function handleExport() {
   if (slicedVolumes) {
     settings.modelVolumeMm3 = slicedVolumes.model;
     settings.supportVolumeMm3 = slicedVolumes.supports;
+    settings.totalVolumeMm3 = slicedVolumes.total;
+    settings.volumeBreakdownExact = slicedVolumes.exactBreakdown;
   }
   const spec = slicer.getPrinterSpec();
 
@@ -984,26 +977,28 @@ function updateEstimate() {
   const layerCount = Math.ceil(modelHeight / settings.layerHeight);
   const estimate = estimatePrintTime(layerCount, settings);
 
-  const exact = !!slicedVolumes;
-  const modelMl = mm3ToMl(exact ? slicedVolumes.model : (info.modelVolume || 0));
-  const supportMl = mm3ToMl(exact ? slicedVolumes.supports : (info.supportVolume || 0));
-  const totalMl = modelMl + supportMl;
+  const exactTotal = !!slicedVolumes?.exactTotal;
+  const exactBreakdown = !!slicedVolumes?.exactBreakdown;
+  const modelMl = mm3ToMl(slicedVolumes ? slicedVolumes.model : (info.modelVolume || 0));
+  const supportMl = mm3ToMl(slicedVolumes ? slicedVolumes.supports : (info.supportVolume || 0));
+  const totalMl = mm3ToMl(slicedVolumes?.total ?? ((info.modelVolume || 0) + (info.supportVolume || 0)));
   const pourMl = totalMl * 1.05;
-  const suffix = exact ? '' : ' (est.)';
+  const breakdownSuffix = exactBreakdown ? '' : ' (est.)';
+  const totalSuffix = exactTotal ? '' : ' (est.)';
 
   const rows = [
     `<div class="estimate-row"><span class="estimate-label">Layers</span><span class="estimate-value">${layerCount}</span></div>`,
     `<div class="estimate-row"><span class="estimate-label">Height</span><span class="estimate-value">${modelHeight.toFixed(1)} mm</span></div>`,
-    `<div class="estimate-row"><span class="estimate-label">Model${suffix}</span><span class="estimate-value">${modelMl.toFixed(1)} mL</span></div>`,
+    `<div class="estimate-row"><span class="estimate-label">Model${breakdownSuffix}</span><span class="estimate-value">${modelMl.toFixed(1)} mL</span></div>`,
   ];
-  if (supportMl > 0 || exact) {
+  if (supportMl > 0 || slicedVolumes) {
     rows.push(
-      `<div class="estimate-row"><span class="estimate-label">Supports${suffix}</span><span class="estimate-value">${supportMl.toFixed(1)} mL</span></div>`,
+      `<div class="estimate-row"><span class="estimate-label">Supports${breakdownSuffix}</span><span class="estimate-value">${supportMl.toFixed(1)} mL</span></div>`,
     );
   }
-  if (exact) {
+  if (slicedVolumes) {
     rows.push(
-      `<div class="estimate-row"><span class="estimate-label">Total</span><span class="estimate-value">${totalMl.toFixed(1)} mL <small>(pour ≥${Math.ceil(pourMl)} mL)</small></span></div>`,
+      `<div class="estimate-row"><span class="estimate-label">Total${totalSuffix}</span><span class="estimate-value">${totalMl.toFixed(1)} mL <small>(pour ≥${Math.ceil(pourMl)} mL)</small></span></div>`,
     );
   }
   rows.push(
