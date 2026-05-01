@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SliceLab</title>
   <link rel="icon" type="image/svg+xml" href="/slicer/favicon.svg">
-  <script type="module" crossorigin src="/slicer/assets/index-RWrQT-NW.js"></script>
-  <link rel="stylesheet" crossorigin href="/slicer/assets/index-CD2ockE5.css">
+  <script type="module" crossorigin src="/slicer/assets/index-BlVAjiMi.js"></script>
+  <link rel="stylesheet" crossorigin href="/slicer/assets/index-CKPxUyL2.css">
 </head>
 
 <body>
@@ -17,7 +17,13 @@
         <div class="logo">SliceLab</div>
       </div>
       <div id="toolbar-right">
-        <select id="printer-select" class="val-box" style="margin-right: 10px;"></select>
+        <button type="button" id="printer-select-btn" class="printer-select-btn" aria-haspopup="dialog" aria-controls="printer-modal" aria-expanded="false">
+          <span class="printer-select-copy">
+            <span id="selected-printer-name" class="printer-select-name">Printer</span>
+            <span id="selected-printer-spec" class="printer-select-spec">Build volume</span>
+          </span>
+          <span class="printer-select-icon" aria-hidden="true">▾</span>
+        </button>
       </div>
     </header>
 
@@ -292,6 +298,12 @@
               </svg>
               Fill Platform
             </button>
+            <button class="btn btn-secondary edit-action-btn" id="arrange-btn">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M3 3h8v8H3V3zm10 0h8v5h-8V3zM3 13h5v8H3v-8zm7 0h11v8H10v-8z" />
+              </svg>
+              Auto Arrange
+            </button>
             <button class="btn edit-action-btn edit-action-danger" id="delete-btn">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                 <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
@@ -372,6 +384,19 @@
     <button type="button" class="context-menu-item" data-export-format="stl">STL</button>
     <button type="button" class="context-menu-item" data-export-format="3mf">3MF</button>
     <button type="button" class="context-menu-item" data-export-format="obj">OBJ</button>
+  </div>
+
+  <div id="printer-modal" class="modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="printer-modal-title">
+    <div class="printer-modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="printer-modal-title">Select Printer</h2>
+          <p>Match the LCD resolution and build volume before slicing.</p>
+        </div>
+        <button type="button" id="printer-modal-close" class="icon-btn" aria-label="Close printer selector">×</button>
+      </div>
+      <div id="printer-grid" class="printer-grid"></div>
+    </div>
   </div>
 
   <div id="progress-overlay" hidden>

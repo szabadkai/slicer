@@ -35,6 +35,8 @@ export class Viewer {
     this.undoStack = [];
     this.clipboard = [];
     this.MAX_UNDO = 30;
+    this.selectionPivot = new THREE.Object3D();
+    this.multiTransformState = null;
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xf0f2f5);
@@ -68,8 +70,15 @@ export class Viewer {
     this.controls.addEventListener('change', () => this.requestRender());
 
     this.transformControl = new TransformControls(this.camera, canvas);
-    this.transformControl.addEventListener('change', () => this.requestRender());
+    this.scene.add(this.selectionPivot);
+    this.transformControl.addEventListener('change', () => {
+      this._applyMultiTransformDelta();
+      this.requestRender();
+    });
     this.transformControl.addEventListener('dragging-changed', (event) => {
+      if (event.value) {
+        this._beginMultiTransform();
+      }
       this.controls.enabled = !event.value;
       this.isUserInteracting = event.value;
       this._setRenderPixelRatio(event.value ? INTERACTIVE_PIXEL_RATIO_CAP : STATIC_PIXEL_RATIO_CAP);
@@ -173,6 +182,14 @@ export class Viewer {
     this.canvas.dispatchEvent(new CustomEvent('selection-changed'));
   }
 
+  selectObjects(ids) {
+    const idSet = new Set(ids);
+    this.selected = this.objects.filter(o => idSet.has(o.id));
+    this._attachTransformControls();
+    this._updateSelectionVisuals();
+    this.canvas.dispatchEvent(new CustomEvent('selection-changed'));
+  }
+
   selectAll() {
     this.selected = [...this.objects];
     this._attachTransformControls();
@@ -186,19 +203,152 @@ export class Viewer {
       if (!this.transformControl.getMode()) {
         this.transformControl.setMode('translate');
       }
+    } else if (this.selected.length > 1) {
+      this._positionSelectionPivot();
+      this.transformControl.attach(this.selectionPivot);
+      if (!this.transformControl.getMode()) {
+        this.transformControl.setMode('translate');
+      }
     } else {
       this.transformControl.detach();
     }
   }
 
-  _recenterMeshOrigin(mesh) {
-    mesh.geometry.computeBoundingBox();
-    const center = new THREE.Vector3();
-    mesh.geometry.boundingBox.getCenter(center);
-    if (center.lengthSq() === 0) return;
+  _getSelectionBounds() {
+    const bounds = new THREE.Box3();
+    this.selected.forEach(sel => {
+      sel.mesh.geometry.computeBoundingBox();
+      sel.mesh.updateMatrixWorld(true);
+      bounds.union(sel.mesh.geometry.boundingBox.clone().applyMatrix4(sel.mesh.matrixWorld));
+    });
+    return bounds;
+  }
 
-    mesh.geometry.translate(-center.x, -center.y, -center.z);
-    mesh.position.add(center);
+  _positionSelectionPivot() {
+    if (this.selected.length <= 1) return;
+    const center = new THREE.Vector3();
+    this._getSelectionBounds().getCenter(center);
+    this.selectionPivot.position.copy(center);
+    this.selectionPivot.rotation.set(0, 0, 0);
+    this.selectionPivot.scale.set(1, 1, 1);
+    this.selectionPivot.updateMatrixWorld(true);
+  }
+
+  _beginMultiTransform() {
+    if (this.selected.length <= 1) {
+      this.multiTransformState = null;
+      return;
+    }
+    this.selectionPivot.updateMatrixWorld(true);
+    this.multiTransformState = {
+      pivotMatrix: this.selectionPivot.matrixWorld.clone(),
+      objectMatrices: this.selected.map(sel => {
+        sel.mesh.updateMatrixWorld(true);
+        return {
+          sel,
+          matrix: sel.mesh.matrixWorld.clone(),
+        };
+      }),
+    };
+  }
+
+  _applyMultiTransformDelta() {
+    if (!this.multiTransformState || this.selected.length <= 1 || !this.transformControl.dragging) return;
+
+    this.selectionPivot.updateMatrixWorld(true);
+    const inverseStart = this.multiTransformState.pivotMatrix.clone().invert();
+    const delta = this.selectionPivot.matrixWorld.clone().multiply(inverseStart);
+    this._applyMatrixToSelection(delta, this.multiTransformState.objectMatrices);
+
+    this.canvas.dispatchEvent(new CustomEvent('mesh-transforming'));
+  }
+
+  _applyMatrixToSelection(delta, objectMatrices = null) {
+    const position = new THREE.Vector3();
+    const quaternion = new THREE.Quaternion();
+    const scale = new THREE.Vector3();
+    const targets = objectMatrices || this.selected.map(sel => {
+      sel.mesh.updateMatrixWorld(true);
+      return { sel, matrix: sel.mesh.matrixWorld.clone() };
+    });
+
+    targets.forEach(({ sel, matrix }) => {
+      const nextMatrix = delta.clone().multiply(matrix);
+      nextMatrix.decompose(position, quaternion, scale);
+      sel.mesh.position.copy(position);
+      sel.mesh.quaternion.copy(quaternion);
+      sel.mesh.scale.copy(scale);
+      sel.mesh.updateMatrixWorld(true);
+    });
+  }
+
+  getSelectionWorldSize() {
+    if (this.selected.length === 0) return null;
+    const size = new THREE.Vector3();
+    this._getSelectionBounds().getSize(size);
+    return size;
+  }
+
+  getSelectionWorldCenter() {
+    if (this.selected.length === 0) return null;
+    const center = new THREE.Vector3();
+    this._getSelectionBounds().getCenter(center);
+    return center;
+  }
+
+  translateSelectionTo(position) {
+    if (this.selected.length === 0) return;
+    if (this.selected.length === 1) {
+      this.selected[0].mesh.position.copy(position);
+    } else {
+      const center = this.getSelectionWorldCenter();
+      const delta = new THREE.Matrix4().makeTranslation(
+        position.x - center.x,
+        position.y - center.y,
+        position.z - center.z,
+      );
+      this._applyMatrixToSelection(delta);
+    }
+    this._bakeTransform();
+  }
+
+  scaleSelectionBy(scale) {
+    if (this.selected.length === 0) return;
+    if (this.selected.length === 1) {
+      this.selected[0].mesh.scale.set(scale.x, scale.y, scale.z);
+    } else {
+      const center = this.getSelectionWorldCenter();
+      const delta = new THREE.Matrix4()
+        .makeTranslation(center.x, center.y, center.z)
+        .multiply(new THREE.Matrix4().makeScale(scale.x, scale.y, scale.z))
+        .multiply(new THREE.Matrix4().makeTranslation(-center.x, -center.y, -center.z));
+      this._applyMatrixToSelection(delta);
+    }
+    this._bakeTransform();
+  }
+
+  rotateSelectionBy(rotation) {
+    if (this.selected.length === 0) return;
+    if (this.selected.length === 1) {
+      this.selected[0].mesh.rotation.copy(rotation);
+    } else {
+      const center = this.getSelectionWorldCenter();
+      const delta = new THREE.Matrix4()
+        .makeTranslation(center.x, center.y, center.z)
+        .multiply(new THREE.Matrix4().makeRotationFromEuler(rotation))
+        .multiply(new THREE.Matrix4().makeTranslation(-center.x, -center.y, -center.z));
+      this._applyMatrixToSelection(delta);
+    }
+    this._bakeTransform();
+  }
+
+  _moveMeshOriginToBoundsMin(mesh) {
+    mesh.geometry.computeBoundingBox();
+    const min = mesh.geometry.boundingBox.min.clone();
+    if (min.lengthSq() === 0) return;
+
+    mesh.geometry.translate(-min.x, -min.y, -min.z);
+    mesh.position.add(min);
     mesh.geometry.computeBoundingBox();
     mesh.updateMatrixWorld(true);
   }
@@ -429,7 +579,7 @@ export class Viewer {
 
   addModel(geometry, elevation = 5) {
     const obj = this._addModelRaw(geometry, null, elevation);
-    this._recenterMeshOrigin(obj.mesh);
+    this._moveMeshOriginToBoundsMin(obj.mesh);
     this.selectObject(obj.id);
     this.canvas.dispatchEvent(new CustomEvent('mesh-changed'));
     return obj;
@@ -485,7 +635,7 @@ export class Viewer {
     
     const newSelected = [];
     this.selected.forEach(sel => {
-      const newObj = this._addModelRaw(sel.mesh.geometry, sel.mesh.material.clone(), sel.elevation);
+      const newObj = this._addModelRaw(sel.mesh.geometry.clone(), sel.mesh.material.clone(), sel.elevation);
       newObj.materialPreset = sel.materialPreset || DEFAULT_RESIN_MATERIAL;
       newObj.mesh.position.copy(sel.mesh.position);
       newObj.mesh.position.x += 10;
@@ -669,14 +819,12 @@ export class Viewer {
     const sel = this.selected[0];
     sel.mesh.geometry.applyQuaternion(quaternion);
     sel.mesh.geometry.computeBoundingBox();
-    const bb = sel.mesh.geometry.boundingBox;
-    const center = new THREE.Vector3();
-    bb.getCenter(center);
-    sel.mesh.geometry.translate(-center.x, -center.y, -center.z);
+    const min = sel.mesh.geometry.boundingBox.min.clone();
+    sel.mesh.geometry.translate(-min.x, -min.y, -min.z);
     sel.mesh.geometry.computeBoundingBox();
-    sel.mesh.position.x += center.x;
-    sel.mesh.position.z += center.z;
-    sel.mesh.position.y = sel.elevation - sel.mesh.geometry.boundingBox.min.y;
+    sel.mesh.position.x += min.x;
+    sel.mesh.position.z += min.z;
+    sel.mesh.position.y = sel.elevation;
     sel.mesh.updateMatrixWorld(true);
     
     this.clearSupports();
@@ -687,8 +835,8 @@ export class Viewer {
     if (!mode) {
        this.transformControl.detach();
     } else {
-       if (this.selected.length === 1) {
-           this.transformControl.attach(this.selected[0].mesh);
+       if (this.selected.length > 0) {
+           this._attachTransformControls();
            this.transformControl.setMode(mode);
        } else if (this.objects.length > 0 && this.selected.length === 0) {
            this.selectObject(this.objects[0].id);
@@ -699,18 +847,25 @@ export class Viewer {
   }
 
   _bakeTransform() {
-    if (this.selected.length !== 1) return;
-    const sel = this.selected[0];
-    const smesh = sel.mesh;
-    smesh.updateMatrix();
-    smesh.geometry.applyMatrix4(smesh.matrix);
-    smesh.position.set(0, 0, 0);
-    smesh.rotation.set(0, 0, 0);
-    smesh.scale.set(1, 1, 1);
-    smesh.updateMatrix();
-    smesh.geometry.computeBoundingBox();
-    this._recenterMeshOrigin(smesh);
-    sel._cachedLocalVolume = undefined;
+    if (this.selected.length === 0) return;
+    this.multiTransformState = null;
+
+    this.selected.forEach(sel => {
+      const smesh = sel.mesh;
+      smesh.updateMatrix();
+      smesh.geometry.applyMatrix4(smesh.matrix);
+      smesh.position.set(0, 0, 0);
+      smesh.rotation.set(0, 0, 0);
+      smesh.scale.set(1, 1, 1);
+      smesh.updateMatrix();
+      smesh.geometry.computeBoundingBox();
+      this._moveMeshOriginToBoundsMin(smesh);
+      sel._cachedLocalVolume = undefined;
+    });
+
+    if (this.selected.length > 1) {
+      this._positionSelectionPivot();
+    }
 
     this.clearSupports();
     this.canvas.dispatchEvent(new CustomEvent('mesh-changed'));
@@ -800,6 +955,127 @@ export class Viewer {
     this.canvas.dispatchEvent(new CustomEvent('mesh-changed'));
   }
 
+  autoArrange(padding = 3, elevation = 10) {
+    if (!this.printer || this.objects.length <= 1) return false;
+
+    const usableWidth = this.printer.buildWidthMM - padding * 2;
+    const usableDepth = this.printer.buildDepthMM - padding * 2;
+    if (usableWidth <= 0 || usableDepth <= 0) return false;
+
+    const items = this.objects.map(obj => {
+      obj.mesh.geometry.computeBoundingBox();
+      obj.mesh.updateMatrixWorld(true);
+      const box = obj.mesh.geometry.boundingBox.clone().applyMatrix4(obj.mesh.matrixWorld);
+      const size = new THREE.Vector3();
+      const center = new THREE.Vector3();
+      box.getSize(size);
+      box.getCenter(center);
+      return {
+        obj,
+        box,
+        center,
+        width: size.x,
+        depth: size.z,
+      };
+    }).sort((a, b) => Math.max(b.depth, b.width) - Math.max(a.depth, a.width));
+
+    const placements = [];
+    let cursorX = 0;
+    let cursorZ = 0;
+    let rowDepth = 0;
+    let arrangedWidth = 0;
+    let arrangedDepth = 0;
+
+    items.forEach(item => {
+      if (item.width > usableWidth || item.depth > usableDepth) {
+        return;
+      }
+
+      if (cursorX > 0 && cursorX + item.width > usableWidth) {
+        cursorX = 0;
+        cursorZ += rowDepth + padding;
+        rowDepth = 0;
+      }
+
+      if (cursorZ + item.depth > usableDepth) {
+        return;
+      }
+
+      placements.push({
+        item,
+        x: cursorX + item.width / 2,
+        z: cursorZ + item.depth / 2,
+        inside: true,
+      });
+
+      cursorX += item.width + padding;
+      rowDepth = Math.max(rowDepth, item.depth);
+      arrangedWidth = Math.max(arrangedWidth, cursorX - padding);
+      arrangedDepth = Math.max(arrangedDepth, cursorZ + rowDepth);
+    });
+
+    const placedItems = new Set(placements.map(placement => placement.item));
+    const overflowItems = items.filter(item => !placedItems.has(item));
+    const overflowStartX = this.printer.buildWidthMM / 2 + padding * 2;
+    let overflowCursorZ = 0;
+    let overflowRowDepth = 0;
+    let overflowCursorX = 0;
+    const overflowRowWidth = Math.max(usableWidth, 1);
+
+    overflowItems.forEach(item => {
+      if (overflowCursorX > 0 && overflowCursorX + item.width > overflowRowWidth) {
+        overflowCursorX = 0;
+        overflowCursorZ += overflowRowDepth + padding;
+        overflowRowDepth = 0;
+      }
+
+      placements.push({
+        item,
+        x: overflowStartX + overflowCursorX + item.width / 2,
+        z: overflowCursorZ + item.depth / 2,
+        inside: false,
+      });
+
+      overflowCursorX += item.width + padding;
+      overflowRowDepth = Math.max(overflowRowDepth, item.depth);
+    });
+
+    this._saveUndoState();
+
+    const offsetX = -arrangedWidth / 2;
+    const offsetZ = -arrangedDepth / 2;
+    placements.forEach(({ item, x, z, inside }) => {
+      const targetX = inside ? x + offsetX : x;
+      const targetZ = inside ? z + offsetZ : z - usableDepth / 2;
+      const dx = targetX - item.center.x;
+      const dy = elevation - item.box.min.y;
+      const dz = targetZ - item.center.z;
+
+      item.obj.mesh.position.x += dx;
+      item.obj.mesh.position.y += dy;
+      item.obj.mesh.position.z += dz;
+      item.obj.elevation = elevation;
+      item.obj.mesh.updateMatrixWorld(true);
+
+      if (item.obj.supportsMesh) {
+        this.scene.remove(item.obj.supportsMesh);
+        item.obj.supportsMesh.geometry.dispose();
+        item.obj.supportsMesh.material.dispose();
+        item.obj.supportsMesh = null;
+        item.obj._cachedLocalSupportVolume = undefined;
+      }
+    });
+
+    if (this.selected.length > 1) {
+      this._positionSelectionPivot();
+    } else {
+      this._attachTransformControls();
+    }
+    this.canvas.dispatchEvent(new CustomEvent('selection-changed'));
+    this.canvas.dispatchEvent(new CustomEvent('mesh-changed'));
+    return true;
+  }
+
   fillPlatform() {
     if (this.selected.length !== 1 || !this.printer) return false;
     this._saveUndoState();
@@ -831,18 +1107,12 @@ export class Viewer {
     const startX = -totalW / 2 + itemW / 2;
     const startZ = -totalD / 2 + itemD / 2;
     
-    const center = new THREE.Vector3();
-    sourceGeo.boundingBox.getCenter(center);
-    
-    // Instead of translating the source geometry, we leave it untouched
-    // and reposition all models via `mesh.position` during cloning loop.
     const sourceElevation = sel.elevation;
     const sharedMaterial = sel.mesh.material;
     const materialPreset = sel.materialPreset || DEFAULT_RESIN_MATERIAL;
-    
-    // Keep internal transform centering identical to what we had before replacing.
-    sourceGeo.translate(-center.x, 0, -center.z);
-    sourceGeo.computeBoundingBox();
+
+    const sourceGeoTemplate = sourceGeo.clone();
+    const sourceY = sourceElevation - sourceGeoTemplate.boundingBox.min.y;
     
     this.removeSelected();
     
@@ -851,9 +1121,9 @@ export class Viewer {
         const px = startX + i * itemW;
         const pz = startZ + j * itemD;
         
-        const newObj = this._addModelRaw(sourceGeo, sharedMaterial.clone(), sourceElevation);
+        const newObj = this._addModelRaw(sourceGeoTemplate.clone(), sharedMaterial.clone(), sourceElevation);
         newObj.materialPreset = materialPreset;
-        newObj.mesh.position.set(px, 0, pz);
+        newObj.mesh.position.set(px - size.x / 2, sourceY, pz - size.z / 2);
         newObj.mesh.updateMatrixWorld();
       }
     }

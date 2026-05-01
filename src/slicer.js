@@ -16,12 +16,20 @@ import * as THREE from 'three';
 // Common printer specs
 export const PRINTERS = {
   'photon-mono': {
-    name: 'Anycubic Photon Mono',
+    name: 'Anycubic Photon Mono 4K',
     resolutionX: 2560,
     resolutionY: 1620,
     buildWidthMM: 130,
     buildDepthMM: 80,
     buildHeightMM: 165,
+  },
+  'photon-mono-m5s': {
+    name: 'Anycubic Photon Mono M5s',
+    resolutionX: 11520,
+    resolutionY: 5120,
+    buildWidthMM: 218.88,
+    buildDepthMM: 122.88,
+    buildHeightMM: 200,
   },
   'mars-3': {
     name: 'Elegoo Mars 3',
@@ -31,6 +39,14 @@ export const PRINTERS = {
     buildDepthMM: 89.6,
     buildHeightMM: 175,
   },
+  'mars-4-ultra': {
+    name: 'Elegoo Mars 4 Ultra',
+    resolutionX: 8520,
+    resolutionY: 4320,
+    buildWidthMM: 153.36,
+    buildDepthMM: 77.76,
+    buildHeightMM: 165,
+  },
   'saturn-2': {
     name: 'Elegoo Saturn 2',
     resolutionX: 7680,
@@ -39,6 +55,22 @@ export const PRINTERS = {
     buildDepthMM: 123.12,
     buildHeightMM: 250,
   },
+  'halot-mage-8k': {
+    name: 'Creality HALOT-MAGE 8K',
+    resolutionX: 7680,
+    resolutionY: 4320,
+    buildWidthMM: 228,
+    buildDepthMM: 128,
+    buildHeightMM: 230,
+  },
+  'uniformation-gktwo': {
+    name: 'UniFormation GKtwo',
+    resolutionX: 7680,
+    resolutionY: 4320,
+    buildWidthMM: 228,
+    buildDepthMM: 128,
+    buildHeightMM: 245,
+  },
   'sonic-mini-8k': {
     name: 'Phrozen Sonic Mini 8K',
     resolutionX: 7500,
@@ -46,7 +78,23 @@ export const PRINTERS = {
     buildWidthMM: 165,
     buildDepthMM: 72,
     buildHeightMM: 180,
-  }
+  },
+  'sonic-mighty-8k': {
+    name: 'Phrozen Sonic Mighty 8K',
+    resolutionX: 7680,
+    resolutionY: 4320,
+    buildWidthMM: 223,
+    buildDepthMM: 126,
+    buildHeightMM: 235,
+  },
+  'form-4': {
+    name: 'Formlabs Form 4',
+    resolutionX: 4000,
+    resolutionY: 2500,
+    buildWidthMM: 200,
+    buildDepthMM: 125,
+    buildHeightMM: 210,
+  },
 };
 
 export class Slicer {

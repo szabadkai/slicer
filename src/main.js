@@ -13,6 +13,50 @@ let slicedLayers = null;
 // Set after slicing completes; falsy means "use mesh-based pre-slice estimate".
 let slicedVolumes = null; // { model: mm³, supports: mm³, total: mm³, exactTotal: boolean, exactBreakdown: boolean }
 let selectedMaterialId = DEFAULT_RESIN_MATERIAL_ID;
+let selectedPrinterKey = 'photon-mono';
+
+const PRINTER_DETAILS = {
+  'photon-mono': {
+    image: 'printers/anycubic-photon-mono-4k.jpg',
+    description: 'Compact Anycubic machine with a small plate for quick tabletop resin prints.',
+  },
+  'photon-mono-m5s': {
+    image: 'printers/anycubic-photon-mono-m5s.jpg',
+    description: 'Leveling-free 12K Anycubic printer with a larger mid-size build area.',
+  },
+  'mars-3': {
+    image: 'printers/elegoo-mars-3.jpg',
+    description: 'Balanced desktop resin printer with a sharper 4K screen and moderate plate size.',
+  },
+  'mars-4-ultra': {
+    image: 'printers/elegoo-mars-4-ultra.jpg',
+    description: 'Fast 9K Mars-series printer with Wi-Fi and very fine 18 micron XY pixels.',
+  },
+  'saturn-2': {
+    image: 'printers/elegoo-saturn-2.jpg',
+    description: 'Large-format 8K machine for bigger models or batching many parts at once.',
+  },
+  'halot-mage-8k': {
+    image: 'printers/creality-halot-mage-8k.jpg',
+    description: 'Creality 10.3 inch 8K MSLA printer with a flip lid and generous build height.',
+  },
+  'uniformation-gktwo': {
+    image: 'printers/uniformation-gktwo.png',
+    description: 'UniFormation 8K printer with a heated chamber and tall 245 mm Z capacity.',
+  },
+  'sonic-mini-8k': {
+    image: 'printers/phrozen-sonic-mini-8k.png',
+    description: 'High-detail compact printer with dense 8K resolution for fine miniatures.',
+  },
+  'sonic-mighty-8k': {
+    image: 'printers/phrozen-sonic-mighty-8k.png',
+    description: 'Large Phrozen 8K printer for high-detail batches and larger resin parts.',
+  },
+  'form-4': {
+    image: 'printers/formlabs-form-4.jpg',
+    description: 'Industrial Formlabs LFD resin printer profile with a 50 micron pixel pitch.',
+  },
+};
 
 // Debug access
 import * as THREE from 'three';
@@ -41,8 +85,14 @@ const toolPanels = {
   materials: materialsPanel,
   slice: slicePanel,
 };
+let showToolPanelByName = null;
 
-const printerSelect = document.getElementById('printer-select');
+const printerSelectBtn = document.getElementById('printer-select-btn');
+const selectedPrinterName = document.getElementById('selected-printer-name');
+const selectedPrinterSpec = document.getElementById('selected-printer-spec');
+const printerModal = document.getElementById('printer-modal');
+const printerModalClose = document.getElementById('printer-modal-close');
+const printerGrid = document.getElementById('printer-grid');
 
 const overhangAngleInput = document.getElementById('overhang-angle');
 const overhangAngleVal = document.getElementById('overhang-angle-val');
@@ -97,33 +147,8 @@ function init() {
   viewer = new Viewer(canvas);
   slicer = new Slicer();
 
-  // Populate printer select
-  for (const [key, spec] of Object.entries(PRINTERS)) {
-    const opt = document.createElement('option');
-    opt.value = key;
-    opt.textContent = spec.name;
-    printerSelect.appendChild(opt);
-  }
-  
-  printerSelect.value = 'photon-mono';
-
-  printerSelect.addEventListener('change', () => {
-    const printerKey = printerSelect.value;
-    slicer.setPrinter(printerKey);
-    viewer.setPrinter(PRINTERS[printerKey]);
-
-    // Clear out sliced output because bounds/resolution changed
-    slicedLayers = null;
-    slicedVolumes = null;
-    exportBtn.hidden = true;
-    layerPreviewPanel.hidden = true;
-    updateEstimate();
-    viewer.updateBoundsWarning();
-  });
-
-  // Initialize both viewer and slicer with the default printer
-  slicer.setPrinter(printerSelect.value);
-  viewer.setPrinter(PRINTERS[printerSelect.value]);
+  initPrinterPicker();
+  applyPrinter(selectedPrinterKey, { resetSlice: false });
   initMaterialPicker();
 
   stlInput.addEventListener('change', handleFileLoad);
@@ -145,6 +170,7 @@ function init() {
   const deleteBtn = document.getElementById('delete-btn');
   const clearBtn = document.getElementById('clear-btn');
   const fillBtn = document.getElementById('fill-btn');
+  const arrangeBtn = document.getElementById('arrange-btn');
 
   // Edit panel actions
   duplicateBtn.addEventListener('click', () => viewer.duplicateSelected());
@@ -153,6 +179,11 @@ function init() {
   fillBtn.addEventListener('click', () => {
     if (!viewer.fillPlatform()) {
       alert("Model may be too large to duplicate on the platform.");
+    }
+  });
+  arrangeBtn.addEventListener('click', () => {
+    if (!viewer.autoArrange()) {
+      alert("Models do not fit on the current build plate.");
     }
   });
   applyMaterialAllBtn.addEventListener('click', () => {
@@ -236,6 +267,7 @@ function init() {
       layerPreviewPanel.hidden = false;
     }
   }
+  showToolPanelByName = showToolPanel;
 
   editBtn.addEventListener('click', () => showToolPanel('edit'));
   transformBtn.addEventListener('click', () => showToolPanel('transform'));
@@ -278,25 +310,14 @@ function init() {
   const rotateZInput = document.getElementById('rotate-z');
   const uniformScaleInput = document.getElementById('uniform-scale');
 
-  // After mutating mesh.position/rotation/scale from a panel input, commit it
-  // by baking the transform — same behavior as releasing the transform gizmo.
-  // Without this, supports (which are a sibling mesh in the scene, not a child
-  // of the model) stay attached at the original 1:1 dimensions while the
-  // model visually changes.
-  function commitTransform() {
-    viewer._bakeTransform();
-    updateTransformInputs();
-  }
-
   function applyTransformFromInputs() {
-    if (viewer.selected.length !== 1) return;
-    const mesh = viewer.selected[0].mesh;
-    mesh.position.set(
+    if (viewer.selected.length === 0) return;
+    viewer.translateSelectionTo(new THREE.Vector3(
       parseFloat(moveXInput.value) || 0,
       parseFloat(moveYInput.value) || 0,
       parseFloat(moveZInput.value) || 0,
-    );
-    commitTransform();
+    ));
+    updateTransformInputs();
   }
 
   [moveXInput, moveYInput, moveZInput].forEach(el => {
@@ -304,7 +325,7 @@ function init() {
   });
 
   function applyScaleFromInputs(changedAxis) {
-    if (viewer.selected.length !== 1) return;
+    if (viewer.selected.length === 0) return;
     const sx = parseFloat(scaleXInput.value) / 100 || 1;
     const sy = parseFloat(scaleYInput.value) / 100 || 1;
     const sz = parseFloat(scaleZInput.value) / 100 || 1;
@@ -314,26 +335,19 @@ function init() {
       scaleXInput.value = Math.round(val * 100);
       scaleYInput.value = Math.round(val * 100);
       scaleZInput.value = Math.round(val * 100);
-      viewer.selected[0].mesh.scale.set(val, val, val);
+      viewer.scaleSelectionBy(new THREE.Vector3(val, val, val));
     } else {
-      viewer.selected[0].mesh.scale.set(sx, sy, sz);
+      viewer.scaleSelectionBy(new THREE.Vector3(sx, sy, sz));
     }
-    commitTransform();
+    updateTransformInputs();
   }
 
   function getSelectedWorldSize() {
-    if (viewer.selected.length !== 1) return null;
-    const mesh = viewer.selected[0].mesh;
-    mesh.geometry.computeBoundingBox();
-    mesh.updateMatrixWorld(true);
-    const box = mesh.geometry.boundingBox.clone().applyMatrix4(mesh.matrixWorld);
-    const size = new THREE.Vector3();
-    box.getSize(size);
-    return size;
+    return viewer.getSelectionWorldSize();
   }
 
   function applySizeFromInputs(changedAxis) {
-    if (viewer.selected.length !== 1) return;
+    if (viewer.selected.length === 0) return;
     const currentSize = getSelectedWorldSize();
     if (!currentSize || currentSize.x <= 0 || currentSize.y <= 0 || currentSize.z <= 0) return;
 
@@ -345,15 +359,15 @@ function init() {
       const targetAxisSize = changedAxis === 'x' ? targetX : changedAxis === 'y' ? targetY : targetZ;
       if (!Number.isFinite(targetAxisSize) || targetAxisSize <= 0 || currentAxisSize <= 0) return;
       const factor = targetAxisSize / currentAxisSize;
-      viewer.selected[0].mesh.scale.multiplyScalar(factor);
+      viewer.scaleSelectionBy(new THREE.Vector3(factor, factor, factor));
     } else {
-      viewer.selected[0].mesh.scale.set(
+      viewer.scaleSelectionBy(new THREE.Vector3(
         Number.isFinite(targetX) && targetX > 0 ? targetX / currentSize.x : 1,
         Number.isFinite(targetY) && targetY > 0 ? targetY / currentSize.y : 1,
         Number.isFinite(targetZ) && targetZ > 0 ? targetZ / currentSize.z : 1,
-      );
+      ));
     }
-    commitTransform();
+    updateTransformInputs();
   }
 
   scaleXInput.addEventListener('change', () => applyScaleFromInputs('x'));
@@ -364,14 +378,14 @@ function init() {
   sizeZInput.addEventListener('change', () => applySizeFromInputs('z'));
 
   function applyRotationFromInputs() {
-    if (viewer.selected.length !== 1) return;
+    if (viewer.selected.length === 0) return;
     const deg2rad = Math.PI / 180;
-    viewer.selected[0].mesh.rotation.set(
+    viewer.rotateSelectionBy(new THREE.Euler(
       (parseFloat(rotateXInput.value) || 0) * deg2rad,
       (parseFloat(rotateYInput.value) || 0) * deg2rad,
       (parseFloat(rotateZInput.value) || 0) * deg2rad,
-    );
-    commitTransform();
+    ));
+    updateTransformInputs();
   }
 
   [rotateXInput, rotateYInput, rotateZInput].forEach(el => {
@@ -382,10 +396,13 @@ function init() {
     const singleSelected = viewer.selected.length === 1;
     const hasSelection = viewer.selected.length > 0;
 
-    // Single-object tools in left toolbar
-    [transformBtn, orientBtn, supportToolBtn].forEach(btn => {
-       btn.style.opacity = singleSelected ? '1' : '0.3';
-       btn.style.pointerEvents = singleSelected ? 'auto' : 'none';
+    transformBtn.style.opacity = hasSelection ? '1' : '0.3';
+    transformBtn.style.pointerEvents = hasSelection ? 'auto' : 'none';
+
+    // Model tools can process one selected mesh or batch over a multi-selection.
+    [orientBtn, supportToolBtn].forEach(btn => {
+      btn.style.opacity = hasSelection ? '1' : '0.3';
+      btn.style.pointerEvents = hasSelection ? 'auto' : 'none';
     });
 
     // Workflow steps that need plate content
@@ -401,11 +418,13 @@ function init() {
     duplicateBtn.style.pointerEvents = hasSelection ? 'auto' : 'none';
     fillBtn.style.opacity = singleSelected ? '1' : '0.5';
     fillBtn.style.pointerEvents = singleSelected ? 'auto' : 'none';
+    arrangeBtn.style.opacity = viewer.objects.length > 1 ? '1' : '0.5';
+    arrangeBtn.style.pointerEvents = viewer.objects.length > 1 ? 'auto' : 'none';
     deleteBtn.style.opacity = hasSelection ? '1' : '0.5';
     deleteBtn.style.pointerEvents = hasSelection ? 'auto' : 'none';
 
-    // Close single-object panels when no single selection
-    if (!singleSelected && activeToolPanel && (activeToolPanel === 'transform' || activeToolPanel === 'orient' || activeToolPanel === 'supports')) {
+    // Close selected-model panels only when there is no selected model to process.
+    if (!hasSelection && activeToolPanel && (activeToolPanel === 'orient' || activeToolPanel === 'supports')) {
       toolPanels[activeToolPanel].hidden = true;
       toolButtons[activeToolPanel].classList.remove('active');
       activeToolPanel = 'edit';
@@ -414,9 +433,9 @@ function init() {
       viewer.setTransformMode(null);
     }
 
-    if (singleSelected) {
-        zElevationInput.value = viewer.selected[0].elevation;
-        updateTransformInputs();
+    if (hasSelection) {
+      zElevationInput.value = viewer.selected[0].elevation;
+      updateTransformInputs();
     }
 
     updateWorkspaceInfo();
@@ -429,24 +448,35 @@ function init() {
   });
 
   function updateTransformInputs() {
-    if (viewer.selected.length !== 1) return;
-    const mesh = viewer.selected[0].mesh;
-    moveXInput.value = Math.round(mesh.position.x * 100) / 100;
-    moveYInput.value = Math.round(mesh.position.y * 100) / 100;
-    moveZInput.value = Math.round(mesh.position.z * 100) / 100;
-    scaleXInput.value = Math.round(mesh.scale.x * 100);
-    scaleYInput.value = Math.round(mesh.scale.y * 100);
-    scaleZInput.value = Math.round(mesh.scale.z * 100);
+    if (viewer.selected.length === 0) return;
+    const position = viewer.selected.length === 1
+      ? viewer.selected[0].mesh.getWorldPosition(new THREE.Vector3())
+      : viewer.getSelectionWorldCenter();
+    if (position) {
+      moveXInput.value = Math.round(position.x * 100) / 100;
+      moveYInput.value = Math.round(position.y * 100) / 100;
+      moveZInput.value = Math.round(position.z * 100) / 100;
+    }
+    scaleXInput.value = 100;
+    scaleYInput.value = 100;
+    scaleZInput.value = 100;
     const size = getSelectedWorldSize();
     if (size) {
       sizeXInput.value = Math.round(size.x * 100) / 100;
       sizeYInput.value = Math.round(size.y * 100) / 100;
       sizeZInput.value = Math.round(size.z * 100) / 100;
     }
-    const rad2deg = 180 / Math.PI;
-    rotateXInput.value = Math.round(mesh.rotation.x * rad2deg);
-    rotateYInput.value = Math.round(mesh.rotation.y * rad2deg);
-    rotateZInput.value = Math.round(mesh.rotation.z * rad2deg);
+    if (viewer.selected.length === 1) {
+      const mesh = viewer.selected[0].mesh;
+      const rad2deg = 180 / Math.PI;
+      rotateXInput.value = Math.round(mesh.rotation.x * rad2deg);
+      rotateYInput.value = Math.round(mesh.rotation.y * rad2deg);
+      rotateZInput.value = Math.round(mesh.rotation.z * rad2deg);
+    } else {
+      rotateXInput.value = 0;
+      rotateYInput.value = 0;
+      rotateZInput.value = 0;
+    }
   }
   
   function updateWorkspaceInfo() {
@@ -550,6 +580,95 @@ function init() {
   loadDefaultModel();
 }
 
+function initPrinterPicker() {
+  printerGrid.innerHTML = '';
+  for (const [key, spec] of Object.entries(PRINTERS)) {
+    const details = PRINTER_DETAILS[key] || {};
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'printer-card';
+    card.dataset.printer = key;
+    card.innerHTML = `
+      <img class="printer-card-image" src="${assetUrl(details.image)}" alt="${spec.name}">
+      <div class="printer-card-title">
+        <strong>${spec.name}</strong>
+        <span class="printer-active-badge">Selected</span>
+      </div>
+      <p class="printer-card-desc">${details.description || 'Resin printer profile for slicing and export.'}</p>
+      <div class="printer-card-specs">
+        <span>Build <b>${formatBuildVolume(spec)}</b></span>
+        <span>LCD <b>${spec.resolutionX} × ${spec.resolutionY}</b></span>
+        <span>Pixel <b>${formatPixelSize(spec)}</b></span>
+      </div>
+    `;
+    card.addEventListener('click', () => {
+      applyPrinter(key);
+      closePrinterModal();
+    });
+    printerGrid.appendChild(card);
+  }
+
+  printerSelectBtn.addEventListener('click', openPrinterModal);
+  printerModalClose.addEventListener('click', closePrinterModal);
+  printerModal.addEventListener('click', (event) => {
+    if (event.target === printerModal) closePrinterModal();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !printerModal.hidden) closePrinterModal();
+  });
+}
+
+function applyPrinter(printerKey, { resetSlice = true } = {}) {
+  if (!PRINTERS[printerKey]) return;
+  selectedPrinterKey = printerKey;
+  const spec = PRINTERS[printerKey];
+  slicer.setPrinter(printerKey);
+  viewer.setPrinter(spec);
+  selectedPrinterName.textContent = spec.name;
+  selectedPrinterSpec.textContent = `${formatBuildVolume(spec)} · ${spec.resolutionX} × ${spec.resolutionY}`;
+  printerGrid.querySelectorAll('.printer-card').forEach(card => {
+    const active = card.dataset.printer === printerKey;
+    card.classList.toggle('active', active);
+    card.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+
+  if (resetSlice) {
+    slicedLayers = null;
+    slicedVolumes = null;
+    exportBtn.hidden = true;
+    layerPreviewPanel.hidden = true;
+    updateEstimate();
+    viewer.updateBoundsWarning();
+  }
+}
+
+function openPrinterModal() {
+  printerModal.hidden = false;
+  printerSelectBtn.setAttribute('aria-expanded', 'true');
+  const activeCard = printerGrid.querySelector('.printer-card.active') || printerGrid.querySelector('.printer-card');
+  activeCard?.focus();
+}
+
+function closePrinterModal() {
+  printerModal.hidden = true;
+  printerSelectBtn.setAttribute('aria-expanded', 'false');
+  printerSelectBtn.focus();
+}
+
+function formatBuildVolume(spec) {
+  return `${spec.buildWidthMM} × ${spec.buildDepthMM} × ${spec.buildHeightMM} mm`;
+}
+
+function formatPixelSize(spec) {
+  const xMicron = (spec.buildWidthMM / spec.resolutionX) * 1000;
+  const yMicron = (spec.buildDepthMM / spec.resolutionY) * 1000;
+  return `${xMicron.toFixed(1)} × ${yMicron.toFixed(1)} μm`;
+}
+
+function assetUrl(path) {
+  return `${import.meta.env.BASE_URL}${path}`;
+}
+
 function initMaterialPicker() {
   materialPicker.innerHTML = '';
   RESIN_MATERIALS.forEach((material) => {
@@ -644,33 +763,43 @@ function handleFileLoad(e) {
 
 // --- Orientation ---
 async function handleOrientation(preset) {
-  const geometry = viewer.getModelGeometry();
-  if (!geometry) return;
+  const targets = [...viewer.selected];
+  if (targets.length === 0) return;
+  const originalSelectionIds = targets.map(obj => obj.id);
 
-  showProgress('Optimizing orientation...');
+  showProgress(targets.length === 1 ? 'Optimizing orientation...' : 'Optimizing selected models...');
 
-  try {
-    const quaternion = await optimizeOrientationAsync(geometry, preset, (fraction, text) => {
-        updateProgress(fraction, text);
-    });
-    viewer.applyRotation(quaternion); // applyRotation now fires mesh-changed
-  } catch (error) {
-    console.error("Failed to optimize orientation", error);
-    alert("Failed to optimize orientation: " + error.message);
-  } finally {
-    hideProgress();
+  let failureCount = 0;
+  for (let i = 0; i < targets.length; i++) {
+    const obj = targets[i];
+    viewer.selectObject(obj.id);
+    const geometry = viewer.getModelGeometry();
+    if (!geometry) continue;
+
+    updateProgress(i / targets.length, targets.length === 1 ? 'Optimizing orientation...' : `Orienting model ${i + 1} / ${targets.length}`);
+
+    try {
+      const quaternion = await optimizeOrientationAsync(geometry, preset, (fraction, text) => {
+        const overall = (i + fraction) / targets.length;
+        updateProgress(overall, targets.length === 1 ? text : `Orienting model ${i + 1} / ${targets.length}`);
+      });
+      viewer.applyRotation(quaternion);
+    } catch (error) {
+      failureCount += 1;
+      console.error(`Failed to orient model ${i + 1}`, error);
+    }
   }
+
+  viewer.selectObjects(originalSelectionIds);
+  showToolPanelByName?.('orient');
+  if (failureCount > 0) {
+    alert(`Failed to orient ${failureCount} selected model${failureCount === 1 ? '' : 's'}.`);
+  }
+  hideProgress();
 }
 
-// --- Supports ---
-async function handleGenerateSupports() {
-  const geometry = viewer.getModelGeometry();
-  if (!geometry) return;
-
-  showProgress('Generating supports...');
-  await new Promise(r => setTimeout(r, 50));
-
-  const supportGeo = await generateSupports(geometry, {
+function getSupportOptions(onProgress) {
+  return {
     overhangAngle: parseFloat(overhangAngleInput.value),
     density: parseFloat(supportDensityInput.value),
     autoDensity: autoDensityInput.checked,
@@ -688,22 +817,55 @@ async function handleGenerateSupports() {
     basePanThickness: parseFloat(basePanThicknessInput.value),
     basePanLipWidth: parseFloat(basePanLipWidthInput.value),
     basePanLipHeight: parseFloat(basePanLipHeightInput.value),
-    onProgress: (fraction, text) => {
-      updateProgress(fraction, text);
-    }
-  });
+    onProgress,
+  };
+}
 
-  if (supportGeo.attributes.position && supportGeo.attributes.position.count > 0) {
-    viewer.setSupports(supportGeo);
-  } else {
-    viewer.clearSupports();
+// --- Supports ---
+async function handleGenerateSupports() {
+  const targets = [...viewer.selected];
+  if (targets.length === 0) return;
+  const originalSelectionIds = targets.map(obj => obj.id);
+
+  showProgress(targets.length === 1 ? 'Generating supports...' : 'Generating supports for selected models...');
+  await new Promise(r => setTimeout(r, 50));
+
+  let failureCount = 0;
+  for (let i = 0; i < targets.length; i++) {
+    const obj = targets[i];
+    viewer.selectObject(obj.id);
+    const geometry = viewer.getModelGeometry();
+    if (!geometry) continue;
+
+    updateProgress(i / targets.length, targets.length === 1 ? 'Generating supports...' : `Supporting model ${i + 1} / ${targets.length}`);
+
+    try {
+      const supportGeo = await generateSupports(geometry, getSupportOptions((fraction, text) => {
+        const overall = (i + fraction) / targets.length;
+        updateProgress(overall, targets.length === 1 ? text : `Supporting model ${i + 1} / ${targets.length}`);
+      }));
+
+      if (supportGeo.attributes.position && supportGeo.attributes.position.count > 0) {
+        viewer.setSupports(supportGeo);
+      } else {
+        viewer.clearSupports();
+      }
+    } catch (error) {
+      failureCount += 1;
+      console.error(`Failed to generate supports for model ${i + 1}`, error);
+    }
   }
 
+  viewer.selectObjects(originalSelectionIds);
+  showToolPanelByName?.('supports');
   slicedLayers = null;
   slicedVolumes = null;
   exportBtn.hidden = true;
   layerPreviewPanel.hidden = true;
   updateEstimate();
+  if (failureCount > 0) {
+    alert(`Failed to generate supports for ${failureCount} selected model${failureCount === 1 ? '' : 's'}.`);
+  }
   hideProgress();
 }
 

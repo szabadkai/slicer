@@ -1,7 +1,8 @@
 /**
  * Compute the volume of a closed mesh using the signed-tetrahedron method.
- * For each triangle, sum (v0 · (v1 × v2)) / 6. Takes Math.abs to be robust to
- * inverted winding and partially-open meshes.
+ * For each triangle, sum (v0 · (v1 × v2)) / 6. Disconnected shells are summed
+ * independently so a support raft/pan with opposite winding cannot subtract
+ * from the rest of the support structure.
  *
  * @param {THREE.BufferGeometry} geometry - position attribute is required;
  *   vertices are read in their current local space, so the caller must apply
@@ -12,34 +13,100 @@ export function computeMeshVolume(geometry) {
   if (!geometry || !geometry.attributes || !geometry.attributes.position) return 0;
   const pos = geometry.attributes.position;
   const index = geometry.index;
-  let sum = 0;
 
   const ax = (i) => pos.getX(i);
   const ay = (i) => pos.getY(i);
   const az = (i) => pos.getZ(i);
+  const triCount = index ? Math.floor(index.count / 3) : Math.floor(pos.count / 3);
+  if (triCount === 0) return 0;
+
+  const parent = new Int32Array(triCount);
+  const rank = new Uint8Array(triCount);
+  const componentVolume = new Float64Array(triCount);
+  for (let i = 0; i < triCount; i++) parent[i] = i;
+
+  const find = (x) => {
+    let root = x;
+    while (parent[root] !== root) root = parent[root];
+    while (parent[x] !== x) {
+      const next = parent[x];
+      parent[x] = root;
+      x = next;
+    }
+    return root;
+  };
+
+  const union = (a, b) => {
+    let rootA = find(a);
+    let rootB = find(b);
+    if (rootA === rootB) return;
+    if (rank[rootA] < rank[rootB]) {
+      const tmp = rootA;
+      rootA = rootB;
+      rootB = tmp;
+    }
+    parent[rootB] = rootA;
+    if (rank[rootA] === rank[rootB]) rank[rootA]++;
+  };
+
+  const vertexToTriangle = new Map();
+  const connectVertex = (vertexIndex, triangleIndex) => {
+    const key = vertexKey(ax(vertexIndex), ay(vertexIndex), az(vertexIndex));
+    const previousTriangle = vertexToTriangle.get(key);
+    if (previousTriangle === undefined) {
+      vertexToTriangle.set(key, triangleIndex);
+    } else {
+      union(triangleIndex, previousTriangle);
+    }
+  };
 
   if (index) {
-    const idx = index.array;
-    for (let i = 0; i < idx.length; i += 3) {
-      const a = idx[i], b = idx[i + 1], c = idx[i + 2];
-      sum += signedTetVolume(
+    for (let tri = 0; tri < triCount; tri++) {
+      const a = index.getX(tri * 3);
+      const b = index.getX(tri * 3 + 1);
+      const c = index.getX(tri * 3 + 2);
+      componentVolume[tri] = signedTetVolume(
         ax(a), ay(a), az(a),
         ax(b), ay(b), az(b),
         ax(c), ay(c), az(c),
       );
+      connectVertex(a, tri);
+      connectVertex(b, tri);
+      connectVertex(c, tri);
     }
   } else {
-    const n = pos.count;
-    for (let i = 0; i < n; i += 3) {
-      sum += signedTetVolume(
+    for (let tri = 0; tri < triCount; tri++) {
+      const i = tri * 3;
+      componentVolume[tri] = signedTetVolume(
         ax(i), ay(i), az(i),
         ax(i + 1), ay(i + 1), az(i + 1),
         ax(i + 2), ay(i + 2), az(i + 2),
       );
+      connectVertex(i, tri);
+      connectVertex(i + 1, tri);
+      connectVertex(i + 2, tri);
     }
   }
 
-  return Math.abs(sum);
+  const sums = new Map();
+  for (let tri = 0; tri < triCount; tri++) {
+    const root = find(tri);
+    sums.set(root, (sums.get(root) || 0) + componentVolume[tri]);
+  }
+
+  let volume = 0;
+  for (const sum of sums.values()) {
+    volume += Math.abs(sum);
+  }
+  return volume;
+}
+
+function vertexKey(x, y, z) {
+  return `${roundForKey(x)},${roundForKey(y)},${roundForKey(z)}`;
+}
+
+function roundForKey(value) {
+  return Math.round(value * 1e5);
 }
 
 function signedTetVolume(
