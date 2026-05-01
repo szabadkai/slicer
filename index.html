@@ -30,9 +30,12 @@
             <span>Load</span>
             <input type="file" id="stl-input" accept=".stl" hidden>
           </label>
-        </div>
-
-        <div class="toolbar-group">
+          <button class="tool-btn active" id="edit-btn" title="Prepare">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M4 4h16v4H4V4zm0 6h16v4H4v-4zm0 6h10v4H4v-4z" />
+            </svg>
+            <span>Prepare</span>
+          </button>
           <button class="tool-btn" id="transform-btn" title="Transform">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
               <path d="M12 2L8 6h3v5H6V8L2 12l4 4v-3h5v5H8l4 4 4-4h-3v-5h5v3l4-4-4-4v3h-5V6h3z" />
@@ -51,20 +54,24 @@
             </svg>
             <span>Supports</span>
           </button>
-        </div>
-
-        <div class="toolbar-group">
-          <button class="tool-btn" id="edit-btn" title="Edit">
+          <button class="tool-btn" id="material-btn" title="Material">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-              <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+              <path d="M12 2C8.1 2 5 5.1 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.9-3.1-7-7-7zm0 10.5A3.5 3.5 0 1 1 12 5a3.5 3.5 0 0 1 0 7.5z" />
             </svg>
-            <span>Edit</span>
+            <span>Material</span>
+          </button>
+          <button class="tool-btn" id="slice-tool-btn" title="Slice">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M4 5h16v2H4V5zm2 4h12v2H6V9zm2 4h8v2H8v-2zm2 4h4v2h-4v-2z" />
+            </svg>
+            <span>Slice</span>
           </button>
         </div>
       </aside>
 
       <div id="viewport-container">
         <canvas id="viewport"></canvas>
+        <div id="fps-counter">FPS --</div>
         <div id="model-info" class="floating-panel"></div>
         <div id="summary-panel" class="floating-panel">
           <h3>Summary</h3>
@@ -127,6 +134,12 @@
               <label>Z (&deg;) <input type="number" id="rotate-z" value="0" step="5" class="val-box"></label>
             </div>
           </div>
+          <h3 class="field-heading">Build Plate</h3>
+          <div class="control-group">
+            <label>Z Elevation (mm)
+              <input type="number" id="z-elevation" value="5" min="0" max="50" step="1" class="val-box">
+            </label>
+          </div>
         </section>
 
         <section id="orientation-panel" class="panel" hidden>
@@ -152,11 +165,6 @@
 
         <section id="supports-panel" class="panel" hidden>
           <h2>Supports <span class="badge">Auto</span></h2>
-          <div class="control-group">
-            <label>Z Elevation (mm)
-              <input type="number" id="z-elevation" value="5" min="0" max="50" step="1" class="val-box">
-            </label>
-          </div>
           <div class="control-group">
             <label>Overhang Angle</label>
             <div class="flex-row">
@@ -193,42 +201,72 @@
             </label>
           </div>
           <div class="control-group">
-            <label>Support Scope
-              <select id="support-scope" class="val-box">
-                <option value="outside-only" selected>Outside only</option>
-                <option value="all">Include cavities</option>
-              </select>
+            <label>Solid Base Pan
+              <input type="checkbox" id="base-pan-enabled" class="val-box">
             </label>
           </div>
-          <div class="control-group">
-            <label>Approach
-              <select id="support-approach" class="val-box">
-                <option value="angled-needed" selected>Angle when needed</option>
-                <option value="vertical">Vertical only</option>
-                <option value="prefer-angled">Prefer angled</option>
-              </select>
-            </label>
+          <div id="base-pan-options" style="opacity: 0.5; pointer-events: none;">
+            <div class="control-group">
+              <label>Pan Margin (mm)
+                <input type="number" id="base-pan-margin" value="4" min="0" max="30" step="0.5" class="val-box" disabled>
+              </label>
+            </div>
+            <div class="control-group">
+              <label>Pan Thickness (mm)
+                <input type="number" id="base-pan-thickness" value="0.8" min="0.2" max="5" step="0.1" class="val-box" disabled>
+              </label>
+            </div>
+            <div class="control-group">
+              <label>Lip Width (mm)
+                <input type="number" id="base-pan-lip-width" value="1.2" min="0.4" max="5" step="0.1" class="val-box" disabled>
+              </label>
+            </div>
+            <div class="control-group">
+              <label>Lip Height (mm)
+                <input type="number" id="base-pan-lip-height" value="1" min="0.2" max="6" step="0.1" class="val-box" disabled>
+              </label>
+            </div>
           </div>
-          <div class="control-group">
-            <label>Max Pillar Angle (deg)
-              <input type="number" id="support-max-angle" value="45" min="5" max="70" step="5" class="val-box">
-            </label>
-          </div>
-          <div class="control-group">
-            <label>Model Clearance (mm)
-              <input type="number" id="support-clearance" value="1.5" min="0.2" max="10" step="0.1" class="val-box">
-            </label>
-          </div>
-          <div class="control-group">
-            <label>Max Contact Offset (mm)
-              <input type="number" id="support-max-offset" value="18" min="1" max="80" step="1" class="val-box">
-            </label>
-          </div>
-          <div class="control-group">
-            <label>Cross Bracing
-              <input type="checkbox" id="cross-bracing" checked class="val-box">
-            </label>
-          </div>
+          <details class="advanced-group">
+            <summary>Advanced Support Routing</summary>
+            <div class="control-group">
+              <label>Support Scope
+                <select id="support-scope" class="val-box">
+                  <option value="outside-only" selected>Outside only</option>
+                  <option value="all">Include cavities</option>
+                </select>
+              </label>
+            </div>
+            <div class="control-group">
+              <label>Approach
+                <select id="support-approach" class="val-box">
+                  <option value="angled-needed">Angle when needed</option>
+                  <option value="vertical">Vertical only</option>
+                  <option value="prefer-angled" selected>Prefer angled</option>
+                </select>
+              </label>
+            </div>
+            <div class="control-group">
+              <label>Max Pillar Angle (deg)
+                <input type="number" id="support-max-angle" value="45" min="5" max="70" step="5" class="val-box">
+              </label>
+            </div>
+            <div class="control-group">
+              <label>Model Clearance (mm)
+                <input type="number" id="support-clearance" value="1.5" min="0.2" max="10" step="0.1" class="val-box">
+              </label>
+            </div>
+            <div class="control-group">
+              <label>Max Contact Offset (mm)
+                <input type="number" id="support-max-offset" value="18" min="1" max="80" step="1" class="val-box">
+              </label>
+            </div>
+            <div class="control-group">
+              <label>Cross Bracing
+                <input type="checkbox" id="cross-bracing" checked class="val-box">
+              </label>
+            </div>
+          </details>
           <div class="action-buttons">
             <button class="btn btn-secondary" id="clear-supports-btn">Clear</button>
             <button class="btn btn-primary" id="generate-supports-btn">Auto-Generate</button>
@@ -239,7 +277,7 @@
         </section>
 
         <section id="edit-panel" class="panel" hidden>
-          <h2>Edit</h2>
+          <h2>Prepare</h2>
           <div class="edit-actions">
             <button class="btn btn-secondary edit-action-btn" id="duplicate-btn">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
@@ -268,7 +306,7 @@
           </div>
         </section>
 
-        <section id="materials-panel" class="panel">
+        <section id="materials-panel" class="panel" hidden>
           <h2>Resin Material <span class="badge">Preview</span></h2>
           <div id="material-picker" class="material-grid"></div>
           <div id="material-detail" class="material-detail"></div>
@@ -277,8 +315,8 @@
           </div>
         </section>
 
-        <section id="slice-panel" class="panel">
-          <h2>Job Settings</h2>
+        <section id="slice-panel" class="panel" hidden>
+          <h2>Slice</h2>
           <div class="control-group">
             <label>Layer Height (mm)
               <input type="number" id="layer-height" value="0.05" min="0.01" max="0.15" step="0.01" class="val-box">
@@ -320,7 +358,7 @@
           </div>
         </section>
 
-        <div id="footer-actions">
+        <div id="footer-actions" hidden>
           <button class="btn btn-primary slice-big-btn" id="slice-btn">Slice & Print</button>
           <button class="btn export-btn" id="export-btn" hidden>Export ZIP</button>
         </div>

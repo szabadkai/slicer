@@ -7,20 +7,17 @@ import { computeMeshVolume } from './volume.js';
 import { DEFAULT_RESIN_MATERIAL_ID, RESIN_MATERIALS } from './materials.js';
 
 const DEFAULT_RESIN_MATERIAL = RESIN_MATERIALS.find(m => m.id === DEFAULT_RESIN_MATERIAL_ID) || RESIN_MATERIALS[0];
+const STATIC_PIXEL_RATIO_CAP = 1.5;
+const INTERACTIVE_PIXEL_RATIO_CAP = 1.25;
 
 function createResinMaterial(preset = DEFAULT_RESIN_MATERIAL) {
-  return new THREE.MeshPhysicalMaterial({
+  return new THREE.MeshStandardMaterial({
     color: preset.color,
     roughness: preset.roughness,
     metalness: preset.metalness,
     transparent: preset.opacity < 1,
     opacity: preset.opacity,
-    transmission: preset.transmission,
-    ior: preset.ior,
-    thickness: preset.transmission > 0 ? 2 : 0,
-    clearcoat: preset.transmission > 0 ? 0.35 : 0.08,
-    clearcoatRoughness: Math.min(0.6, preset.roughness + 0.12),
-    side: THREE.DoubleSide,
+    depthWrite: preset.opacity >= 0.85,
   });
 }
 
@@ -38,8 +35,15 @@ export class Viewer {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xf0f2f5);
 
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+      alpha: false,
+      stencil: false,
+      powerPreference: 'low-power',
+    });
+    this.renderPixelRatio = 0;
+    this._setRenderPixelRatio(STATIC_PIXEL_RATIO_CAP);
     this.renderer.sortObjects = true;
 
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 2000);
@@ -47,10 +51,25 @@ export class Viewer {
 
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
+    this.controls.addEventListener('start', () => {
+      this.isUserInteracting = true;
+      this._setRenderPixelRatio(INTERACTIVE_PIXEL_RATIO_CAP);
+      this.requestRender();
+    });
+    this.controls.addEventListener('end', () => {
+      this.isUserInteracting = false;
+      this._setRenderPixelRatio(STATIC_PIXEL_RATIO_CAP);
+      this.requestRender();
+    });
+    this.controls.addEventListener('change', () => this.requestRender());
 
     this.transformControl = new TransformControls(this.camera, canvas);
+    this.transformControl.addEventListener('change', () => this.requestRender());
     this.transformControl.addEventListener('dragging-changed', (event) => {
       this.controls.enabled = !event.value;
+      this.isUserInteracting = event.value;
+      this._setRenderPixelRatio(event.value ? INTERACTIVE_PIXEL_RATIO_CAP : STATIC_PIXEL_RATIO_CAP);
+      this.requestRender();
     });
     this.transformControl.addEventListener('mouseUp', () => {
       this._bakeTransform();
@@ -59,21 +78,35 @@ export class Viewer {
 
     this.raycaster = new THREE.Raycaster();
     this.pointerDown = new THREE.Vector2();
+    this.renderRequested = false;
+    this.isUserInteracting = false;
+    this.fpsElement = document.getElementById('fps-counter');
+    this.fpsFrames = 0;
+    this.fpsWindowStart = performance.now();
+    this.fpsIdleTimer = null;
     this.canvas.addEventListener('pointerdown', (e) => {
       this.pointerDown.set(e.clientX, e.clientY);
+      this.requestRender();
     });
     this.canvas.addEventListener('pointerup', (e) => {
       const dist = Math.hypot(e.clientX - this.pointerDown.x, e.clientY - this.pointerDown.y);
       if (dist < 5 && !this.transformControl.dragging) {
         this._onClick(e);
       }
+      this.requestRender();
+    });
+    this.canvas.addEventListener('mesh-changed', () => this.requestRender());
+    this.canvas.addEventListener('selection-changed', () => this.requestRender());
+    this.canvas.addEventListener('material-changed', () => this.requestRender());
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) this.requestRender();
     });
 
     this._setupLights();
     this._setupGrid();
     this._resize();
     window.addEventListener('resize', () => this._resize());
-    this._animate();
+    this.requestRender();
   }
 
   _onClick(e) {
@@ -215,6 +248,7 @@ export class Viewer {
       this.controls.target.set(0, spec.buildHeightMM / 2, 0);
       this.controls.update();
     }
+    this.requestRender();
   }
 
   _setupGrid() {
@@ -288,6 +322,7 @@ export class Viewer {
     const volLines = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x888888, transparent: true, opacity: 0.4 }));
     this.gridGroup.add(volLines);
     this.buildVolumeEdges = volLines;
+    this.requestRender();
   }
 
   _resize() {
@@ -297,12 +332,54 @@ export class Viewer {
     this.renderer.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.requestRender();
   }
 
-  _animate() {
-    requestAnimationFrame(() => this._animate());
-    this.controls.update();
+  _setRenderPixelRatio(maxPixelRatio) {
+    const nextPixelRatio = Math.min(window.devicePixelRatio || 1, maxPixelRatio);
+    if (nextPixelRatio === this.renderPixelRatio) return;
+    this.renderPixelRatio = nextPixelRatio;
+    this.renderer.setPixelRatio(nextPixelRatio);
+    if (this.canvas.parentElement && this.camera) {
+      this._resize();
+    }
+  }
+
+  requestRender() {
+    if (this.renderRequested || document.hidden) return;
+    this.renderRequested = true;
+    requestAnimationFrame(() => this._render());
+  }
+
+  _render() {
+    this.renderRequested = false;
+    const now = performance.now();
+    const cameraMoved = this.controls.update();
     this.renderer.render(this.scene, this.camera);
+    this._updateFps(now);
+    if (this.isUserInteracting || cameraMoved) {
+      this.requestRender();
+    }
+  }
+
+  _updateFps(now) {
+    if (!this.fpsElement) return;
+
+    this.fpsFrames += 1;
+    const elapsed = now - this.fpsWindowStart;
+    if (elapsed >= 250) {
+      const fps = Math.round((this.fpsFrames * 1000) / elapsed);
+      this.fpsElement.textContent = `${fps} FPS`;
+      this.fpsFrames = 0;
+      this.fpsWindowStart = now;
+    }
+
+    clearTimeout(this.fpsIdleTimer);
+    this.fpsIdleTimer = setTimeout(() => {
+      this.fpsFrames = 0;
+      this.fpsWindowStart = performance.now();
+      this.fpsElement.textContent = 'Idle';
+    }, 500);
   }
 
   loadSTL(buffer, scale = 1) {
@@ -490,6 +567,7 @@ export class Viewer {
     const { inBounds } = this.checkBounds();
     this.buildVolumeEdges.material.color.setHex(inBounds ? 0x888888 : 0xff4444);
     this.buildVolumeEdges.material.opacity = inBounds ? 0.4 : 0.8;
+    this.requestRender();
   }
 
   getModelGeometry() {
@@ -549,6 +627,7 @@ export class Viewer {
     this.selected[0].supportsMesh = mesh;
     this.selected[0]._cachedLocalSupportVolume = undefined;
     this.scene.add(mesh);
+    this.requestRender();
   }
 
   clearSupports() {
@@ -561,6 +640,7 @@ export class Viewer {
       }
       sel._cachedLocalSupportVolume = undefined;
     });
+    this.requestRender();
   }
 
   getSupportsMesh() {
@@ -577,6 +657,7 @@ export class Viewer {
         sel.mesh.updateMatrixWorld(true);
     });
     this.clearSupports();
+    this.canvas.dispatchEvent(new CustomEvent('mesh-changed'));
   }
 
   applyRotation(quaternion) {
@@ -610,6 +691,7 @@ export class Viewer {
            this.transformControl.setMode(mode);
        }
     }
+    this.requestRender();
   }
 
   _bakeTransform() {

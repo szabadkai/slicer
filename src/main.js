@@ -25,13 +25,22 @@ const transformPanel = document.getElementById('transform-panel');
 const orientationPanel = document.getElementById('orientation-panel');
 const supportsPanel = document.getElementById('supports-panel');
 const editPanel = document.getElementById('edit-panel');
+const materialsPanel = document.getElementById('materials-panel');
 const slicePanel = document.getElementById('slice-panel');
 const layerPreviewPanel = document.getElementById('layer-preview-panel');
+const footerActions = document.getElementById('footer-actions');
 const materialPicker = document.getElementById('material-picker');
 const materialDetail = document.getElementById('material-detail');
 const applyMaterialAllBtn = document.getElementById('apply-material-all-btn');
 
-const toolPanels = { transform: transformPanel, orient: orientationPanel, supports: supportsPanel, edit: editPanel };
+const toolPanels = {
+  edit: editPanel,
+  transform: transformPanel,
+  orient: orientationPanel,
+  supports: supportsPanel,
+  materials: materialsPanel,
+  slice: slicePanel,
+};
 
 const printerSelect = document.getElementById('printer-select');
 
@@ -52,6 +61,12 @@ const supportMaxAngleInput = document.getElementById('support-max-angle');
 const supportClearanceInput = document.getElementById('support-clearance');
 const supportMaxOffsetInput = document.getElementById('support-max-offset');
 const crossBracingInput = document.getElementById('cross-bracing');
+const basePanEnabledInput = document.getElementById('base-pan-enabled');
+const basePanOptions = document.getElementById('base-pan-options');
+const basePanMarginInput = document.getElementById('base-pan-margin');
+const basePanThicknessInput = document.getElementById('base-pan-thickness');
+const basePanLipWidthInput = document.getElementById('base-pan-lip-width');
+const basePanLipHeightInput = document.getElementById('base-pan-lip-height');
 const generateSupportsBtn = document.getElementById('generate-supports-btn');
 const clearSupportsBtn = document.getElementById('clear-supports-btn');
 const zElevationInput = document.getElementById('z-elevation');
@@ -122,6 +137,8 @@ function init() {
   const orientBtn = document.getElementById('orient-btn');
   const supportToolBtn = document.getElementById('support-tool-btn');
   const editBtn = document.getElementById('edit-btn');
+  const materialBtn = document.getElementById('material-btn');
+  const sliceToolBtn = document.getElementById('slice-tool-btn');
 
   const duplicateBtn = document.getElementById('duplicate-btn');
   const deleteBtn = document.getElementById('delete-btn');
@@ -166,43 +183,46 @@ function init() {
   });
   
   // --- Panel toggle logic ---
-  const toolButtons = { transform: transformBtn, orient: orientBtn, supports: supportToolBtn, edit: editBtn };
-  let activeToolPanel = null;
+  const toolButtons = {
+    edit: editBtn,
+    transform: transformBtn,
+    orient: orientBtn,
+    supports: supportToolBtn,
+    materials: materialBtn,
+    slice: sliceToolBtn,
+  };
+  let activeToolPanel = 'edit';
 
   function showToolPanel(name) {
-    // If already active, toggle off
-    if (activeToolPanel === name) {
-      toolPanels[name].hidden = true;
-      toolButtons[name].classList.remove('active');
-      activeToolPanel = null;
-      if (name === 'transform') viewer.setTransformMode(null);
-      return;
-    }
-
-    // Hide all tool panels, deactivate all buttons
     Object.keys(toolPanels).forEach(k => {
       toolPanels[k].hidden = true;
       toolButtons[k].classList.remove('active');
     });
+    layerPreviewPanel.hidden = true;
+    footerActions.hidden = name !== 'slice';
 
-    // Show the selected panel
     toolPanels[name].hidden = false;
     toolButtons[name].classList.add('active');
     activeToolPanel = name;
 
-    // When opening transform, activate the currently-selected mode
     if (name === 'transform') {
       const activeMode = transformPanel.querySelector('.mode-btn.active');
       if (activeMode) viewer.setTransformMode(activeMode.dataset.mode);
     } else {
       viewer.setTransformMode(null);
     }
+
+    if (name === 'slice' && slicedLayers) {
+      layerPreviewPanel.hidden = false;
+    }
   }
 
+  editBtn.addEventListener('click', () => showToolPanel('edit'));
   transformBtn.addEventListener('click', () => showToolPanel('transform'));
   orientBtn.addEventListener('click', () => showToolPanel('orient'));
   supportToolBtn.addEventListener('click', () => showToolPanel('supports'));
-  editBtn.addEventListener('click', () => showToolPanel('edit'));
+  materialBtn.addEventListener('click', () => showToolPanel('materials'));
+  sliceToolBtn.addEventListener('click', () => showToolPanel('slice'));
 
   // --- Transform panel mode toggles ---
   const modeBtns = transformPanel.querySelectorAll('.mode-btn');
@@ -348,9 +368,13 @@ function init() {
        btn.style.pointerEvents = singleSelected ? 'auto' : 'none';
     });
 
-    // Edit button: needs at least some objects on the plate
+    // Workflow steps that need plate content
     editBtn.style.opacity = (hasSelection || viewer.objects.length > 0) ? '1' : '0.3';
     editBtn.style.pointerEvents = (hasSelection || viewer.objects.length > 0) ? 'auto' : 'none';
+    materialBtn.style.opacity = viewer.objects.length > 0 ? '1' : '0.3';
+    materialBtn.style.pointerEvents = viewer.objects.length > 0 ? 'auto' : 'none';
+    sliceToolBtn.style.opacity = viewer.objects.length > 0 ? '1' : '0.3';
+    sliceToolBtn.style.pointerEvents = viewer.objects.length > 0 ? 'auto' : 'none';
 
     // Within edit panel, enable/disable individual buttons
     duplicateBtn.style.opacity = hasSelection ? '1' : '0.5';
@@ -364,7 +388,9 @@ function init() {
     if (!singleSelected && activeToolPanel && (activeToolPanel === 'transform' || activeToolPanel === 'orient' || activeToolPanel === 'supports')) {
       toolPanels[activeToolPanel].hidden = true;
       toolButtons[activeToolPanel].classList.remove('active');
-      activeToolPanel = null;
+      activeToolPanel = 'edit';
+      toolPanels.edit.hidden = false;
+      toolButtons.edit.classList.add('active');
       viewer.setTransformMode(null);
     }
 
@@ -442,8 +468,7 @@ function init() {
 
   canvas.addEventListener('mesh-changed', updateWorkspaceInfo);
   
-  // Slice panel is always visible (not part of tool toggle)
-  slicePanel.hidden = false;
+  showToolPanel('edit');
 
   // Support controls
   overhangAngleInput.addEventListener('input', () => {
@@ -464,6 +489,13 @@ function init() {
     supportThicknessInput.disabled = autoThicknessInput.checked;
     supportThicknessGroup.style.opacity = autoThicknessInput.checked ? '0.5' : '1';
     supportThicknessGroup.style.pointerEvents = autoThicknessInput.checked ? 'none' : 'auto';
+  });
+  basePanEnabledInput.addEventListener('change', () => {
+    [basePanMarginInput, basePanThicknessInput, basePanLipWidthInput, basePanLipHeightInput].forEach(input => {
+      input.disabled = !basePanEnabledInput.checked;
+    });
+    basePanOptions.style.opacity = basePanEnabledInput.checked ? '1' : '0.5';
+    basePanOptions.style.pointerEvents = basePanEnabledInput.checked ? 'auto' : 'none';
   });
   generateSupportsBtn.addEventListener('click', handleGenerateSupports);
   document.getElementById('orient-all-btn').addEventListener('click', () => handleOrientAll('fastest'));
@@ -631,6 +663,11 @@ async function handleGenerateSupports() {
     modelClearance: parseFloat(supportClearanceInput.value),
     maxContactOffset: parseFloat(supportMaxOffsetInput.value),
     crossBracing: crossBracingInput.checked,
+    basePanEnabled: basePanEnabledInput.checked,
+    basePanMargin: parseFloat(basePanMarginInput.value),
+    basePanThickness: parseFloat(basePanThicknessInput.value),
+    basePanLipWidth: parseFloat(basePanLipWidthInput.value),
+    basePanLipHeight: parseFloat(basePanLipHeightInput.value),
     onProgress: (fraction, text) => {
       updateProgress(fraction, text);
     }
@@ -705,6 +742,11 @@ async function handleSupportAll() {
       modelClearance: parseFloat(supportClearanceInput.value),
       maxContactOffset: parseFloat(supportMaxOffsetInput.value),
       crossBracing: crossBracingInput.checked,
+      basePanEnabled: basePanEnabledInput.checked,
+      basePanMargin: parseFloat(basePanMarginInput.value),
+      basePanThickness: parseFloat(basePanThicknessInput.value),
+      basePanLipWidth: parseFloat(basePanLipWidthInput.value),
+      basePanLipHeight: parseFloat(basePanLipHeightInput.value),
       onProgress: (fraction) => {
         const overall = (i + fraction) / allObjects.length;
         updateProgress(overall, `Supporting model ${i + 1} / ${allObjects.length}`);

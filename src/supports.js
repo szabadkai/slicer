@@ -11,15 +11,15 @@ THREE.Mesh.prototype.raycast = acceleratedRaycast;
  * Support anatomy (bottom to top):
  *   Base (wide cone on build plate)
  *   Vertical shaft (straight pillar)
- *   Angled section (optional, routes around model to reach occluded overhangs)
+ *   Angled section (routes the contact into a nearby vertical shaft)
  *   Tip (tapered cone touching the model)
  *
  * Pipeline:
  * 1. Detect overhang faces
  * 2. Sample contact points on overhang surfaces
- * 3. For each contact point, raycast downward to check for model collision
- *    - If clear path: straight vertical support
- *    - If blocked: route support at an angle to clear the obstruction
+ * 3. For each contact point, plan a route to the plate
+ *    - Prefer a short angled branch into a vertical shaft
+ *    - If blocked, route away from the obstruction
  * 4. Build support geometry with proper tip/shaft/base
  * 5. Return merged geometry
  */
@@ -50,30 +50,35 @@ export async function generateSupports(geometry, options = {}) {
     autoThickness = true,
     internalSupports = false,
     supportScope = internalSupports ? 'all' : 'outside-only',
-    approachMode = 'angled-needed',
+    approachMode = 'prefer-angled',
     maxPillarAngle = 45,
     modelClearance = 1.5,
     maxContactOffset = 18,
     crossBracing = false,
+    basePanEnabled = false,
+    basePanMargin = 4,
+    basePanThickness = 0.8,
+    basePanLipWidth = 1.2,
+    basePanLipHeight = 1,
     onProgress,
   } = options;
 
-  // Compute effective density
+  geometry.computeBoundingBox();
+  const modelBounds = geometry.boundingBox.clone();
+  const size = new THREE.Vector3();
+  modelBounds.getSize(size);
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const footprintArea = Math.max(size.x * size.z, 1);
+  const normalizedFootprint = THREE.MathUtils.clamp(footprintArea / 10000, 0, 1);
+  const normalizedHeight = THREE.MathUtils.clamp(size.y / 120, 0, 1);
+
+  // Compute effective density. Keep large/heavy parts from becoming too sparse,
+  // but avoid overpopulating tiny parts with more supports than they can use.
   let effectiveDensity = density;
   if (autoDensity) {
-    geometry.computeBoundingBox();
-    const bb = geometry.boundingBox;
-    const maxDim = Math.max(
-      bb.max.x - bb.min.x,
-      bb.max.y - bb.min.y,
-      bb.max.z - bb.min.z
-    );
-    // Small models (~10mm) → density 8 (tight spacing)
-    // Medium models (~50mm) → density 5
-    // Large models (~200mm) → density 3 (wide spacing)
     effectiveDensity = THREE.MathUtils.clamp(
-      Math.round(9 - (maxDim - 10) * (5 / 190)),
-      2, 9
+      Math.round(6.5 - (maxDim / 120) + normalizedFootprint * 1.5 + normalizedHeight),
+      4, 9
     );
   }
 
@@ -82,7 +87,10 @@ export async function generateSupports(geometry, options = {}) {
   const contactPoints = await findContactPoints(geometry, overhangAngle, effectiveDensity, (text) => {
     if (onProgress) onProgress(0, text);
   });
-  if (contactPoints.length === 0) return new THREE.BufferGeometry();
+  if (contactPoints.length === 0) {
+    if (!basePanEnabled) return new THREE.BufferGeometry();
+    return createBasePanGeometry(modelBounds, [], basePanMargin, basePanThickness, basePanLipWidth, basePanLipHeight);
+  }
 
   if (onProgress) {
     onProgress(0.1, "Building bounds tree...");
@@ -98,8 +106,6 @@ export async function generateSupports(geometry, options = {}) {
     new THREE.MeshBasicMaterial()
   );
   tempMesh.updateMatrixWorld(true);
-  geometry.computeBoundingBox();
-  const modelBounds = geometry.boundingBox.clone();
   const modelCenter = new THREE.Vector3();
   modelBounds.getCenter(modelCenter);
   const raycaster = new THREE.Raycaster();
@@ -108,15 +114,10 @@ export async function generateSupports(geometry, options = {}) {
   let actualTipDiameter = tipDiameter;
   let actualSupportThickness = supportThickness;
   if (autoThickness) {
-    geometry.computeBoundingBox();
-    const bb = geometry.boundingBox;
-    const maxDim = Math.max(
-      bb.max.x - bb.min.x,
-      bb.max.y - bb.min.y,
-      bb.max.z - bb.min.z
-    );
-    actualTipDiameter = THREE.MathUtils.clamp(0.2 + (maxDim - 10) * (0.8 / 190), 0.2, 1.5);
-    actualSupportThickness = actualTipDiameter * 1.5;
+    const scale = THREE.MathUtils.clamp(maxDim / 160, 0, 1);
+    const loadBoost = normalizedFootprint * 0.25 + normalizedHeight * 0.2;
+    actualTipDiameter = THREE.MathUtils.clamp(0.28 + scale * 0.45 + loadBoost, 0.28, 1.15);
+    actualSupportThickness = THREE.MathUtils.clamp(actualTipDiameter * 1.85, 0.65, 2.4);
   }
 
   const pillarRadius = actualSupportThickness / 2;
@@ -193,6 +194,12 @@ export async function generateSupports(geometry, options = {}) {
     );
   }
 
+  if (basePanEnabled) {
+    geometries.push(createBasePanGeometry(
+      modelBounds, routes, basePanMargin, basePanThickness, basePanLipWidth, basePanLipHeight
+    ));
+  }
+
   if (onProgress) {
     onProgress(0.95, "Merging geometry...");
     await new Promise(r => setTimeout(r, 0));
@@ -227,9 +234,10 @@ function planSupportRoute(point, context, pillarRadius, baseHeight, tipHeight, o
 
   if (validHits.length === 0) {
     if (options.approachMode === 'prefer-angled') {
+      const preferredAngle = preferredRouteAngle(point, context);
       const angled = findAngledRoute(
         contactPos, context, baseHeight, tipHeight, clearance, maxHorizontalPerVertical,
-        options.maxContactOffset, null, null, options.supportCollisionRadius
+        options.maxContactOffset, null, preferredAngle, options.supportCollisionRadius
       );
       if (angled) return angled;
     }
@@ -255,12 +263,9 @@ function planSupportRoute(point, context, pillarRadius, baseHeight, tipHeight, o
   const obstruction = validHits[0];
   const obstructionY = obstruction.point.y;
 
-  const obstructionNormal = obstruction.face
-    ? new THREE.Vector3().fromBufferAttribute(
-        mesh.geometry.attributes.normal,
-        obstruction.face.a
-      ).normalize()
-    : new THREE.Vector3(1, 0, 0);
+  const obstructionNormal = obstruction.face?.normal
+    ? obstruction.face.normal.clone().normalize()
+    : point.normal?.clone().normalize() || new THREE.Vector3(1, 0, 0);
 
   // Determine offset direction: move away from the obstruction surface
   // Project the normal onto XZ plane to get a horizontal escape direction
@@ -268,8 +273,12 @@ function planSupportRoute(point, context, pillarRadius, baseHeight, tipHeight, o
     obstructionNormal.x, 0, obstructionNormal.z
   );
   if (escapeDir.length() < 0.01) {
-    // Normal is straight up/down, pick arbitrary horizontal direction
-    escapeDir.set(1, 0, 0);
+    const radial = new THREE.Vector3(
+      contactPos.x - context.modelCenter.x,
+      0,
+      contactPos.z - context.modelCenter.z
+    );
+    escapeDir.copy(radial.lengthSq() > 0.01 ? radial : new THREE.Vector3(1, 0, 0));
   }
   escapeDir.normalize();
 
@@ -298,6 +307,29 @@ function planSupportRoute(point, context, pillarRadius, baseHeight, tipHeight, o
       { x: contactPos.x, y: contactPos.y, z: contactPos.z },
       { x: contactPos.x, y: obstructionY, z: contactPos.z, internalResting: true }
     ];
+  }
+
+  return null;
+}
+
+function preferredRouteAngle(point, context) {
+  const normal = point.normal?.clone().normalize() || null;
+  if (normal) {
+    normal.y = 0;
+    if (normal.lengthSq() > 0.01) {
+      normal.normalize();
+      return Math.atan2(normal.z, normal.x);
+    }
+  }
+
+  const radial = new THREE.Vector3(
+    point.position.x - context.modelCenter.x,
+    0,
+    point.position.z - context.modelCenter.z
+  );
+  if (radial.lengthSq() > 0.01) {
+    radial.normalize();
+    return Math.atan2(radial.z, radial.x);
   }
 
   return null;
@@ -360,12 +392,13 @@ function findAngledRoute(
   const maxOffset = Math.min(maxContactOffset, slopeLimitedOffset);
   if (maxOffset < clearance) return null;
 
-  const distances = [
+  const distances = uniqueSortedNumbers([
     clearance * 1.5,
     clearance * 2.5,
     clearance * 4,
     maxOffset,
-  ].filter((dist, index, arr) => dist <= maxOffset && arr.indexOf(dist) === index);
+  ].filter(dist => dist <= maxOffset));
+  const targetOffset = Math.min(maxOffset, Math.max(clearance * 2.5, 6));
 
   const candidates = [];
   for (const dist of distances) {
@@ -384,13 +417,18 @@ function findAngledRoute(
 
       if (!routeCollides(route, context, tipHeight, baseHeight, collisionRadius)) {
         const preferencePenalty = preferredAngle === null ? 0 : Math.abs(normalizedAngleDelta(angle, preferredAngle));
-        candidates.push({ route, score: dist + preferencePenalty * clearance });
+        const offsetPenalty = Math.abs(dist - targetOffset);
+        candidates.push({ route, score: offsetPenalty + preferencePenalty * clearance });
       }
     }
   }
 
   candidates.sort((a, b) => a.score - b.score);
   return candidates[0]?.route || null;
+}
+
+function uniqueSortedNumbers(values) {
+  return [...new Set(values.map(value => Number(value.toFixed(3))))].sort((a, b) => a - b);
 }
 
 function directionOffset(index) {
@@ -468,86 +506,304 @@ function clearanceSampleStarts(origin, axis, clearance) {
 function buildSupportGeometry(
   route, geometries, tipDiameter, tipHeight, pillarRadius, baseRadius, baseHeight
 ) {
-  const top = route[0];
+  const profile = buildSupportProfile(route, tipDiameter / 2, tipHeight, pillarRadius, baseRadius, baseHeight);
+  const supportGeo = createSweptSupportGeometry(profile, SUPPORT_SEGMENTS);
+  if (supportGeo) geometries.push(supportGeo);
+}
 
-  // 1. Tip: tapered cone at the contact point, pointing down
-  const tipGeo = new THREE.ConeGeometry(tipDiameter / 2, tipHeight, SUPPORT_SEGMENTS);
-  tipGeo.translate(0, -tipHeight / 2, 0);
-  tipGeo.translate(top.x, top.y, top.z);
-  geometries.push(tipGeo);
+function buildSupportProfile(route, tipRadius, tipHeight, pillarRadius, baseRadius, baseHeight) {
+  const profile = [];
+  const top = toVector3(route[0]);
+  const firstTarget = routeTargetPoint(route, 0, baseHeight, tipHeight);
+  const firstDir = new THREE.Vector3().subVectors(firstTarget, top);
+  const firstLength = firstDir.length();
+  if (firstLength < 0.1) return profile;
 
-  const tipBottom = top.y - tipHeight;
+  firstDir.normalize();
+  addProfileRing(profile, top, 0);
+  addProfileRing(profile, top.clone().addScaledVector(firstDir, Math.min(tipHeight, firstLength * 0.8)), tipRadius);
 
-  // 2. Build segments between waypoints
-  for (let i = 0; i < route.length - 1; i++) {
-    const from = i === 0 ? { x: top.x, y: tipBottom, z: top.z } : route[i];
-    const to = route[i + 1];
-    const isLast = i === route.length - 2;
+  const lastPoint = route[route.length - 1];
+  const lastIsInternal = Boolean(lastPoint.internalResting);
+  const bodyEndIndex = lastIsInternal ? route.length - 2 : route.length - 1;
 
-    // Target Y: leave room for base on last segment
-    let targetY = to.y;
-    if (isLast) {
-      targetY = to.internalResting ? to.y + tipHeight : baseHeight;
+  for (let i = 1; i <= bodyEndIndex; i++) {
+    addProfileRing(profile, routeTargetPoint(route, i - 1, baseHeight, tipHeight), pillarRadius);
+  }
+
+  if (lastIsInternal) {
+    addProfileRing(profile, routeTargetPoint(route, route.length - 2, baseHeight, tipHeight), pillarRadius);
+
+    const bottomContact = toVector3(lastPoint);
+    const previous = profile[profile.length - 1]?.center || top;
+    const bottomDir = new THREE.Vector3().subVectors(bottomContact, previous);
+    const bottomLength = bottomDir.length();
+    if (bottomLength >= 0.1) {
+      bottomDir.normalize();
+      addProfileRing(profile, bottomContact.clone().addScaledVector(bottomDir, -Math.min(tipHeight, bottomLength * 0.8)), tipRadius);
+      addProfileRing(profile, bottomContact, 0);
+    }
+  } else {
+    const base = route[route.length - 1];
+    addProfileRing(profile, new THREE.Vector3(base.x, baseHeight, base.z), pillarRadius);
+    addProfileRing(profile, new THREE.Vector3(base.x, 0, base.z), baseRadius);
+  }
+
+  return profile;
+}
+
+function routeTargetPoint(route, segmentIndex, baseHeight, tipHeight) {
+  const to = route[segmentIndex + 1];
+  const isLast = segmentIndex === route.length - 2;
+  const y = isLast
+    ? (to.internalResting ? to.y + tipHeight : baseHeight)
+    : to.y;
+  return new THREE.Vector3(to.x, y, to.z);
+}
+
+function addProfileRing(profile, center, radius) {
+  const previous = profile[profile.length - 1];
+  if (previous && previous.center.distanceToSquared(center) < 1e-6) {
+    previous.radius = Math.max(previous.radius, radius);
+    return;
+  }
+  profile.push({ center, radius });
+}
+
+function createSweptSupportGeometry(profile, segments) {
+  if (profile.length < 2) return null;
+
+  const positions = [];
+  const indices = [];
+  const frames = computeProfileFrames(profile);
+  const rings = [];
+
+  for (let i = 0; i < profile.length; i++) {
+    const { center, radius } = profile[i];
+    const start = positions.length / 3;
+    if (radius <= 1e-5) {
+      positions.push(center.x, center.y, center.z);
+      rings.push({ start, count: 1 });
+      continue;
     }
 
-    const dx = to.x - from.x;
-    const dz = to.z - from.z;
-    const dy = targetY - from.y;
-    const horizontalDist = Math.sqrt(dx * dx + dz * dz);
+    const { normal, binormal } = frames[i];
+    for (let s = 0; s < segments; s++) {
+      const angle = (s / segments) * Math.PI * 2;
+      const offset = normal.clone()
+        .multiplyScalar(Math.cos(angle) * radius)
+        .addScaledVector(binormal, Math.sin(angle) * radius);
+      positions.push(center.x + offset.x, center.y + offset.y, center.z + offset.z);
+    }
+    rings.push({ start, count: segments });
+  }
 
-    if (horizontalDist < 0.01) {
-      // Pure vertical segment
-      const segHeight = Math.abs(dy);
-      if (segHeight < 0.1) continue;
+  for (let i = 0; i < profile.length - 1; i++) {
+    connectProfileRings(indices, rings[i], rings[i + 1], segments);
+  }
 
-      const segGeo = new THREE.CylinderGeometry(
-        pillarRadius, pillarRadius, segHeight, SUPPORT_SEGMENTS
-      );
-      segGeo.translate(from.x, from.y + dy / 2, from.z);
-      geometries.push(segGeo);
+  addCap(indices, positions, profile[0], segments, rings[0].start, true);
+  addCap(
+    indices,
+    positions,
+    profile[profile.length - 1],
+    segments,
+    rings[rings.length - 1].start,
+    false
+  );
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function connectProfileRings(indices, ringA, ringB, segments) {
+  if (ringA.count === 1 && ringB.count === 1) return;
+
+  if (ringA.count === 1) {
+    for (let s = 0; s < segments; s++) {
+      indices.push(ringA.start, ringB.start + s, ringB.start + ((s + 1) % segments));
+    }
+    return;
+  }
+
+  if (ringB.count === 1) {
+    for (let s = 0; s < segments; s++) {
+      indices.push(ringA.start + s, ringB.start, ringA.start + ((s + 1) % segments));
+    }
+    return;
+  }
+
+  for (let s = 0; s < segments; s++) {
+    const next = (s + 1) % segments;
+    indices.push(ringA.start + s, ringB.start + s, ringB.start + next);
+    indices.push(ringA.start + s, ringB.start + next, ringA.start + next);
+  }
+}
+
+function computeProfileFrames(profile) {
+  const frames = [];
+  let previousNormal = null;
+
+  for (let i = 0; i < profile.length; i++) {
+    const prev = profile[Math.max(0, i - 1)].center;
+    const next = profile[Math.min(profile.length - 1, i + 1)].center;
+    const tangent = new THREE.Vector3().subVectors(next, prev);
+    if (tangent.lengthSq() < 1e-6) tangent.copy(DOWN);
+    tangent.normalize();
+
+    let normal;
+    if (previousNormal) {
+      normal = previousNormal.clone().sub(tangent.clone().multiplyScalar(previousNormal.dot(tangent)));
+      if (normal.lengthSq() < 1e-6) normal = null;
+    }
+    if (!normal) {
+      normal = Math.abs(tangent.dot(UP)) < 0.95
+        ? new THREE.Vector3().crossVectors(tangent, UP)
+        : new THREE.Vector3(1, 0, 0);
+    }
+    normal.normalize();
+    const binormal = new THREE.Vector3().crossVectors(tangent, normal).normalize();
+    frames.push({ tangent, normal, binormal });
+    previousNormal = normal;
+  }
+
+  return frames;
+}
+
+function addCap(indices, positions, ring, segments, ringStart, reverse) {
+  if (ring.radius <= 1e-5) return;
+
+  const centerIndex = positions.length / 3;
+  positions.push(ring.center.x, ring.center.y, ring.center.z);
+  for (let s = 0; s < segments; s++) {
+    const next = (s + 1) % segments;
+    if (reverse) {
+      indices.push(centerIndex, ringStart + next, ringStart + s);
     } else {
-      // Angled segment: build a cylinder aligned along the direction vector
-      const segLength = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (segLength < 0.1) continue;
-
-      const segGeo = new THREE.CylinderGeometry(
-        pillarRadius, pillarRadius, segLength, SUPPORT_SEGMENTS
-      );
-
-      // CylinderGeometry is along Y axis by default. Rotate to align with direction.
-      const dir = new THREE.Vector3(dx, dy, dz).normalize();
-      const quat = new THREE.Quaternion().setFromUnitVectors(UP, dir);
-      segGeo.applyQuaternion(quat);
-
-      // Position at midpoint
-      segGeo.translate(
-        from.x + dx / 2,
-        from.y + dy / 2,
-        from.z + dz / 2
-      );
-      geometries.push(segGeo);
-    }
-
-    // If this is the last segment, add the base
-    if (isLast) {
-      if (to.internalResting) {
-        // Bottom tip resting on model
-        const bottomTipGeo = new THREE.ConeGeometry(tipDiameter / 2, tipHeight, SUPPORT_SEGMENTS);
-        bottomTipGeo.rotateX(Math.PI);
-        bottomTipGeo.translate(0, tipHeight / 2, 0);
-        bottomTipGeo.translate(to.x, to.y, to.z);
-        geometries.push(bottomTipGeo);
-      } else {
-        const bx = to.x;
-        const bz = to.z;
-        const baseGeo = new THREE.CylinderGeometry(
-          pillarRadius, baseRadius, baseHeight, SUPPORT_SEGMENTS
-        );
-        baseGeo.translate(bx, baseHeight / 2, bz);
-        geometries.push(baseGeo);
-      }
+      indices.push(centerIndex, ringStart + s, ringStart + next);
     }
   }
+}
+
+function toVector3(point) {
+  return new THREE.Vector3(point.x, point.y, point.z);
+}
+
+function createBasePanGeometry(modelBounds, routes, margin, thickness, lipWidth, lipHeight) {
+  const safeMargin = Number.isFinite(margin) ? Math.max(0, margin) : 4;
+  const safeThickness = Number.isFinite(thickness) ? Math.max(0.2, thickness) : 0.8;
+  const safeLipWidth = Number.isFinite(lipWidth) ? Math.max(0, lipWidth) : 1.2;
+  const safeLipHeight = Number.isFinite(lipHeight) ? Math.max(0, lipHeight) : 1;
+  const basePoints = [];
+
+  for (const route of routes) {
+    const base = route[route.length - 1];
+    if (!base || base.internalResting) continue;
+    basePoints.push(new THREE.Vector2(base.x, base.z));
+  }
+
+  if (basePoints.length < 3) {
+    basePoints.push(
+      new THREE.Vector2(modelBounds.min.x, modelBounds.min.z),
+      new THREE.Vector2(modelBounds.max.x, modelBounds.min.z),
+      new THREE.Vector2(modelBounds.max.x, modelBounds.max.z),
+      new THREE.Vector2(modelBounds.min.x, modelBounds.max.z)
+    );
+  }
+
+  const outlineSamples = [];
+  const sampleRadius = Math.max(safeMargin, safeLipWidth * 1.2, 0.5);
+  const sampleCount = 12;
+  for (const point of basePoints) {
+    for (let i = 0; i < sampleCount; i++) {
+      const angle = (i / sampleCount) * Math.PI * 2;
+      outlineSamples.push(new THREE.Vector2(
+        point.x + Math.cos(angle) * sampleRadius,
+        point.y + Math.sin(angle) * sampleRadius
+      ));
+    }
+  }
+
+  const outline = convexHull2D(outlineSamples);
+  if (outline.length < 3) return new THREE.BufferGeometry();
+
+  const shape = new THREE.Shape(outline);
+  const slabGeo = new THREE.ExtrudeGeometry(shape, {
+    depth: safeThickness,
+    bevelEnabled: false,
+  });
+  slabGeo.rotateX(Math.PI / 2);
+  slabGeo.translate(0, safeThickness, 0);
+
+  const geometries = [slabGeo];
+  if (safeLipWidth > 0 && safeLipHeight > 0) {
+    addLipGeometry(outline, geometries, safeThickness, safeLipWidth, safeLipHeight);
+  }
+  return mergeGeometries(geometries);
+}
+
+function addLipGeometry(outline, geometries, baseThickness, lipWidth, lipHeight) {
+  const topY = baseThickness + lipHeight / 2;
+  const minEdgeLength = 0.1;
+
+  for (let i = 0; i < outline.length; i++) {
+    const a = outline[i];
+    const b = outline[(i + 1) % outline.length];
+    const dx = b.x - a.x;
+    const dz = b.y - a.y;
+    const length = Math.sqrt(dx * dx + dz * dz);
+    if (length < minEdgeLength) continue;
+
+    const edgeGeo = new THREE.BoxGeometry(length, lipHeight, lipWidth);
+    const angle = Math.atan2(dz, dx);
+    edgeGeo.rotateY(-angle);
+    edgeGeo.translate(a.x + dx / 2, topY, a.y + dz / 2);
+    geometries.push(edgeGeo);
+
+    const cornerGeo = new THREE.CylinderGeometry(lipWidth / 2, lipWidth / 2, lipHeight, SUPPORT_SEGMENTS);
+    cornerGeo.translate(a.x, topY, a.y);
+    geometries.push(cornerGeo);
+  }
+}
+
+function convexHull2D(points) {
+  const unique = [];
+  const seen = new Set();
+  for (const point of points) {
+    const key = `${point.x.toFixed(3)},${point.y.toFixed(3)}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(point);
+    }
+  }
+
+  unique.sort((a, b) => a.x === b.x ? a.y - b.y : a.x - b.x);
+  if (unique.length <= 3) return unique;
+
+  const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lower = [];
+  for (const point of unique) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], point) <= 0) {
+      lower.pop();
+    }
+    lower.push(point);
+  }
+
+  const upper = [];
+  for (let i = unique.length - 1; i >= 0; i--) {
+    const point = unique[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], point) <= 0) {
+      upper.pop();
+    }
+    upper.push(point);
+  }
+
+  lower.pop();
+  upper.pop();
+  return lower.concat(upper);
 }
 
 /**
@@ -592,11 +848,11 @@ function generateCrossBracing(
 
   // 2. Determine an appropriate search radius based on the model scale
   // By default we check up to 30mm, but if it's a huge model we might need more
-  let maxBraceDist = 30; // Significantly increased base search radius
+  let maxBraceDist = 24;
   const braceRadius = pillarRadius * 0.7;
-  const zInterval = 10; // Vertical spacing between zig-zags
+  const zInterval = 12; // Vertical spacing between zig-zags
   
-  const maxConnectionsPerShaft = 4;
+  const maxConnectionsPerShaft = 2;
   const connections = new Map();
   for (let i = 0; i < shafts.length; i++) {
     connections.set(i, 0);
@@ -607,7 +863,8 @@ function generateCrossBracing(
      if (connections.get(i) >= maxConnectionsPerShaft) continue;
      const s1 = shafts[i];
      
-     // Find all potential neighbors (ignoring max distance initially)
+     // Find nearby shafts deterministically. Stable contact points make this
+     // produce repeatable brace networks instead of changing on every run.
      const neighbors = [];
      for (let j = 0; j < shafts.length; j++) {
          if (i === j) continue;
@@ -623,7 +880,12 @@ function generateCrossBracing(
      }
      
      // Sort by distance
-     neighbors.sort((a, b) => a.dist - b.dist);
+     neighbors.sort((a, b) =>
+       a.dist - b.dist ||
+       a.shaft.x - b.shaft.x ||
+       a.shaft.z - b.shaft.z ||
+       a.index - b.index
+     );
      
      // Try connecting to the closest ones
      let connectedCount = 0;
@@ -631,8 +893,7 @@ function generateCrossBracing(
          if (connections.get(i) >= maxConnectionsPerShaft) break;
          if (connections.get(neighbor.index) >= maxConnectionsPerShaft) continue;
          
-         // Enforce distance limit, BUT always allow at least 1 connection if it's the absolute closest neighbor
-         if (neighbor.dist > maxBraceDist && connectedCount > 0) continue;
+         if (neighbor.dist > maxBraceDist) continue;
 
          // To avoid duplicating braces (A->B and B->A), only build if i < neighbor.index
          // But we still count the connection for both
@@ -755,8 +1016,14 @@ async function findContactPoints(geometry, overhangAngleDeg, density, onProgress
     const numSamples = Math.max(1, Math.round(area / (spacing * spacing)));
 
     for (let s = 0; s < numSamples; s++) {
-      let u = Math.random();
-      let v = Math.random();
+      let u, v;
+      if (numSamples === 1) {
+        u = 1 / 3;
+        v = 1 / 3;
+      } else {
+        u = halton(i * 31 + s + 1, 2);
+        v = halton(i * 31 + s + 1, 3);
+      }
       if (u + v > 1) { u = 1 - u; v = 1 - v; }
       const w = 1 - u - v;
 
@@ -771,6 +1038,18 @@ async function findContactPoints(geometry, overhangAngleDeg, density, onProgress
   }
 
   return deduplicatePoints(points, spacing * 0.5);
+}
+
+function halton(index, base) {
+  let result = 0;
+  let fraction = 1 / base;
+  let value = index;
+  while (value > 0) {
+    result += fraction * (value % base);
+    value = Math.floor(value / base);
+    fraction /= base;
+  }
+  return result;
 }
 
 /**

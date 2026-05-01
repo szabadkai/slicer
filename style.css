@@ -17,6 +17,7 @@
   --border: #e0e0e0;
   --tool-bg: #ffffff;
   --tool-hover: #f0f2f5;
+  --sidebar-shadow: rgba(0, 0, 0, 0.04);
 }
 
 body {
@@ -126,8 +127,9 @@ body {
 }
 
 .tool-btn {
-  width: 60px;
-  height: 60px;
+  position: relative;
+  width: 72px;
+  height: 56px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -138,7 +140,7 @@ body {
   border-radius: 0;
   color: var(--text-dim);
   cursor: pointer;
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 600;
   transition: all 0.15s ease;
 }
@@ -158,6 +160,17 @@ body {
   box-shadow: none;
 }
 
+.tool-btn.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent);
+}
+
 #viewport-container {
   flex: 1;
   position: relative;
@@ -167,6 +180,23 @@ body {
   width: 100%;
   height: 100%;
   display: block;
+}
+
+#fps-counter {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  min-width: 58px;
+  padding: 4px 7px;
+  border-radius: 5px;
+  background: rgba(20, 24, 28, 0.72);
+  color: #ffffff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: right;
+  pointer-events: none;
+  z-index: 6;
 }
 
 .floating-panel {
@@ -235,10 +265,10 @@ body {
 }
 
 #sidebar {
-  width: 340px;
+  width: 360px;
   background: var(--surface);
   border-left: 1px solid var(--border);
-  box-shadow: -2px 0 16px rgba(0, 0, 0, 0.04);
+  box-shadow: -2px 0 16px var(--sidebar-shadow);
   display: flex;
   flex-direction: column;
   z-index: 5;
@@ -246,14 +276,13 @@ body {
 }
 
 .panel {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
+  padding: 20px 22px;
 }
 
 .panel h2 {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 700;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
   color: var(--text);
   display: flex;
   justify-content: space-between;
@@ -374,6 +403,30 @@ body {
   color: var(--text);
   font-size: 12px;
   text-align: right;
+}
+
+.control-group select.val-box {
+  width: 148px;
+  text-align: left;
+}
+
+.advanced-group {
+  margin-top: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.advanced-group summary {
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  list-style-position: inside;
+  margin-bottom: 10px;
+}
+
+.advanced-group[open] summary {
+  color: var(--text);
 }
 
 .action-buttons {
