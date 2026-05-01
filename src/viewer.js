@@ -11,13 +11,18 @@ const STATIC_PIXEL_RATIO_CAP = 1.5;
 const INTERACTIVE_PIXEL_RATIO_CAP = 1.25;
 
 function createResinMaterial(preset = DEFAULT_RESIN_MATERIAL) {
-  return new THREE.MeshStandardMaterial({
+  const isTransparent = preset.opacity < 1;
+  return new THREE.MeshPhysicalMaterial({
     color: preset.color,
     roughness: preset.roughness,
     metalness: preset.metalness,
-    transparent: preset.opacity < 1,
+    transparent: isTransparent,
     opacity: preset.opacity,
-    depthWrite: preset.opacity >= 0.85,
+    depthWrite: preset.opacity >= 0.55,
+    alphaHash: isTransparent && preset.opacity < 0.85,
+    transmission: preset.transmission,
+    thickness: preset.transmission > 0 ? 0.8 : 0,
+    ior: preset.ior,
   });
 }
 

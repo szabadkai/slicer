@@ -486,6 +486,50 @@ body {
   color: var(--text-dim);
 }
 
+.context-menu {
+  position: fixed;
+  z-index: 900;
+  min-width: 172px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+}
+
+.context-menu[hidden] {
+  display: none;
+}
+
+.context-menu-label {
+  padding: 6px 8px 5px;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.context-menu-item {
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.context-menu-item:hover,
+.context-menu-item:focus {
+  outline: none;
+  background: var(--tool-hover);
+  color: var(--accent);
+}
+
 
 
 /* Progress overlay */

@@ -2,7 +2,7 @@ import { Viewer } from './viewer.js';
 import { Slicer, PRINTERS } from './slicer.js';
 import { optimizeOrientationAsync, analyzeCurrentOrientation } from './orientation.js';
 import { generateSupports } from './supports.js';
-import { exportZip, estimatePrintTime } from './exporter.js';
+import { exportMesh, exportZip, estimatePrintTime } from './exporter.js';
 import { computeSlicedVolume, mm3ToMl } from './volume.js';
 import { DEFAULT_RESIN_MATERIAL_ID, RESIN_MATERIALS } from './materials.js';
 
@@ -89,6 +89,7 @@ const progressOverlay = document.getElementById('progress-overlay');
 const progressText = document.getElementById('progress-text');
 const progressBar = document.getElementById('progress-bar');
 const progressPercent = document.getElementById('progress-percent');
+const contextMenu = document.getElementById('context-menu');
 
 // --- Init ---
 function init() {
@@ -160,6 +161,9 @@ function init() {
   });
   
   document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      hideContextMenu();
+    }
     if (e.target.tagName === 'INPUT') return;
     if (e.key === 'Delete' || e.key === 'Backspace') {
       viewer.removeSelected();
@@ -180,6 +184,22 @@ function init() {
       e.preventDefault();
       viewer.paste();
     }
+  });
+
+  canvas.addEventListener('contextmenu', (e) => {
+    if (viewer.objects.length === 0) return;
+    e.preventDefault();
+    showContextMenu(e.clientX, e.clientY);
+  });
+  document.addEventListener('pointerdown', (e) => {
+    if (!contextMenu?.contains(e.target)) {
+      hideContextMenu();
+    }
+  });
+  contextMenu?.addEventListener('click', (e) => {
+    const button = e.target.closest('[data-export-format]');
+    if (!button) return;
+    handleMeshExport(button.dataset.exportFormat);
   });
   
   // --- Panel toggle logic ---
@@ -917,6 +937,29 @@ async function handleExport() {
   hideProgress();
 }
 
+async function handleMeshExport(format) {
+  hideContextMenu();
+  if (viewer.objects.length === 0) return;
+
+  const geometries = [];
+  const modelGeometry = viewer.getMergedModelGeometry();
+  const supportGeometry = viewer.getMergedSupportGeometry();
+  if (modelGeometry) geometries.push(modelGeometry);
+  if (supportGeometry) geometries.push(supportGeometry);
+
+  try {
+    showProgress(`Exporting ${format.toUpperCase()}...`);
+    await new Promise(r => setTimeout(r, 50));
+    await exportMesh(geometries, format, 'slicelab-plate');
+  } catch (error) {
+    console.error(`Failed to export ${format}`, error);
+    alert(`Failed to export ${format.toUpperCase()}: ${error.message}`);
+  } finally {
+    geometries.forEach(geometry => geometry.dispose?.());
+    hideProgress();
+  }
+}
+
 // --- Settings & Estimate ---
 function getSettings() {
   return {
@@ -987,6 +1030,22 @@ function updateProgress(fraction, text) {
 
 function hideProgress() {
   progressOverlay.hidden = true;
+}
+
+function showContextMenu(clientX, clientY) {
+  if (!contextMenu) return;
+  contextMenu.hidden = false;
+
+  const { innerWidth, innerHeight } = window;
+  const rect = contextMenu.getBoundingClientRect();
+  const x = Math.min(clientX, innerWidth - rect.width - 8);
+  const y = Math.min(clientY, innerHeight - rect.height - 8);
+  contextMenu.style.left = `${Math.max(8, x)}px`;
+  contextMenu.style.top = `${Math.max(8, y)}px`;
+}
+
+function hideContextMenu() {
+  if (contextMenu) contextMenu.hidden = true;
 }
 
 // --- Start ---
