@@ -10,7 +10,7 @@ const DEFAULT_RESIN_MATERIAL = RESIN_MATERIALS.find(m => m.id === DEFAULT_RESIN_
 const STATIC_PIXEL_RATIO_CAP = 1.5;
 const INTERACTIVE_PIXEL_RATIO_CAP = 1.25;
 
-function createResinMaterial(preset = DEFAULT_RESIN_MATERIAL) {
+export function createResinMaterial(preset = DEFAULT_RESIN_MATERIAL) {
   const isTransparent = preset.opacity < 1;
   return new THREE.MeshPhysicalMaterial({
     color: preset.color,
@@ -37,8 +37,10 @@ export class Viewer {
     this.undoStack = [];
     this.clipboard = [];
     this.MAX_UNDO = 30;
+    this.defaultMaterialPreset = DEFAULT_RESIN_MATERIAL;
     this.selectionPivot = new THREE.Object3D();
     this.multiTransformState = null;
+    this.transformSupportState = null;
     this.facePickMode = false;
     this.significantFaceHighlights = null;
 
@@ -77,11 +79,13 @@ export class Viewer {
     this.scene.add(this.selectionPivot);
     this.transformControl.addEventListener('change', () => {
       this._applyMultiTransformDelta();
+      this._syncSupportsDuringHorizontalTranslation();
       this.requestRender();
     });
     this.transformControl.addEventListener('dragging-changed', (event) => {
       if (event.value) {
         this._beginMultiTransform();
+        this._beginTransformSupportSync();
       }
       this.controls.enabled = !event.value;
       this.isUserInteracting = event.value;
@@ -89,7 +93,9 @@ export class Viewer {
       this.requestRender();
     });
     this.transformControl.addEventListener('mouseUp', () => {
-      this._bakeTransform();
+      const preserveSupports = this._canPreserveSupportsAfterHorizontalTranslation();
+      this._bakeTransform({ preserveSupports });
+      this.transformSupportState = null;
       this._reassignObjectsToPlates();
     });
     this.scene.add(this.transformControl.getHelper());
@@ -466,6 +472,43 @@ export class Viewer {
     });
   }
 
+  _beginTransformSupportSync() {
+    if (this.transformControl.getMode?.() !== 'translate') {
+      this.transformSupportState = null;
+      return;
+    }
+
+    const items = this.selected
+      .filter(sel => sel.supportsMesh)
+      .map(sel => ({
+        sel,
+        meshPosition: sel.mesh.position.clone(),
+        supportPosition: sel.supportsMesh.position.clone(),
+      }));
+
+    this.transformSupportState = items.length > 0 ? { items } : null;
+  }
+
+  _syncSupportsDuringHorizontalTranslation() {
+    if (!this.transformSupportState || !this.transformControl.dragging) return;
+
+    this.transformSupportState.items.forEach(({ sel, meshPosition, supportPosition }) => {
+      if (!sel.supportsMesh) return;
+      const dx = sel.mesh.position.x - meshPosition.x;
+      const dz = sel.mesh.position.z - meshPosition.z;
+      sel.supportsMesh.position.x = supportPosition.x + dx;
+      sel.supportsMesh.position.z = supportPosition.z + dz;
+    });
+  }
+
+  _canPreserveSupportsAfterHorizontalTranslation() {
+    if (!this.transformSupportState || this.transformControl.getMode?.() !== 'translate') return false;
+    const EPSILON = 1e-6;
+    return this.transformSupportState.items.every(({ sel, meshPosition }) =>
+      Math.abs(sel.mesh.position.y - meshPosition.y) <= EPSILON
+    );
+  }
+
   getSelectionWorldSize() {
     if (this.selected.length === 0) return null;
     const size = new THREE.Vector3();
@@ -482,18 +525,34 @@ export class Viewer {
 
   translateSelectionTo(position) {
     if (this.selected.length === 0) return;
+    const currentCenter = this.selected.length > 1 ? this.getSelectionWorldCenter() : null;
+    const currentPosition = this.selected.length === 1 ? this.selected[0].mesh.position : currentCenter;
+    const supportMoves = this.selected
+      .filter(sel => sel.supportsMesh)
+      .map(sel => ({
+        sel,
+        dx: position.x - currentPosition.x,
+        dz: position.z - currentPosition.z,
+      }));
+    const preserveSupports = Math.abs(position.y - currentPosition.y) <= 1e-6;
     if (this.selected.length === 1) {
       this.selected[0].mesh.position.copy(position);
     } else {
-      const center = this.getSelectionWorldCenter();
       const delta = new THREE.Matrix4().makeTranslation(
-        position.x - center.x,
-        position.y - center.y,
-        position.z - center.z,
+        position.x - currentCenter.x,
+        position.y - currentCenter.y,
+        position.z - currentCenter.z,
       );
       this._applyMatrixToSelection(delta);
     }
-    this._bakeTransform();
+    if (preserveSupports) {
+      supportMoves.forEach(({ sel, dx, dz }) => {
+        if (!sel.supportsMesh) return;
+        sel.supportsMesh.position.x += dx;
+        sel.supportsMesh.position.z += dz;
+      });
+    }
+    this._bakeTransform({ preserveSupports });
   }
 
   scaleSelectionBy(scale) {
@@ -560,7 +619,11 @@ export class Viewer {
 
   getActiveMaterialPreset() {
     const obj = this.selected[0] || this.objects[0];
-    return obj?.materialPreset || DEFAULT_RESIN_MATERIAL;
+    return obj?.materialPreset || this.defaultMaterialPreset || DEFAULT_RESIN_MATERIAL;
+  }
+
+  setDefaultMaterialPreset(preset) {
+    if (preset) this.defaultMaterialPreset = preset;
   }
 
   setMaterialPreset(preset, target = 'selection') {
@@ -806,14 +869,15 @@ export class Viewer {
   }
 
   _addModelRaw(geometry, material, elevation) {
+    const preset = this.defaultMaterialPreset || DEFAULT_RESIN_MATERIAL;
     if (!material) {
-      material = createResinMaterial(DEFAULT_RESIN_MATERIAL);
+      material = createResinMaterial(preset);
     }
     const mesh = new THREE.Mesh(geometry, material);
     const id = 'obj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
     mesh.userData.id = id;
     this.scene.add(mesh);
-    const obj = { id, mesh, supportsMesh: null, elevation, materialPreset: DEFAULT_RESIN_MATERIAL };
+    const obj = { id, mesh, supportsMesh: null, elevation, materialPreset: preset };
     this.objects.push(obj);
     return obj;
   }
@@ -1179,7 +1243,7 @@ export class Viewer {
     this.requestRender();
   }
 
-  _bakeTransform() {
+  _bakeTransform({ preserveSupports = false } = {}) {
     if (this.selected.length === 0) return;
     this.multiTransformState = null;
 
@@ -1200,7 +1264,9 @@ export class Viewer {
       this._positionSelectionPivot();
     }
 
-    this.clearSupports();
+    if (!preserveSupports) {
+      this.clearSupports();
+    }
     this.canvas.dispatchEvent(new CustomEvent('mesh-changed'));
   }
 
@@ -1566,13 +1632,17 @@ export class Viewer {
       item.obj.elevation = elevation;
       item.obj.mesh.updateMatrixWorld(true);
 
-      // Clear supports since position changed
       if (item.obj.supportsMesh) {
-        this.scene.remove(item.obj.supportsMesh);
-        item.obj.supportsMesh.geometry.dispose();
-        item.obj.supportsMesh.material.dispose();
-        item.obj.supportsMesh = null;
-        item.obj._cachedLocalSupportVolume = undefined;
+        if (Math.abs(dy) <= 1e-6) {
+          item.obj.supportsMesh.position.x += dx;
+          item.obj.supportsMesh.position.z += dz;
+        } else {
+          this.scene.remove(item.obj.supportsMesh);
+          item.obj.supportsMesh.geometry.dispose();
+          item.obj.supportsMesh.material.dispose();
+          item.obj.supportsMesh = null;
+          item.obj._cachedLocalSupportVolume = undefined;
+        }
       }
     }
 
@@ -1836,11 +1906,17 @@ export class Viewer {
       item.obj.elevation = elevation;
       item.obj.mesh.updateMatrixWorld(true);
 
-      // Move supports mesh if exists
       if (item.obj.supportsMesh) {
-        item.obj.supportsMesh.position.x += dx;
-        item.obj.supportsMesh.position.y += dy;
-        item.obj.supportsMesh.position.z += dz;
+        if (Math.abs(dy) <= 1e-6) {
+          item.obj.supportsMesh.position.x += dx;
+          item.obj.supportsMesh.position.z += dz;
+        } else {
+          this.scene.remove(item.obj.supportsMesh);
+          item.obj.supportsMesh.geometry.dispose();
+          item.obj.supportsMesh.material.dispose();
+          item.obj.supportsMesh = null;
+          item.obj._cachedLocalSupportVolume = undefined;
+        }
       }
 
       // If object was on a different plate, move it to new plate
@@ -1852,14 +1928,6 @@ export class Viewer {
         plate.objects.push(item.obj);
       }
 
-      // Clear supports
-      if (item.obj.supportsMesh) {
-        this.scene.remove(item.obj.supportsMesh);
-        item.obj.supportsMesh.geometry.dispose();
-        item.obj.supportsMesh.material.dispose();
-        item.obj.supportsMesh = null;
-        item.obj._cachedLocalSupportVolume = undefined;
-      }
     }
 
     // Update active plate objects reference

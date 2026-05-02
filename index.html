@@ -19,6 +19,11 @@
         </a>
       </div>
       <div id="toolbar-right">
+        <button type="button" id="clear-autosave-btn" class="toolbar-icon-btn" title="Clear saved project state" aria-label="Clear saved project state">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+            <path d="M9 3h6l1 2h4v2H4V5h4l1-2zm-1 6h2v9H8V9zm6 0h2v9h-2V9zm-3 0h2v9h-2V9zM6 9h12l-1 12H7L6 9z"/>
+          </svg>
+        </button>
         <button type="button" id="printer-select-btn" class="printer-select-btn" aria-haspopup="dialog" aria-controls="printer-modal" aria-expanded="false">
           <span class="printer-select-copy">
             <span id="selected-printer-name" class="printer-select-name">Printer</span>
@@ -39,11 +44,11 @@
             <span>Load</span>
             <input type="file" id="stl-input" accept=".stl" hidden>
           </label>
-          <button class="tool-btn active" id="edit-btn" title="Prepare">
+          <button class="tool-btn active" id="edit-btn" title="Layout">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
               <path d="M4 4h16v4H4V4zm0 6h16v4H4v-4zm0 6h10v4H4v-4z" />
             </svg>
-            <span>Prepare</span>
+            <span>Layout</span>
           </button>
           <button class="tool-btn" id="transform-btn" title="Transform">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
@@ -69,6 +74,12 @@
             </svg>
             <span>Material</span>
           </button>
+          <button class="tool-btn" id="health-btn" title="Model Health">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            </svg>
+            <span>Inspect</span>
+          </button>
           <button class="tool-btn" id="slice-tool-btn" title="Slice">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
               <path d="M4 5h16v2H4V5zm2 4h12v2H6V9zm2 4h8v2H8v-2zm2 4h4v2h-4v-2z" />
@@ -88,10 +99,6 @@
         <canvas id="viewport"></canvas>
         <div id="fps-counter">FPS --</div>
         <div id="model-info" class="floating-panel"></div>
-        <div id="summary-panel" class="floating-panel" hidden>
-          <h3>Summary</h3>
-          <div id="print-estimate">No active slice</div>
-        </div>
         <div id="plate-strip" aria-label="Build plates">
           <div id="plate-tabs"></div>
           <button type="button" id="add-plate-btn" class="plate-add-btn" title="Add plate">+</button>
@@ -103,6 +110,11 @@
         <span aria-hidden="true">›</span>
       </button>
       <aside id="sidebar">
+        <section id="summary-panel" class="sidebar-summary" hidden>
+          <h3>Summary</h3>
+          <div id="print-estimate">No active slice</div>
+        </section>
+
         <section id="transform-panel" class="panel" hidden>
           <h2>Transform</h2>
           <div class="mode-toggles">
@@ -314,7 +326,7 @@
         </section>
 
         <section id="edit-panel" class="panel" hidden>
-          <h2>Prepare</h2>
+          <h2>Layout</h2>
           <div class="edit-actions">
             <button class="btn btn-secondary edit-action-btn" id="duplicate-btn">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
@@ -358,6 +370,45 @@
           </div>
         </section>
 
+        <section id="health-panel" class="panel" hidden>
+          <h2>Model Health</h2>
+          
+          <div class="health-score-container">
+            <div class="health-score-ring">
+              <svg viewBox="0 0 36 36" class="health-score-svg">
+                <path class="health-score-bg"
+                  d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+                <path id="health-score-arc" class="health-score-arc"
+                  stroke-dasharray="0, 100"
+                  d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+              </svg>
+              <div class="health-score-value" id="health-score-value">--</div>
+            </div>
+            <div class="health-score-label" id="health-score-label">No model loaded</div>
+          </div>
+          
+          <div class="health-actions">
+            <button class="btn btn-primary" id="health-analyze-btn">Analyze Model</button>
+            <button class="btn btn-secondary" id="health-autorepair-btn" disabled>Auto-Repair</button>
+          </div>
+          <button class="btn btn-secondary health-heatmap-btn" id="health-support-heatmap-btn" disabled>Show Support Heatmap</button>
+          
+          <div id="health-issues" class="health-issues">
+            <div class="health-empty-state">Load a model and click Analyze to check for issues.</div>
+          </div>
+          
+          <div id="health-printer-context" class="health-printer-context" hidden>
+            <h3>Printer Compatibility</h3>
+            <div id="health-printer-specs"></div>
+          </div>
+        </section>
+
         <section id="slice-panel" class="panel" hidden>
           <h2>Slice</h2>
           <div class="control-group">
@@ -390,10 +441,23 @@
               <input type="number" id="lift-speed" value="1" min="0.5" max="5" step="0.5" class="val-box">
             </label>
           </div>
+
+          <div id="preflight-section" class="preflight-section" hidden>
+            <div class="preflight-header">
+              <h3>Preflight</h3>
+              <button type="button" class="btn btn-small" id="preflight-recheck-btn" title="Re-run checks">Re-check</button>
+            </div>
+            <div id="preflight-results" class="preflight-results"></div>
+          </div>
         </section>
 
         <section id="layer-preview-panel" class="panel" hidden>
-          <h2>Layer Preview</h2>
+          <div class="panel-header-row">
+            <h2>Layer Preview</h2>
+            <button type="button" id="layer-expand-btn" class="icon-btn" title="Open Layer Inspector" aria-label="Open Layer Inspector">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M9 1h4v4M5 13H1V9M13 1L8.5 5.5M1 13l4.5-4.5"/></svg>
+            </button>
+          </div>
           <canvas id="layer-canvas"></canvas>
           <div class="control-group">
             <input type="range" id="layer-slider" min="0" max="0" value="0">
@@ -402,20 +466,17 @@
         </section>
 
         <div id="footer-actions" hidden>
-          <button class="btn btn-primary slice-big-btn" id="slice-btn">Slice & Print</button>
+          <button class="btn btn-primary slice-big-btn" id="slice-btn">Slice Plate</button>
           <button class="btn btn-secondary export-btn" id="slice-all-btn">Slice All</button>
-          <button class="btn export-btn" id="export-btn" hidden>Export ZIP</button>
+          <button class="btn export-btn" id="export-btn" hidden>Export...</button>
           <button class="btn export-btn" id="export-all-btn" hidden>Export All</button>
         </div>
       </aside>
     </main>
   </div>
 
-  <div id="context-menu" class="context-menu" hidden>
-    <div class="context-menu-label">Export plate mesh</div>
-    <button type="button" class="context-menu-item" data-export-format="stl">STL</button>
-    <button type="button" class="context-menu-item" data-export-format="3mf">3MF</button>
-    <button type="button" class="context-menu-item" data-export-format="obj">OBJ</button>
+  <div id="context-menu" class="context-menu" hidden role="menu" aria-label="Actions">
+    <div class="context-menu-label"></div>
   </div>
 
   <div id="printer-modal" class="modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="printer-modal-title">
@@ -438,6 +499,28 @@
         <div id="progress-bar"></div>
       </div>
       <div id="progress-percent">0%</div>
+    </div>
+  </div>
+
+  <div id="restore-project-modal" class="modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="restore-project-title">
+    <div class="restore-modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="restore-project-title">Restore Previous Project</h2>
+          <p id="restore-project-copy">A saved SliceLab session is available.</p>
+        </div>
+        <button type="button" id="restore-project-close" class="icon-btn" aria-label="Close restore prompt">×</button>
+      </div>
+      <label class="restore-checkbox">
+        <input type="checkbox" id="restore-project-auto">
+        <span>Automatically load the previous project on startup</span>
+      </label>
+      <div class="restore-actions">
+        <button type="button" class="btn edit-action-danger" id="restore-project-clear">Clear Saved State</button>
+        <span class="restore-action-spacer"></span>
+        <button type="button" class="btn btn-secondary" id="restore-project-skip">Skip</button>
+        <button type="button" class="btn btn-primary" id="restore-project-load">Load Project</button>
+      </div>
     </div>
   </div>
 
@@ -473,12 +556,13 @@
         </div>
         <div class="shortcuts-section">
           <h3>Tool Panels</h3>
-          <div class="shortcut-row"><kbd>1</kbd> <span>Prepare panel</span></div>
+          <div class="shortcut-row"><kbd>1</kbd> <span>Layout panel</span></div>
           <div class="shortcut-row"><kbd>2</kbd> <span>Transform panel</span></div>
           <div class="shortcut-row"><kbd>3</kbd> <span>Orient panel</span></div>
           <div class="shortcut-row"><kbd>4</kbd> <span>Supports panel</span></div>
           <div class="shortcut-row"><kbd>5</kbd> <span>Materials panel</span></div>
-          <div class="shortcut-row"><kbd>6</kbd> <span>Slice panel</span></div>
+          <div class="shortcut-row"><kbd>6</kbd> <span>Inspect panel</span></div>
+          <div class="shortcut-row"><kbd>7</kbd> <span>Slice panel</span></div>
           <div class="shortcut-row"><kbd>Tab</kbd> <span>Next panel</span></div>
           <div class="shortcut-row"><kbd>Space</kbd> <span>Cycle transform mode</span></div>
         </div>
@@ -491,6 +575,88 @@
           <div class="shortcut-row"><kbd>Ctrl+Enter</kbd> <span>Slice active plate</span></div>
           <div class="shortcut-row"><kbd>Ctrl+Shift+Enter</kbd> <span>Slice all plates</span></div>
         </div>
+        <div class="shortcuts-section">
+          <h3>Layer Inspector</h3>
+          <div class="shortcut-row"><kbd>←</kbd> <span>Previous layer</span></div>
+          <div class="shortcut-row"><kbd>→</kbd> <span>Next layer</span></div>
+          <div class="shortcut-row"><kbd>PgUp</kbd> <span>Skip 10 layers back</span></div>
+          <div class="shortcut-row"><kbd>PgDn</kbd> <span>Skip 10 layers forward</span></div>
+          <div class="shortcut-row"><kbd>Home</kbd> <span>First layer</span></div>
+          <div class="shortcut-row"><kbd>End</kbd> <span>Last layer</span></div>
+          <div class="shortcut-row"><kbd>Esc</kbd> <span>Close inspector</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Layer Inspector Modal -->
+  <div id="layer-inspector" class="modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="layer-inspector-title">
+    <div class="layer-inspector-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="layer-inspector-title">Layer Inspector</h2>
+          <p id="layer-inspector-subtitle">Scrub through layers, zoom in, and inspect issues.</p>
+        </div>
+        <button type="button" id="layer-inspector-close" class="icon-btn" aria-label="Close layer inspector">&times;</button>
+      </div>
+      <div class="layer-inspector-body">
+        <div class="layer-inspector-viewport">
+          <canvas id="inspector-canvas"></canvas>
+        </div>
+        <aside class="layer-inspector-sidebar">
+          <div class="inspector-section">
+            <h3>Navigation</h3>
+            <div class="inspector-slider-row">
+              <input type="range" id="inspector-slider" min="0" max="0" value="0">
+              <span id="inspector-layer-info" class="val-box">0 / 0</span>
+            </div>
+            <div class="inspector-nav-row">
+              <button type="button" class="btn btn-small" id="inspector-prev" title="Previous layer (←)">&#9664;</button>
+              <input type="number" id="inspector-goto" class="val-box" min="1" value="1" title="Jump to layer">
+              <button type="button" class="btn btn-small" id="inspector-next" title="Next layer (→)">&#9654;</button>
+            </div>
+          </div>
+          <div class="inspector-section">
+            <h3>Layer Stats</h3>
+            <div class="inspector-stat-grid">
+              <span class="inspector-stat-label">Area</span>
+              <span id="inspector-area" class="inspector-stat-value">—</span>
+              <span class="inspector-stat-label">Coverage</span>
+              <span id="inspector-coverage" class="inspector-stat-value">—</span>
+              <span class="inspector-stat-label">Islands</span>
+              <span id="inspector-islands" class="inspector-stat-value">—</span>
+              <span class="inspector-stat-label">Height</span>
+              <span id="inspector-height" class="inspector-stat-value">—</span>
+            </div>
+          </div>
+          <div class="inspector-section">
+            <h3>Analysis</h3>
+            <div class="inspector-tools">
+              <label class="inspector-toggle">
+                <input type="checkbox" id="inspector-highlight-islands">
+                <span>Highlight islands</span>
+              </label>
+              <label class="inspector-toggle">
+                <input type="checkbox" id="inspector-show-outline">
+                <span>Show outlines</span>
+              </label>
+              <label class="inspector-toggle">
+                <input type="checkbox" id="inspector-diff-mode">
+                <span>Diff with previous</span>
+              </label>
+            </div>
+          </div>
+          <div class="inspector-section">
+            <h3>Issues</h3>
+            <div id="inspector-issues" class="inspector-issues">
+              <span class="inspector-no-issues">No issues detected</span>
+            </div>
+          </div>
+          <div class="inspector-section">
+            <h3>Cross-section area</h3>
+            <canvas id="inspector-graph" height="80"></canvas>
+          </div>
+        </aside>
       </div>
     </div>
   </div>
