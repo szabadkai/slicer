@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SliceLab</title>
   <link rel="icon" type="image/svg+xml" href="/slicer/favicon.svg">
-  <script type="module" crossorigin src="/slicer/assets/index-BlVAjiMi.js"></script>
-  <link rel="stylesheet" crossorigin href="/slicer/assets/index-CKPxUyL2.css">
+  <script type="module" crossorigin src="/slicer/assets/index-BTFKKziE.js"></script>
+  <link rel="stylesheet" crossorigin href="/slicer/assets/index-C9wfLYf2.css">
 </head>
 
 <body>
@@ -73,6 +73,12 @@
             </svg>
             <span>Slice</span>
           </button>
+          <button class="tool-btn" id="shortcuts-btn" title="Keyboard Shortcuts (?)">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/>
+            </svg>
+            <span>Help</span>
+          </button>
         </div>
       </aside>
 
@@ -80,12 +86,20 @@
         <canvas id="viewport"></canvas>
         <div id="fps-counter">FPS --</div>
         <div id="model-info" class="floating-panel"></div>
-        <div id="summary-panel" class="floating-panel">
+        <div id="summary-panel" class="floating-panel" hidden>
           <h3>Summary</h3>
           <div id="print-estimate">No active slice</div>
         </div>
+        <div id="plate-strip" aria-label="Build plates">
+          <div id="plate-tabs"></div>
+          <button type="button" id="add-plate-btn" class="plate-add-btn" title="Add plate">+</button>
+          <button type="button" id="remove-plate-btn" class="plate-remove-btn" title="Remove active plate" aria-label="Remove active plate">−</button>
+        </div>
       </div>
 
+      <button type="button" id="toggle-sidebar-btn" class="sidebar-collapse-btn" title="Hide panel" aria-label="Hide panel" aria-controls="sidebar" aria-expanded="true">
+        <span aria-hidden="true">›</span>
+      </button>
       <aside id="sidebar">
         <section id="transform-panel" class="panel" hidden>
           <h2>Transform</h2>
@@ -167,6 +181,20 @@
           </div>
           <div class="action-buttons" style="margin-top: 12px;">
             <button class="btn btn-primary" id="orient-all-btn" style="width: 100%;">Orient All</button>
+          </div>
+          <div class="significant-faces-panel">
+            <div class="significant-faces-title">
+              Protected Face
+            </div>
+            <p class="significant-faces-copy">
+              Pick the surface that should avoid support scars and visible warping.
+            </p>
+            <div class="protected-face-actions">
+              <button class="btn" id="pick-protected-face-btn">Pick Face</button>
+              <button class="btn btn-primary" id="orient-protected-face-btn" disabled>Orient</button>
+            </div>
+            <button class="btn btn-secondary" id="clear-protected-face-btn" disabled>Clear Protected Face</button>
+            <div id="protected-face-status" class="significant-faces-results">No protected face selected.</div>
           </div>
         </section>
 
@@ -373,7 +401,9 @@
 
         <div id="footer-actions" hidden>
           <button class="btn btn-primary slice-big-btn" id="slice-btn">Slice & Print</button>
+          <button class="btn btn-secondary export-btn" id="slice-all-btn">Slice All</button>
           <button class="btn export-btn" id="export-btn" hidden>Export ZIP</button>
+          <button class="btn export-btn" id="export-all-btn" hidden>Export All</button>
         </div>
       </aside>
     </main>
@@ -406,6 +436,60 @@
         <div id="progress-bar"></div>
       </div>
       <div id="progress-percent">0%</div>
+    </div>
+  </div>
+
+  <div id="shortcuts-modal" class="modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="shortcuts-modal-title">
+    <div class="shortcuts-modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="shortcuts-modal-title">Keyboard Shortcuts</h2>
+        </div>
+        <button type="button" id="shortcuts-modal-close" class="icon-btn" aria-label="Close shortcuts">×</button>
+      </div>
+      <div class="shortcuts-content">
+        <div class="shortcuts-section">
+          <h3>General</h3>
+          <div class="shortcut-row"><kbd>H</kbd> <span>Toggle right panel</span></div>
+          <div class="shortcut-row"><kbd>Esc</kbd> <span>Close dialogs</span></div>
+          <div class="shortcut-row"><kbd>?</kbd> <span>Show shortcuts</span></div>
+        </div>
+        <div class="shortcuts-section">
+          <h3>Selection</h3>
+          <div class="shortcut-row"><kbd>Ctrl+A</kbd> <span>Select all</span></div>
+          <div class="shortcut-row"><kbd>Ctrl+D</kbd> <span>Duplicate selected</span></div>
+          <div class="shortcut-row"><kbd>Ctrl+C</kbd> <span>Copy selected</span></div>
+          <div class="shortcut-row"><kbd>Ctrl+V</kbd> <span>Paste</span></div>
+          <div class="shortcut-row"><kbd>Ctrl+Z</kbd> <span>Undo</span></div>
+          <div class="shortcut-row"><kbd>Del</kbd> <span>Delete selected</span></div>
+        </div>
+        <div class="shortcuts-section">
+          <h3>Arrangement</h3>
+          <div class="shortcut-row"><kbd>G</kbd> <span>Auto Arrange (single) / Distribute (multi)</span></div>
+          <div class="shortcut-row"><kbd>Ctrl+Shift+A</kbd> <span>Auto Arrange / Distribute</span></div>
+          <div class="shortcut-row"><kbd>F</kbd> <span>Fill platform with copies</span></div>
+        </div>
+        <div class="shortcuts-section">
+          <h3>Tool Panels</h3>
+          <div class="shortcut-row"><kbd>1</kbd> <span>Prepare panel</span></div>
+          <div class="shortcut-row"><kbd>2</kbd> <span>Transform panel</span></div>
+          <div class="shortcut-row"><kbd>3</kbd> <span>Orient panel</span></div>
+          <div class="shortcut-row"><kbd>4</kbd> <span>Supports panel</span></div>
+          <div class="shortcut-row"><kbd>5</kbd> <span>Materials panel</span></div>
+          <div class="shortcut-row"><kbd>6</kbd> <span>Slice panel</span></div>
+          <div class="shortcut-row"><kbd>Tab</kbd> <span>Next panel</span></div>
+          <div class="shortcut-row"><kbd>Space</kbd> <span>Cycle transform mode</span></div>
+        </div>
+        <div class="shortcuts-section">
+          <h3>Slicing & Export</h3>
+          <div class="shortcut-row"><kbd>Ctrl+S</kbd> <span>Slice active plate</span></div>
+          <div class="shortcut-row"><kbd>Ctrl+Shift+S</kbd> <span>Slice all plates</span></div>
+          <div class="shortcut-row"><kbd>Ctrl+E</kbd> <span>Export active plate</span></div>
+          <div class="shortcut-row"><kbd>Ctrl+Shift+E</kbd> <span>Export all plates</span></div>
+          <div class="shortcut-row"><kbd>Ctrl+Enter</kbd> <span>Slice active plate</span></div>
+          <div class="shortcut-row"><kbd>Ctrl+Shift+Enter</kbd> <span>Slice all plates</span></div>
+        </div>
+      </div>
     </div>
   </div>
 

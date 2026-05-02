@@ -206,3 +206,113 @@ export function findOptimalOrientation(geometry, preset) {
 export function analyzeCurrentOrientation(geometry) {
   return analyzeOrientation(geometry, UP);
 }
+
+/**
+ * Find significant (large flat) faces on the model.
+ * Returns array of { normal, area, centroid } for each significant face.
+ * @param {THREE.BufferGeometry} geometry - The model geometry
+ * @param {number} minArea - Minimum area threshold (default 10 mm²)
+ * @param {number} flatnessThreshold - How parallel normals need to be (default 0.95)
+ * @returns {Array<{ normal: THREE.Vector3, area: number, centroid: THREE.Vector3 }>}
+ */
+export function findSignificantFaces(geometry, minArea = 10, flatnessThreshold = 0.95) {
+  const pos = geometry.attributes.position;
+  const normal = geometry.attributes.normal;
+  const triCount = pos.count / 3;
+  
+  // Group triangles by their normal direction
+  const faceGroups = new Map();
+  
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  const edge1 = new THREE.Vector3();
+  const edge2 = new THREE.Vector3();
+  const faceNormal = new THREE.Vector3();
+  const cross = new THREE.Vector3();
+  
+  for (let i = 0; i < triCount; i++) {
+    const idx = i * 3;
+    a.set(pos.getX(idx), pos.getY(idx), pos.getZ(idx));
+    b.set(pos.getX(idx + 1), pos.getY(idx + 1), pos.getZ(idx + 1));
+    c.set(pos.getX(idx + 2), pos.getY(idx + 2), pos.getZ(idx + 2));
+    
+    // Calculate face normal
+    if (normal) {
+      faceNormal.set(normal.getX(idx), normal.getY(idx), normal.getZ(idx)).normalize();
+    } else {
+      edge1.subVectors(b, a);
+      edge2.subVectors(c, a);
+      cross.crossVectors(edge1, edge2);
+      if (cross.length() < 1e-10) continue;
+      faceNormal.copy(cross).normalize();
+    }
+    
+    // Calculate triangle area
+    edge1.subVectors(b, a);
+    edge2.subVectors(c, a);
+    cross.crossVectors(edge1, edge2);
+    const area = cross.length() * 0.5;
+    
+    if (area < 0.001) continue; // Skip degenerate triangles
+    
+    // Calculate centroid
+    const centroid = new THREE.Vector3(
+      (a.x + b.x + c.x) / 3,
+      (a.y + b.y + c.y) / 3,
+      (a.z + b.z + c.z) / 3
+    );
+    
+    // Create a key for this normal direction (quantize to reduce noise sensitivity)
+    const nx = Math.round(faceNormal.x * 10) / 10;
+    const ny = Math.round(faceNormal.y * 10) / 10;
+    const nz = Math.round(faceNormal.z * 10) / 10;
+    const key = `${nx},${ny},${nz}`;
+    
+    if (!faceGroups.has(key)) {
+      faceGroups.set(key, { normal: faceNormal.clone().normalize(), triangles: [] });
+    }
+    faceGroups.get(key).triangles.push({ area, centroid });
+  }
+  
+  // Aggregate triangles into faces and filter by minimum area
+  const significantFaces = [];
+  
+  for (const [key, group] of faceGroups) {
+    const totalArea = group.triangles.reduce((sum, t) => sum + t.area, 0);
+    if (totalArea < minArea) continue;
+    
+    // Calculate weighted centroid
+    let weightedCentroid = new THREE.Vector3();
+    for (const t of group.triangles) {
+      weightedCentroid.addScaledVector(t.centroid, t.area);
+    }
+    weightedCentroid.divideScalar(totalArea);
+    
+    // Check if the face is actually flat (triangles don't diverge too much)
+    let maxDeviation = 0;
+    const refNormal = group.normal;
+    for (const t of group.triangles) {
+      const toCentroid = new THREE.Vector3().subVectors(weightedCentroid, t.centroid);
+      const dist = toCentroid.length();
+      // Rough flatness check - max deviation from plane
+      maxDeviation = Math.max(maxDeviation, dist * 0.1);
+    }
+    
+    // Only include if the group is reasonably flat
+    if (maxDeviation < 2) { // mm tolerance
+      significantFaces.push({
+        normal: group.normal.clone(),
+        area: totalArea,
+        centroid: weightedCentroid,
+        triangleCount: group.triangles.length
+      });
+    }
+  }
+  
+  // Sort by area (largest first)
+  significantFaces.sort((a, b) => b.area - a.area);
+  
+  // Return top significant faces (limit to avoid cluttering)
+  return significantFaces.slice(0, 6);
+}
