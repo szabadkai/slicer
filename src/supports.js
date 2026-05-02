@@ -730,19 +730,52 @@ function createBasePanGeometry(modelBounds, routes, margin, thickness, lipWidth,
   const outline = convexHull2D(outlineSamples);
   if (outline.length < 3) return new THREE.BufferGeometry();
 
-  const shape = new THREE.Shape(outline);
-  const slabGeo = new THREE.ExtrudeGeometry(shape, {
-    depth: safeThickness,
-    bevelEnabled: false,
+  // Create inner outline by offsetting outward points
+  const innerOutline = outline.map(point => {
+    const radial = new THREE.Vector2(
+      point.x - modelBounds.getCenter().x,
+      point.y - modelBounds.getCenter().z
+    );
+    radial.normalize();
+    return new THREE.Vector2(
+      point.x + radial.x * safeLipWidth,
+      point.y + radial.y * safeLipWidth
+    );
   });
-  slabGeo.rotateX(Math.PI / 2);
-  slabGeo.translate(0, safeThickness, 0);
 
-  const geometries = [slabGeo];
-  if (safeLipWidth > 0 && safeLipHeight > 0) {
-    addLipGeometry(outline, geometries, safeThickness, safeLipWidth, safeLipHeight);
+  // Create slanted geometry
+  const vertices = [];
+  const indices = [];
+  
+  // Bottom ring (outer outline)
+  for (let i = 0; i < outline.length; i++) {
+    vertices.push(outline[i].x, 0, outline[i].y);
   }
-  return mergeGeometries(geometries);
+  
+  // Top ring (inner outline)
+  for (let i = 0; i < innerOutline.length; i++) {
+    vertices.push(innerOutline[i].x, safeLipHeight, innerOutline[i].y);
+  }
+  
+  // Create side faces
+  const bottomStart = 0;
+  const topStart = outline.length;
+  for (let i = 0; i < outline.length; i++) {
+    const next = (i + 1) % outline.length;
+    
+    // Triangle 1
+    indices.push(bottomStart + i, bottomStart + next, topStart + i);
+    
+    // Triangle 2
+    indices.push(bottomStart + next, topStart + next, topStart + i);
+  }
+  
+  const geometry = new THREE.BufferGeometry();
+  geometry.setIndex(indices);
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.computeVertexNormals();
+  
+  return geometry;
 }
 
 function addLipGeometry(outline, geometries, baseThickness, lipWidth, lipHeight) {

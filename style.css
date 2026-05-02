@@ -1670,6 +1670,7 @@ button:disabled {
 
 .inspector-stat-label {
   color: var(--text-dim);
+  cursor: help;
 }
 
 .inspector-stat-value {
@@ -1696,12 +1697,61 @@ button:disabled {
   accent-color: var(--accent);
 }
 
+.inspector-toggle-desc {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  line-height: 1.35;
+  margin: -2px 0 6px 22px;
+  opacity: 0.8;
+}
+
+.diff-legend {
+  font-weight: 600;
+  padding: 0 3px;
+  border-radius: 2px;
+}
+
+.diff-legend-added {
+  color: #66bb6a;
+}
+
+.diff-legend-removed {
+  color: #ef9a9a;
+}
+
+.inspector-issue-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 6px;
+}
+
+.inspector-scan-status {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspector-issue-nav-spacer { flex: 1; }
+
+.inspector-issue-pos {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  min-width: 36px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .inspector-issues {
   font-size: 12px;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 120px;
+  max-height: 150px;
   overflow-y: auto;
 }
 
@@ -1728,9 +1778,31 @@ button:disabled {
   flex-shrink: 0;
 }
 
-.inspector-issue-warn .inspector-issue-icon { color: #e67e22; }
-.inspector-issue-error .inspector-issue-icon { color: #e74c3c; }
-.inspector-issue-info .inspector-issue-icon { color: var(--accent); }
+.inspector-issue-warn .inspector-issue-icon { color: #ffb74d; }
+.inspector-issue-error .inspector-issue-icon { color: #ef9a9a; }
+.inspector-issue-info .inspector-issue-icon { color: #90caf9; }
+
+.inspector-issue-text { flex: 1; min-width: 0; }
+
+.inspector-fix-btn {
+  flex-shrink: 0;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 600;
+  opacity: 0.75;
+  transition: opacity 0.15s, background 0.15s;
+}
+.inspector-fix-btn:hover {
+  opacity: 1;
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
 
 #inspector-graph {
   width: 100%;

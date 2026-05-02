@@ -210,7 +210,15 @@ const inspectorShowOutline = document.getElementById('inspector-show-outline');
 const inspectorDiffMode = document.getElementById('inspector-diff-mode');
 const inspectorIssues = document.getElementById('inspector-issues');
 const inspectorGraph = document.getElementById('inspector-graph');
+const inspectorScanAll = document.getElementById('inspector-scan-all');
+const inspectorScanStatus = document.getElementById('inspector-scan-status');
+const inspectorIssuePrev = document.getElementById('inspector-issue-prev');
+const inspectorIssueNext = document.getElementById('inspector-issue-next');
+const inspectorIssuePos = document.getElementById('inspector-issue-pos');
 let inspectorAreaData = null; // cached per-layer white pixel counts
+let inspectorIssueMap = null; // Map<layerIdx, issues[]> from full scan
+let inspectorIssueLayers = []; // sorted list of layer indices with issues
+let inspectorIssueNavIdx = -1; // current position in issueLayers
 
 // Preflight elements
 const preflightSection = document.getElementById('preflight-section');
@@ -784,6 +792,8 @@ function clearActivePlateSlice() {
   slicedLayers = null;
   slicedVolumes = null;
   inspectorAreaData = null;
+  inspectorIssueMap = null;
+  inspectorIssueLayers = [];
   updateOutputButtons();
   layerPreviewPanel.hidden = true;
 }
@@ -3558,6 +3568,7 @@ async function handleSlice() {
     (printerSpec.buildWidthMM / printerSpec.resolutionX) *
     (printerSpec.buildDepthMM / printerSpec.resolutionY);
   let filledPx = 0;
+  const perLayerWhite = [];
   const countWhitePixels = (pixels) => {
     let c = 0;
     for (let i = 0; i < pixels.length; i += 4) {
@@ -3569,8 +3580,11 @@ async function handleSlice() {
   slicedLayers = await slicer.slice(layerHeight, (current, total) => {
     updateProgress(current / total, `Slicing layer ${current} / ${total}`);
   }, {
-    onLayer: (pixels) => { filledPx += countWhitePixels(pixels); },
+    onLayer: (pixels) => { const w = countWhitePixels(pixels); filledPx += w; perLayerWhite.push(w); },
   });
+
+  // Pre-cache area data so the inspector opens instantly
+  inspectorAreaData = new Float64Array(perLayerWhite);
 
   const totalVolMm3 = filledPx * pxArea * layerHeight;
   let modelVolMm3 = totalVolMm3;
@@ -3668,22 +3682,21 @@ function showLayer() {
 
 /** Create a flipped full-res canvas from a raw RGBA Uint8Array */
 function layerToCanvas(pixels, resX, resY) {
+  // Flip rows in-place into an ImageData — no buffer copy, no extra canvas
+  const rowBytes = resX * 4;
+  const img = new ImageData(resX, resY);
+  const dst = img.data;
+  const src = new Uint8Array(pixels.buffer, pixels.byteOffset, pixels.byteLength);
+  for (let y = 0; y < resY; y++) {
+    const srcOff = y * rowBytes;
+    const dstOff = (resY - 1 - y) * rowBytes;
+    dst.set(src.subarray(srcOff, srcOff + rowBytes), dstOff);
+  }
   const c = document.createElement('canvas');
   c.width = resX;
   c.height = resY;
-  const cx = c.getContext('2d');
-  const img = new ImageData(new Uint8ClampedArray(pixels.buffer.slice(0)), resX, resY);
-  cx.putImageData(img, 0, 0);
-  // flip vertically (WebGL bottom-up)
-  const flipped = document.createElement('canvas');
-  flipped.width = resX;
-  flipped.height = resY;
-  const fc = flipped.getContext('2d');
-  fc.save();
-  fc.scale(1, -1);
-  fc.drawImage(c, 0, -resY);
-  fc.restore();
-  return flipped;
+  c.getContext('2d').putImageData(img, 0, 0);
+  return c;
 }
 
 /** Count white pixels in an RGBA buffer */
@@ -3696,35 +3709,43 @@ function countWhite(pixels) {
 }
 
 /** Flood-fill island detection on an RGBA buffer. Returns island count and per-island pixel counts. */
-function detectIslands(pixels, w, h) {
+function detectIslands(pixels, w, h, prevPixels) {
   // work on a 1-bit grid downsampled 4x for speed on huge printer resolutions
   const scale = 4;
   const sw = Math.ceil(w / scale);
   const sh = Math.ceil(h / scale);
   const grid = new Uint8Array(sw * sh);
+  // also build a downsampled grid for the previous layer (if any)
+  const prevGrid = prevPixels ? new Uint8Array(sw * sh) : null;
   for (let y = 0; y < sh; y++) {
     const srcY = Math.min(y * scale, h - 1);
     for (let x = 0; x < sw; x++) {
       const srcX = Math.min(x * scale, w - 1);
       const idx = (srcY * w + srcX) * 4;
       grid[y * sw + x] = pixels[idx] > 127 ? 1 : 0;
+      if (prevGrid) prevGrid[y * sw + x] = prevPixels[idx] > 127 ? 1 : 0;
     }
   }
 
   const labels = new Int32Array(sw * sh);
-  let islandCount = 0;
+  let componentCount = 0;
   const sizes = [];
+  const supported = []; // per-component: does it overlap previous layer?
   const stack = [];
 
   for (let i = 0; i < grid.length; i++) {
     if (grid[i] === 1 && labels[i] === 0) {
-      islandCount++;
+      componentCount++;
       let size = 0;
+      let hasSupport = !prevGrid; // layer 0 is always on the build plate
       stack.push(i);
-      labels[i] = islandCount;
+      labels[i] = componentCount;
       while (stack.length > 0) {
         const p = stack.pop();
         size++;
+        if (prevGrid && !hasSupport && prevGrid[p] === 1) {
+          hasSupport = true;
+        }
         const px = p % sw;
         const py = (p - px) / sw;
         const neighbors = [
@@ -3735,16 +3756,30 @@ function detectIslands(pixels, w, h) {
         ];
         for (const n of neighbors) {
           if (n >= 0 && grid[n] === 1 && labels[n] === 0) {
-            labels[n] = islandCount;
+            labels[n] = componentCount;
             stack.push(n);
           }
         }
       }
       sizes.push(size * scale * scale); // approximate real pixel count
+      supported.push(hasSupport);
     }
   }
 
-  return { count: islandCount, sizes, labels, sw, sh, scale };
+  const unsupportedIndices = [];
+  for (let i = 0; i < supported.length; i++) {
+    if (!supported[i]) unsupportedIndices.push(i + 1); // 1-based label
+  }
+
+  return {
+    count: componentCount,
+    sizes,
+    labels,
+    sw, sh, scale,
+    supported,
+    unsupportedCount: unsupportedIndices.length,
+    unsupportedLabels: new Set(unsupportedIndices),
+  };
 }
 
 /** Render the inspector canvas for a given layer index */
@@ -3776,23 +3811,31 @@ function renderInspectorLayer(idx) {
   inspectorCoverage.textContent = `${coverage.toFixed(1)}%`;
   inspectorHeight.textContent = `${((idx + 1) * layerHeight).toFixed(2)} mm`;
 
-  // Island detection
-  const islands = detectIslands(pixels, resX, resY);
-  inspectorIslands.textContent = islands.count;
+  // Island detection — compare against previous layer to find unsupported regions
+  const prevPixels = idx > 0 ? slicedLayers[idx - 1] : null;
+  const islands = detectIslands(pixels, resX, resY, prevPixels);
+  // Show unsupported / total (e.g. "2 / 5" or just "3" if none unsupported)
+  if (islands.unsupportedCount > 0) {
+    inspectorIslands.textContent = `${islands.unsupportedCount} unsupported`;
+    inspectorIslands.style.color = '#ef9a9a';
+  } else {
+    inspectorIslands.textContent = `${islands.count}`;
+    inspectorIslands.style.color = '';
+  }
 
-  // Highlight islands with distinct colors
-  if (inspectorHighlightIslands.checked && islands.count > 1) {
-    const colors = [
-      [255, 80, 80], [80, 200, 255], [80, 255, 120], [255, 200, 50],
-      [200, 100, 255], [255, 150, 80], [100, 255, 220], [255, 80, 200],
-    ];
+  // Highlight unsupported islands in red, supported regions get a subtle tint
+  if (inspectorHighlightIslands.checked && islands.count > 0) {
+    const unsupportedColor = [239, 100, 100]; // warm red for unsupported
+    const supportedColor = [102, 194, 165];   // soft teal for supported
     const overlay = ctx.getImageData(0, 0, resX, resY);
     const od = overlay.data;
     for (let sy = 0; sy < islands.sh; sy++) {
       for (let sx = 0; sx < islands.sw; sx++) {
         const label = islands.labels[sy * islands.sw + sx];
         if (label > 0) {
-          const col = colors[(label - 1) % colors.length];
+          const isUnsupported = islands.unsupportedLabels.has(label);
+          const col = isUnsupported ? unsupportedColor : supportedColor;
+          const blend = isUnsupported ? 0.65 : 0.25; // unsupported stands out more
           // paint the scale×scale block in the full-res canvas
           for (let dy = 0; dy < islands.scale && sy * islands.scale + dy < resY; dy++) {
             for (let dx = 0; dx < islands.scale && sx * islands.scale + dx < resX; dx++) {
@@ -3800,9 +3843,9 @@ function renderInspectorLayer(idx) {
               const fx = sx * islands.scale + dx;
               const pi = (fy * resX + fx) * 4;
               if (od[pi] > 127) { // only overlay on white pixels
-                od[pi] = Math.round(od[pi] * 0.4 + col[0] * 0.6);
-                od[pi + 1] = Math.round(od[pi + 1] * 0.4 + col[1] * 0.6);
-                od[pi + 2] = Math.round(od[pi + 2] * 0.4 + col[2] * 0.6);
+                od[pi] = Math.round(od[pi] * (1 - blend) + col[0] * blend);
+                od[pi + 1] = Math.round(od[pi + 1] * (1 - blend) + col[1] * blend);
+                od[pi + 2] = Math.round(od[pi + 2] * (1 - blend) + col[2] * blend);
               }
             }
           }
@@ -3830,7 +3873,7 @@ function renderInspectorLayer(idx) {
           const lt = (y * resX + (x - 1)) * 4;
           const rt = (y * resX + (x + 1)) * 4;
           if (sd[up] <= 127 || sd[dn] <= 127 || sd[lt] <= 127 || sd[rt] <= 127) {
-            od[i] = 0; od[i + 1] = 200; od[i + 2] = 255; od[i + 3] = 255;
+            od[i] = 255; od[i + 1] = 200; od[i + 2] = 60; od[i + 3] = 255;
           }
         }
       }
@@ -3851,11 +3894,11 @@ function renderInspectorLayer(idx) {
         const curOn = pixels[ri] > 127;
         const prevOn = prevPixels[ri] > 127;
         if (curOn && !prevOn) {
-          // new pixel — green
-          od[fi] = 50; od[fi + 1] = 220; od[fi + 2] = 80; od[fi + 3] = 255;
+          // new pixel — soft green
+          od[fi] = 102; od[fi + 1] = 187; od[fi + 2] = 106; od[fi + 3] = 255;
         } else if (!curOn && prevOn) {
-          // removed pixel — red
-          od[fi] = 220; od[fi + 1] = 50; od[fi + 2] = 50; od[fi + 3] = 180;
+          // removed pixel — soft red
+          od[fi] = 239; od[fi + 1] = 154; od[fi + 2] = 154; od[fi + 3] = 200;
         } else if (curOn && prevOn) {
           // unchanged — dim
           od[fi] = Math.round(od[fi] * 0.5);
@@ -3867,19 +3910,34 @@ function renderInspectorLayer(idx) {
     ctx.putImageData(overlay, 0, 0);
   }
 
-  // Issues detection
+  // Issues detection — with fix callbacks for actionable issues
   const issues = [];
   if (islands.count === 0) {
     issues.push({ type: 'info', text: `Empty layer` });
   }
+  if (islands.unsupportedCount > 0) {
+    const unsLabels = Array.from(islands.unsupportedLabels);
+    issues.push({
+      type: 'error',
+      text: `${islands.unsupportedCount} unsupported island${islands.unsupportedCount > 1 ? 's' : ''} — will float free`,
+      fix: () => eraseLabelsFromLayer(idx, unsLabels, islands),
+    });
+  }
   if (islands.count > 1) {
     const tinyThreshold = totalPx * 0.0001; // < 0.01% of build area
-    const tiny = islands.sizes.filter(s => s < tinyThreshold).length;
-    if (tiny > 0) {
-      issues.push({ type: 'warn', text: `${tiny} tiny island${tiny > 1 ? 's' : ''} — may detach` });
+    const tinyLabels = [];
+    for (let c = 0; c < islands.sizes.length; c++) {
+      if (islands.sizes[c] < tinyThreshold) tinyLabels.push(c + 1);
+    }
+    if (tinyLabels.length > 0) {
+      issues.push({
+        type: 'warn',
+        text: `${tinyLabels.length} tiny region${tinyLabels.length > 1 ? 's' : ''} — may detach during peel`,
+        fix: () => eraseLabelsFromLayer(idx, tinyLabels, islands),
+      });
     }
     if (islands.count > 5) {
-      issues.push({ type: 'info', text: `${islands.count} separate islands` });
+      issues.push({ type: 'info', text: `${islands.count} separate regions` });
     }
   }
   if (coverage > 60) {
@@ -3896,32 +3954,241 @@ function renderInspectorLayer(idx) {
     }
   }
 
-  renderIssues(issues);
+  renderIssues(issues, idx);
 }
 
-function renderIssues(issues) {
+function renderIssues(issues, layerIdx) {
   if (issues.length === 0) {
     inspectorIssues.innerHTML = '<span class="inspector-no-issues">No issues detected</span>';
     return;
   }
   const icons = { warn: '⚠', error: '✖', info: 'ℹ' };
-  inspectorIssues.innerHTML = issues.map(iss =>
-    `<div class="inspector-issue inspector-issue-${iss.type}">` +
-    `<span class="inspector-issue-icon">${icons[iss.type] || ''}</span>` +
-    `<span>${iss.text}</span></div>`
-  ).join('');
+  inspectorIssues.innerHTML = issues.map((iss, i) => {
+    const fixBtn = iss.fix
+      ? `<button class="inspector-fix-btn" data-fix-idx="${i}">Fix</button>`
+      : '';
+    return `<div class="inspector-issue inspector-issue-${iss.type}">` +
+      `<span class="inspector-issue-icon">${icons[iss.type] || ''}</span>` +
+      `<span class="inspector-issue-text">${iss.text}</span>${fixBtn}</div>`;
+  }).join('');
+
+  // Wire up fix buttons
+  inspectorIssues.querySelectorAll('.inspector-fix-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const fixIdx = parseInt(btn.dataset.fixIdx, 10);
+      const iss = issues[fixIdx];
+      if (iss && iss.fix) {
+        iss.fix();
+        // Re-render the layer & re-detect issues
+        renderInspectorLayer(layerIdx);
+        drawAreaGraph(layerIdx);
+      }
+    });
+  });
 }
 
-/** Build and cache per-layer area data, then draw the area graph */
+// --- Issue scanning across all layers ---
+
+let _scanAbort = false;
+
+function resetIssueScan() {
+  inspectorIssueMap = null;
+  inspectorIssueLayers = [];
+  inspectorIssueNavIdx = -1;
+  inspectorIssuePrev.disabled = true;
+  inspectorIssueNext.disabled = true;
+  inspectorIssuePos.textContent = '';
+  inspectorScanStatus.textContent = '';
+  _scanAbort = false;
+}
+
+async function scanAllLayersForIssues() {
+  if (!slicedLayers || slicedLayers.length === 0) return;
+
+  _scanAbort = false;
+  inspectorScanAll.disabled = true;
+  inspectorScanStatus.textContent = 'Scanning…';
+
+  const spec = slicer.getPrinterSpec();
+  const resX = spec.resolutionX;
+  const resY = spec.resolutionY;
+  const totalPx = resX * resY;
+  const map = new Map();
+  const chunkSize = 8; // layers per frame to stay responsive
+
+  for (let start = 0; start < slicedLayers.length; start += chunkSize) {
+    if (_scanAbort) break;
+    const end = Math.min(start + chunkSize, slicedLayers.length);
+    for (let idx = start; idx < end; idx++) {
+      const pixels = slicedLayers[idx];
+      const prevPixels = idx > 0 ? slicedLayers[idx - 1] : null;
+      const islands = detectIslands(pixels, resX, resY, prevPixels);
+      const whitePx = inspectorAreaData ? inspectorAreaData[idx] : countWhite(pixels);
+      const coverage = (whitePx / totalPx) * 100;
+      const layerIssues = [];
+
+      if (islands.count === 0) {
+        layerIssues.push({ type: 'info', text: 'Empty layer' });
+      }
+      if (islands.unsupportedCount > 0) {
+        layerIssues.push({
+          type: 'error',
+          text: `${islands.unsupportedCount} unsupported island${islands.unsupportedCount > 1 ? 's' : ''}`,
+          fixType: 'remove-unsupported',
+        });
+      }
+      if (islands.count > 1) {
+        const tinyThreshold = totalPx * 0.0001;
+        const tinyLabels = [];
+        for (let c = 0; c < islands.sizes.length; c++) {
+          if (islands.sizes[c] < tinyThreshold) tinyLabels.push(c + 1);
+        }
+        if (tinyLabels.length > 0) {
+          layerIssues.push({
+            type: 'warn',
+            text: `${tinyLabels.length} tiny region${tinyLabels.length > 1 ? 's' : ''}`,
+            fixType: 'remove-tiny',
+          });
+        }
+      }
+      if (coverage > 60) {
+        layerIssues.push({ type: 'warn', text: `High coverage (${coverage.toFixed(0)}%)` });
+      }
+      if (idx > 0 && inspectorAreaData) {
+        const prevWhite = inspectorAreaData[idx - 1];
+        if (prevWhite > 0) {
+          const change = ((whitePx - prevWhite) / prevWhite) * 100;
+          if (change > 50) {
+            layerIssues.push({ type: 'warn', text: `Area jumped +${change.toFixed(0)}%` });
+          }
+        }
+      }
+      if (layerIssues.length > 0) map.set(idx, layerIssues);
+    }
+    inspectorScanStatus.textContent = `Scanning… ${end} / ${slicedLayers.length}`;
+    // yield to browser
+    await new Promise(r => requestAnimationFrame(r));
+  }
+
+  inspectorIssueMap = map;
+  inspectorIssueLayers = Array.from(map.keys()).sort((a, b) => a - b);
+  inspectorScanAll.disabled = false;
+
+  if (inspectorIssueLayers.length === 0) {
+    inspectorScanStatus.textContent = 'No issues found';
+    inspectorIssuePrev.disabled = true;
+    inspectorIssueNext.disabled = true;
+    inspectorIssuePos.textContent = '';
+  } else {
+    inspectorScanStatus.textContent = `${inspectorIssueLayers.length} layer${inspectorIssueLayers.length > 1 ? 's' : ''} with issues`;
+    inspectorIssuePrev.disabled = false;
+    inspectorIssueNext.disabled = false;
+    // Jump to the first issue layer from the current position
+    navigateIssue(1);
+  }
+
+  // Mark issue layers on the area graph
+  drawAreaGraph(parseInt(inspectorSlider.value, 10));
+}
+
+function navigateIssue(direction) {
+  if (inspectorIssueLayers.length === 0) return;
+  const cur = parseInt(inspectorSlider.value, 10);
+
+  if (direction > 0) {
+    // Find next issue layer after current
+    const next = inspectorIssueLayers.find(l => l > cur);
+    inspectorIssueNavIdx = next !== undefined
+      ? inspectorIssueLayers.indexOf(next)
+      : 0; // wrap to first
+  } else {
+    // Find previous issue layer before current
+    let prev;
+    for (let i = inspectorIssueLayers.length - 1; i >= 0; i--) {
+      if (inspectorIssueLayers[i] < cur) { prev = i; break; }
+    }
+    inspectorIssueNavIdx = prev !== undefined
+      ? prev
+      : inspectorIssueLayers.length - 1; // wrap to last
+  }
+
+  const targetLayer = inspectorIssueLayers[inspectorIssueNavIdx];
+  inspectorIssuePos.textContent = `${inspectorIssueNavIdx + 1}/${inspectorIssueLayers.length}`;
+  inspectorGoToLayer(targetLayer);
+}
+
+// --- Fix functions: erase pixels matching certain labels ---
+
+function eraseLabelsFromLayer(layerIdx, labelsToErase, islands) {
+  if (!slicedLayers || !slicedLayers[layerIdx]) return;
+  const spec = slicer.getPrinterSpec();
+  const resX = spec.resolutionX;
+  const resY = spec.resolutionY;
+  const pixels = slicedLayers[layerIdx];
+  const eraseSet = new Set(labelsToErase);
+
+  for (let sy = 0; sy < islands.sh; sy++) {
+    for (let sx = 0; sx < islands.sw; sx++) {
+      const label = islands.labels[sy * islands.sw + sx];
+      if (label > 0 && eraseSet.has(label)) {
+        for (let dy = 0; dy < islands.scale && sy * islands.scale + dy < resY; dy++) {
+          for (let dx = 0; dx < islands.scale && sx * islands.scale + dx < resX; dx++) {
+            const ry = sy * islands.scale + dy;
+            const rx = sx * islands.scale + dx;
+            const pi = (ry * resX + rx) * 4;
+            pixels[pi] = 0;
+            pixels[pi + 1] = 0;
+            pixels[pi + 2] = 0;
+            pixels[pi + 3] = 255;
+          }
+        }
+      }
+    }
+  }
+
+  // Update cached area data
+  if (inspectorAreaData) {
+    inspectorAreaData[layerIdx] = countWhite(pixels);
+  }
+  // Invalidate scan results for this layer
+  if (inspectorIssueMap && inspectorIssueMap.has(layerIdx)) {
+    inspectorIssueMap.delete(layerIdx);
+    inspectorIssueLayers = Array.from(inspectorIssueMap.keys()).sort((a, b) => a - b);
+    if (inspectorIssueLayers.length === 0) {
+      inspectorScanStatus.textContent = 'No issues found';
+      inspectorIssuePrev.disabled = true;
+      inspectorIssueNext.disabled = true;
+      inspectorIssuePos.textContent = '';
+    } else {
+      inspectorScanStatus.textContent = `${inspectorIssueLayers.length} layer${inspectorIssueLayers.length > 1 ? 's' : ''} with issues`;
+    }
+  }
+}
+
+/** Build and cache per-layer area data, then draw the area graph.
+ *  Data is normally pre-computed at slice time; the fallback loop only
+ *  runs if somehow the cache is missing (e.g. loaded from file). */
 function buildAreaGraph() {
   if (!slicedLayers || slicedLayers.length === 0) return;
 
-  // Cache pixel counts
   if (!inspectorAreaData || inspectorAreaData.length !== slicedLayers.length) {
+    // Fallback — compute in async chunks so the UI stays responsive
     inspectorAreaData = new Float64Array(slicedLayers.length);
-    for (let i = 0; i < slicedLayers.length; i++) {
-      inspectorAreaData[i] = countWhite(slicedLayers[i]);
-    }
+    let i = 0;
+    const chunkSize = 64;
+    const processChunk = () => {
+      const end = Math.min(i + chunkSize, slicedLayers.length);
+      for (; i < end; i++) {
+        inspectorAreaData[i] = countWhite(slicedLayers[i]);
+      }
+      drawAreaGraph(parseInt(inspectorSlider.value, 10));
+      if (i < slicedLayers.length) {
+        requestAnimationFrame(processChunk);
+      }
+    };
+    requestAnimationFrame(processChunk);
+    return;
   }
 
   drawAreaGraph();
@@ -3949,6 +4216,17 @@ function drawAreaGraph(highlightIdx) {
     ctx.fillRect(i * barW, h - barH, Math.max(barW - 0.5, 0.5), barH);
   }
 
+  // Draw issue markers on the graph
+  if (inspectorIssueLayers && inspectorIssueLayers.length > 0) {
+    for (const li of inspectorIssueLayers) {
+      const issues = inspectorIssueMap.get(li);
+      const hasError = issues && issues.some(i => i.type === 'error');
+      ctx.fillStyle = hasError ? 'rgba(239, 100, 100, 0.7)' : 'rgba(255, 183, 77, 0.55)';
+      const x = li * barW;
+      ctx.fillRect(x, 0, Math.max(barW, 1.5), h);
+    }
+  }
+
   // Highlight current layer
   if (highlightIdx !== undefined && highlightIdx >= 0 && highlightIdx < len) {
     ctx.fillStyle = 'rgba(0, 112, 243, 0.9)';
@@ -3969,19 +4247,28 @@ function inspectorGoToLayer(idx) {
 
 function openLayerInspector() {
   if (!slicedLayers || slicedLayers.length === 0) return;
+
+  // Show modal instantly — don't block on rendering
   inspectorModal.hidden = false;
   inspectorSlider.max = slicedLayers.length - 1;
   inspectorGoto.max = slicedLayers.length;
 
-  // Sync with the small preview slider
   const idx = parseInt(layerSlider.value, 10) || 0;
+  inspectorSlider.value = idx;
+  inspectorLayerInfo.textContent = `${idx + 1} / ${slicedLayers.length}`;
+  inspectorGoto.value = idx + 1;
 
-  buildAreaGraph();
-  inspectorGoToLayer(idx);
+  // Defer heavy work so the modal paints first
+  requestAnimationFrame(() => {
+    buildAreaGraph();
+    renderInspectorLayer(idx);
+    drawAreaGraph(idx);
+  });
 }
 
 function closeLayerInspector() {
   inspectorModal.hidden = true;
+  _scanAbort = true; // stop any running scan
   // Sync back to small slider
   if (slicedLayers) {
     layerSlider.value = inspectorSlider.value;
@@ -4010,6 +4297,11 @@ listen(inspectorHighlightIslands, 'change', () => renderInspectorLayer(parseInt(
 listen(inspectorShowOutline, 'change', () => renderInspectorLayer(parseInt(inspectorSlider.value, 10)));
 listen(inspectorDiffMode, 'change', () => renderInspectorLayer(parseInt(inspectorSlider.value, 10)));
 
+// Issue scan & navigation
+listen(inspectorScanAll, 'click', scanAllLayersForIssues);
+listen(inspectorIssuePrev, 'click', () => navigateIssue(-1));
+listen(inspectorIssueNext, 'click', () => navigateIssue(1));
+
 // Click on graph to jump to layer
 listen(inspectorGraph, 'click', (e) => {
   if (!slicedLayers) return;
@@ -4032,8 +4324,13 @@ document.addEventListener('keydown', (e) => {
 
   if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     e.preventDefault();
-    const cur = parseInt(inspectorSlider.value, 10);
-    inspectorGoToLayer(e.key === 'ArrowRight' ? cur + 1 : cur - 1);
+    if (e.shiftKey && inspectorIssueLayers.length > 0) {
+      // Shift+Arrow: jump to prev/next issue layer
+      navigateIssue(e.key === 'ArrowRight' ? 1 : -1);
+    } else {
+      const cur = parseInt(inspectorSlider.value, 10);
+      inspectorGoToLayer(e.key === 'ArrowRight' ? cur + 1 : cur - 1);
+    }
     return;
   }
 

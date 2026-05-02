@@ -619,13 +619,13 @@
           <div class="inspector-section">
             <h3>Layer Stats</h3>
             <div class="inspector-stat-grid">
-              <span class="inspector-stat-label">Area</span>
+              <span class="inspector-stat-label" title="Total cured area on this layer">Area</span>
               <span id="inspector-area" class="inspector-stat-value">—</span>
-              <span class="inspector-stat-label">Coverage</span>
+              <span class="inspector-stat-label" title="Percentage of the build plate used by this layer">Coverage</span>
               <span id="inspector-coverage" class="inspector-stat-value">—</span>
-              <span class="inspector-stat-label">Islands</span>
+              <span class="inspector-stat-label" title="Regions with no overlap on the layer below — unsupported pieces that need supports">Islands</span>
               <span id="inspector-islands" class="inspector-stat-value">—</span>
-              <span class="inspector-stat-label">Height</span>
+              <span class="inspector-stat-label" title="Height from the build plate at this layer">Height</span>
               <span id="inspector-height" class="inspector-stat-value">—</span>
             </div>
           </div>
@@ -636,18 +636,29 @@
                 <input type="checkbox" id="inspector-highlight-islands">
                 <span>Highlight islands</span>
               </label>
+              <p class="inspector-toggle-desc">Finds regions with nothing below them — <span style="color:#ef9a9a">red</span> = unsupported (needs supports), <span style="color:#66c2a5">teal</span> = OK.</p>
               <label class="inspector-toggle">
                 <input type="checkbox" id="inspector-show-outline">
                 <span>Show outlines</span>
               </label>
+              <p class="inspector-toggle-desc">Draw edge boundaries so you can see the shape perimeter clearly.</p>
               <label class="inspector-toggle">
                 <input type="checkbox" id="inspector-diff-mode">
                 <span>Diff with previous</span>
               </label>
+              <p class="inspector-toggle-desc">Compare to the layer below — <span class="diff-legend diff-legend-added">added</span> vs <span class="diff-legend diff-legend-removed">removed</span> pixels.</p>
             </div>
           </div>
           <div class="inspector-section">
             <h3>Issues</h3>
+            <div class="inspector-issue-toolbar">
+              <button type="button" class="btn btn-small" id="inspector-scan-all" title="Scan every layer for issues">Scan all</button>
+              <span id="inspector-scan-status" class="inspector-scan-status"></span>
+              <span class="inspector-issue-nav-spacer"></span>
+              <button type="button" class="btn btn-small" id="inspector-issue-prev" title="Previous issue (Shift+←)" disabled>&#9664;</button>
+              <span id="inspector-issue-pos" class="inspector-issue-pos"></span>
+              <button type="button" class="btn btn-small" id="inspector-issue-next" title="Next issue (Shift+→)" disabled>&#9654;</button>
+            </div>
             <div id="inspector-issues" class="inspector-issues">
               <span class="inspector-no-issues">No issues detected</span>
             </div>
