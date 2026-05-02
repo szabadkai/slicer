@@ -977,13 +977,15 @@ function initPrinterPicker() {
 
 function renderPlateTabs() {
   if (!plateTabs) return;
+  const showPlateControls = project.plates.length > 1;
+  plateTabs.hidden = !showPlateControls;
   if (removePlateBtn) {
-    const removesPlate = project.plates.length > 1;
-    const label = removesPlate ? 'Remove active plate' : 'Clear active plate';
-    removePlateBtn.title = label;
-    removePlateBtn.setAttribute('aria-label', label);
+    removePlateBtn.hidden = !showPlateControls;
+    removePlateBtn.title = 'Remove active plate';
+    removePlateBtn.setAttribute('aria-label', 'Remove active plate');
   }
   plateTabs.innerHTML = '';
+  if (!showPlateControls) return;
   project.plates.forEach((plate, index) => {
     const button = document.createElement('button');
     button.type = 'button';
