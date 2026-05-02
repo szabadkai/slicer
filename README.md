@@ -1,43 +1,36 @@
 # SliceLab
 
-A browser-based SLA/DLP 3D printing slicer. Upload STL models, orient them optimally, generate supports, configure print settings, and export sliced files ready for your resin printer.
+A browser-based SLA/DLP resin slicer that runs entirely in your browser. No installs, no backends -- just open it and start slicing.
 
-## Features
+This is a personal testbed for experimenting with ideas around SLA slicing workflows: orientation algorithms, support generation strategies, GPU-accelerated layer slicing, and whatever else comes to mind. It's not trying to replace production slicers -- it's a playground for exploring what's possible in the browser.
 
-- **STL Model Loading** – Drag and drop or browse to load your 3D models
-- **Model Manipulation** – Move, rotate, and scale your models with intuitive controls
-- **Auto-Orientation** – Optimize model orientation for fastest print, least support material, or best quality
-- **Support Generation** – Automatic support generation with customizable density, overhang angles, and cross-bracing
-- **Layer Slicing** – Preview individual layers with adjustable layer height
-- **Print Settings** – Configure exposure times, lift height, speed, and more
-- **Export** – Download sliced files as ZIP archives ready for printing
+**[Try it live](https://szabadkai.github.io/slicer/)**
 
-## Getting Started
+![SliceLab screenshot](public/screenshot.png)
+
+## What it does
+
+- **Load STL models** -- drag and drop or browse
+- **Transform** -- move, rotate, scale with visual gizmos
+- **Auto-orient** -- genetic algorithm evaluates 26+ candidate orientations, optimizing for print speed, support usage, or surface quality
+- **Support generation** -- automatic overhang detection with configurable density, angle threshold, cross-bracing, base pans, and tip tapering
+- **GPU-accelerated slicing** -- stencil-buffer based layer slicing (Formlabs-style algorithm) running on WebGL
+- **Layer preview** -- scrub through sliced layers in real time
+- **Volume estimation** -- mesh-based pre-slice and pixel-based post-slice volume calculation
+- **Multi-plate** -- manage multiple build plates with per-plate slice caching
+- **21 material presets** -- Siraya Tech, Anycubic, Elegoo resins with accurate visual properties
+- **10 printer profiles** -- Anycubic, Elegoo, Creality, Phrozen, Formlabs, UniFormation
+- **Print time estimation** -- based on layer count, exposure, lift speeds
+- **Export** -- STL, OBJ, 3MF, or sliced PNG layer archive with metadata
+
+## Getting started
 
 ```bash
-# Install dependencies
 npm install
-
-# Start development server
 npm run dev
-
-# Build for production
-npm run build
 ```
 
-## Usage
-
-1. Load an STL model using the **Load** button
-2. Use **Move**, **Rotate**, and **Scale** tools to position your model
-3. Click **Orient** to find the optimal printing orientation
-4. Use **Supports** to auto-generate support structures
-5. Adjust **Job Settings** for your specific resin and printer
-6. Click **Slice & Print** to generate the sliced output
-7. Export the result as a ZIP file
-
-## Browser Compatibility
-
-SliceLab runs entirely in your browser using WebGL for 3D rendering and Web Workers for heavy computations.
+Or just open the **[live version](https://szabadkai.github.io/slicer/)** -- nothing to install.
 
 ## License
 

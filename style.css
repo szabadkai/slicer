@@ -47,10 +47,28 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+#toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 #toolbar .logo {
   font-size: 16px;
   font-weight: 600;
   letter-spacing: 0.5px;
+}
+
+.github-link {
+  display: flex;
+  align-items: center;
+  color: var(--header-text);
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+
+.github-link:hover {
+  opacity: 1;
 }
 
 .printer-select-btn {
