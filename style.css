@@ -1301,6 +1301,10 @@ button:disabled {
   background: rgba(255, 255, 255, 0.96);
 }
 
+.sidebar-collapse-btn.collapsed span {
+  transform: scaleX(-1);
+}
+
 /* Keyboard shortcut hints in tooltips */
 .tool-btn[data-shortcut]::after {
   content: attr(data-shortcut);
@@ -2148,4 +2152,11 @@ button:disabled {
 
 .health-issue-group.expanded .health-issue-group-header .icon {
   transform: none;
+}
+
+.health-issue-group-chevron {
+  font-size: 10px;
+  width: 12px;
+  display: inline-block;
+  transition: transform 0.15s ease;
 }

@@ -1,0 +1,185 @@
+// ─── Auto-orientation candidate generation & scoring ────────
+// Pure functions — no THREE.js, no DOM.
+
+export type Strategy = 'print-speed' | 'minimal-supports' | 'surface-quality';
+
+export interface StrategyWeights {
+  height: number;
+  overhangArea: number;
+  staircaseMetric: number;
+  flatBottomArea: number;
+}
+
+export const STRATEGY_PRESETS: Record<Strategy, StrategyWeights> = {
+  'print-speed': { height: 0.7, overhangArea: 0.1, staircaseMetric: 0.1, flatBottomArea: 0.1 },
+  'minimal-supports': {
+    height: 0.1,
+    overhangArea: 0.6,
+    staircaseMetric: 0.1,
+    flatBottomArea: 0.2,
+  },
+  'surface-quality': {
+    height: 0.1,
+    overhangArea: 0.1,
+    staircaseMetric: 0.6,
+    flatBottomArea: 0.2,
+  },
+};
+
+export interface Candidate {
+  /** Unit up-vector for this orientation */
+  upX: number;
+  upY: number;
+  upZ: number;
+  /** Computed scores (lower is better) */
+  score: number;
+  metrics: CandidateMetrics;
+}
+
+export interface CandidateMetrics {
+  height: number;
+  overhangArea: number;
+  staircaseMetric: number;
+  flatBottomArea: number;
+}
+
+/**
+ * Generate the 26 standard candidate up-vectors:
+ * 6 face-aligned, 12 edge-aligned, 8 corner-aligned.
+ */
+export function generateCandidateUpVectors(): Array<{ x: number; y: number; z: number }> {
+  const candidates: Array<{ x: number; y: number; z: number }> = [];
+
+  // Face-aligned (6)
+  for (const sign of [-1, 1]) {
+    candidates.push({ x: sign, y: 0, z: 0 });
+    candidates.push({ x: 0, y: sign, z: 0 });
+    candidates.push({ x: 0, y: 0, z: sign });
+  }
+
+  // Edge-aligned (12)
+  const s = Math.SQRT1_2;
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      candidates.push({ x: sx * s, y: sy * s, z: 0 });
+      candidates.push({ x: sx * s, y: 0, z: sy * s });
+      candidates.push({ x: 0, y: sx * s, z: sy * s });
+    }
+  }
+
+  // Corner-aligned (8)
+  const c = 1 / Math.sqrt(3);
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        candidates.push({ x: sx * c, y: sy * c, z: sz * c });
+      }
+    }
+  }
+
+  return candidates;
+}
+
+/**
+ * Score all 26 candidates against a mesh and strategy.
+ * Mesh is represented as non-indexed Float32Array positions.
+ */
+export function scoreCandidates(
+  positions: Float32Array,
+  triangleCount: number,
+  strategy: Strategy,
+  protectedNormal?: { x: number; y: number; z: number } | null,
+): Candidate[] {
+  const upVectors = generateCandidateUpVectors();
+  const weights = STRATEGY_PRESETS[strategy];
+  const candidates: Candidate[] = [];
+
+  for (const up of upVectors) {
+    // Filter out orientations that violate protected face constraint
+    if (protectedNormal) {
+      const dot = protectedNormal.x * up.x + protectedNormal.y * up.y + protectedNormal.z * up.z;
+      if (dot < 0) continue; // protected face would point toward plate
+    }
+
+    const metrics = computeMetrics(positions, triangleCount, up);
+    const score =
+      weights.height * metrics.height +
+      weights.overhangArea * metrics.overhangArea +
+      weights.staircaseMetric * metrics.staircaseMetric -
+      weights.flatBottomArea * metrics.flatBottomArea; // flat bottom is good → subtract
+
+    candidates.push({ upX: up.x, upY: up.y, upZ: up.z, score, metrics });
+  }
+
+  candidates.sort((a, b) => a.score - b.score);
+  return candidates;
+}
+
+// ─── Metric computation ────────────────────────────────────
+
+function computeMetrics(
+  positions: Float32Array,
+  triangleCount: number,
+  up: { x: number; y: number; z: number },
+): CandidateMetrics {
+  let minProj = Infinity;
+  let maxProj = -Infinity;
+  let overhangArea = 0;
+  let flatBottomArea = 0;
+  let staircaseMetric = 0;
+
+  const overhangCos = Math.cos((60 * Math.PI) / 180); // 60° from up = 30° overhang
+
+  for (let tri = 0; tri < triangleCount; tri++) {
+    const base = tri * 9;
+
+    // Vertex projections onto up-axis
+    for (let v = 0; v < 3; v++) {
+      const vBase = base + v * 3;
+      const proj =
+        positions[vBase] * up.x + positions[vBase + 1] * up.y + positions[vBase + 2] * up.z;
+      if (proj < minProj) minProj = proj;
+      if (proj > maxProj) maxProj = proj;
+    }
+
+    // Face normal
+    const ax = positions[base + 3] - positions[base];
+    const ay = positions[base + 4] - positions[base + 1];
+    const az = positions[base + 5] - positions[base + 2];
+    const bx = positions[base + 6] - positions[base];
+    const by = positions[base + 7] - positions[base + 1];
+    const bz = positions[base + 8] - positions[base + 2];
+
+    const nx = ay * bz - az * by;
+    const ny = az * bx - ax * bz;
+    const nz = ax * by - ay * bx;
+    const nLen = Math.sqrt(nx * nx + ny * ny + nz * nz);
+    if (nLen < 1e-12) continue;
+
+    const normNx = nx / nLen;
+    const normNy = ny / nLen;
+    const normNz = nz / nLen;
+
+    const dotUp = normNx * up.x + normNy * up.y + normNz * up.z;
+    const triArea = nLen * 0.5;
+
+    // Overhang: normal points away from up (downward)
+    if (-dotUp > overhangCos) {
+      overhangArea += triArea;
+    }
+
+    // Flat bottom: normal points directly opposite to up (good for adhesion)
+    if (dotUp < -0.99) {
+      flatBottomArea += triArea;
+    }
+
+    // Staircase: faces nearly perpendicular to up get stepped
+    const absDot = Math.abs(dotUp);
+    if (absDot < 0.3) {
+      staircaseMetric += triArea * (1 - absDot);
+    }
+  }
+
+  const height = maxProj - minProj;
+  return { height, overhangArea, staircaseMetric, flatBottomArea };
+}
