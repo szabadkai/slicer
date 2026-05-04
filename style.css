@@ -292,11 +292,11 @@ body {
   display: block;
 }
 
-#viewport.face-pick-mode {
+#viewport.paint-mode {
   cursor: crosshair;
 }
 
-#viewport.paint-mode {
+#viewport.intent-paint-mode {
   cursor: crosshair;
 }
 
@@ -758,7 +758,8 @@ body {
   flex: 1;
 }
 
-#footer-actions {
+#footer-actions,
+#orient-footer-actions {
   margin-top: auto;
   padding: 16px 20px;
   background: var(--surface-2);
@@ -1470,18 +1471,7 @@ button:disabled {
   line-height: 1.4;
 }
 
-.protected-face-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-bottom: 8px;
-}
 
-#pick-protected-face-btn.active {
-  border-color: var(--accent);
-  background: #f0f7ff;
-  color: var(--accent);
-}
 
 .significant-faces-results {
   margin-top: 10px;
@@ -2295,6 +2285,31 @@ button:disabled {
 .hollow-step[open] {
   border-left-color: var(--accent);
 }
+
+/* Panel section (collapsible groups inside Scene / Surface panels) */
+.panel-section {
+  border-left: 3px solid var(--border);
+  margin: 0 0 8px 0;
+  padding: 0 0 0 10px;
+  transition: border-color 0.2s;
+}
+.panel-section[open] {
+  border-left-color: var(--accent);
+}
+.panel-section-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--text);
+  user-select: none;
+}
+.panel-section-summary::-webkit-details-marker { display: none; }
+
 .hollow-step-summary {
   display: flex;
   align-items: center;

@@ -68,6 +68,7 @@ export interface LegacyViewer {
 
   // Transform
   setTransformMode(mode: string | null): void;
+  paintToolEnabled: boolean;
   setPaintToolEnabled?(enabled: boolean): void;
   setPaintBrush?(brush: {
     radiusMM?: number;
@@ -91,12 +92,16 @@ export interface LegacyViewer {
   getSelectionWorldBounds?(): { min: Vec3; max: Vec3 } | null;
   setElevation(elevation: number): void;
   applyRotation(quaternion: unknown): void;
-  setFacePickMode(enabled: boolean): void;
 
   // Intent painting
   intentPaintMode: boolean;
   intentBrushRadiusMM: number;
   setIntentPaintMode(enabled: boolean): void;
+
+  // Intent overlay management (delegates THREE.js internally)
+  showIntentOverlay(objectId: string, intentBuffer: Uint8Array): void;
+  clearIntentOverlay(): void;
+  getObjectTriangleCount(objectId: string): number | null;
 
   // Edit operations
   duplicateSelected(): void;
@@ -114,7 +119,12 @@ export interface LegacyViewer {
   previewCutPlane?(axis: 'x' | 'y' | 'z', worldOffset: number): boolean;
   editCutPlane?(axis: 'x' | 'y' | 'z', worldOffset: number, mode?: 'translate' | 'rotate'): boolean;
   clearCutPlanePreview?(): void;
-  getCutPlaneState?(): { axis: 'x' | 'y' | 'z'; position: number; normal: Vec3; constant: number } | null;
+  getCutPlaneState?(): {
+    axis: 'x' | 'y' | 'z';
+    position: number;
+    normal: Vec3;
+    constant: number;
+  } | null;
 
   // Plate management
   setPlates(plates: LegacyPlate[]): void;
@@ -144,7 +154,10 @@ export interface LegacyViewer {
   clearSupports(): void;
 
   // Support heatmap
-  buildSupportHeatmapGeometry?(targets: LegacyObject[], overhangAngleDeg: number): { geometry: unknown; area: number; triangleCount: number } | null;
+  buildSupportHeatmapGeometry?(
+    targets: LegacyObject[],
+    overhangAngleDeg: number,
+  ): { geometry: unknown; area: number; triangleCount: number } | null;
   showSupportHeatmap?(result: { geometry: unknown; area: number; triangleCount: number }): void;
   clearSupportHeatmap?(): void;
 

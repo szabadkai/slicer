@@ -22,7 +22,9 @@ export function mountTransformPanel(ctx: AppContext): void {
       modeBtns.forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       const mode = btn.dataset.mode ?? 'translate';
-      Object.values(fieldSets).forEach((f) => { if (f) f.hidden = true; });
+      Object.values(fieldSets).forEach((f) => {
+        if (f) f.hidden = true;
+      });
       const active = fieldSets[mode];
       if (active) active.hidden = false;
       viewer.setTransformMode(mode);
@@ -49,16 +51,23 @@ export function mountTransformPanel(ctx: AppContext): void {
   const cutMaxLabel = document.getElementById('cut-max-label');
   const cutCenterBtn = document.getElementById('cut-center-btn') as HTMLButtonElement | null;
   const cutToolbar = document.getElementById('cut-viewer-toolbar');
-  const cutViewerMoveBtn = document.getElementById('cut-viewer-move-btn') as HTMLButtonElement | null;
-  const cutViewerRotateBtn = document.getElementById('cut-viewer-rotate-btn') as HTMLButtonElement | null;
-  const cutViewerApplyBtn = document.getElementById('cut-viewer-apply-btn') as HTMLButtonElement | null;
+  const cutViewerMoveBtn = document.getElementById(
+    'cut-viewer-move-btn',
+  ) as HTMLButtonElement | null;
+  const cutViewerRotateBtn = document.getElementById(
+    'cut-viewer-rotate-btn',
+  ) as HTMLButtonElement | null;
+  const cutViewerApplyBtn = document.getElementById(
+    'cut-viewer-apply-btn',
+  ) as HTMLButtonElement | null;
   let activeCutMode: 'translate' | 'rotate' = 'translate';
 
   function updateTransformInputs(): void {
     if (viewer.selected.length === 0) return;
-    const pos = viewer.selected.length === 1
-      ? viewer.getSelectionWorldCenter()
-      : viewer.getSelectionWorldCenter();
+    const pos =
+      viewer.selected.length === 1
+        ? viewer.getSelectionWorldCenter()
+        : viewer.getSelectionWorldCenter();
     if (pos) {
       if (moveX) moveX.value = String(Math.round(pos.x * 100) / 100);
       if (moveY) moveY.value = String(Math.round(pos.y * 100) / 100);
@@ -92,7 +101,14 @@ export function mountTransformPanel(ctx: AppContext): void {
     const center = viewer.getSelectionWorldCenter();
     const bounds = viewer.getSelectionWorldBounds?.();
     const enabled = viewer.selected.length > 0 && !!center && !!bounds;
-    [cutAxis, cutPosition, cutCenterBtn, cutViewerMoveBtn, cutViewerRotateBtn, cutViewerApplyBtn].forEach((el) => {
+    [
+      cutAxis,
+      cutPosition,
+      cutCenterBtn,
+      cutViewerMoveBtn,
+      cutViewerRotateBtn,
+      cutViewerApplyBtn,
+    ].forEach((el) => {
       if (el) el.disabled = !enabled;
     });
     if (!enabled || !center || !bounds) {
@@ -107,7 +123,8 @@ export function mountTransformPanel(ctx: AppContext): void {
     const max = axisValue(bounds.max, axis);
     const centerValue = axisValue(center, axis);
     const current = parseFloat(cutPosition?.value ?? String(centerValue));
-    const value = resetToCenter || !Number.isFinite(current) ? centerValue : clamp(current, min, max);
+    const value =
+      resetToCenter || !Number.isFinite(current) ? centerValue : clamp(current, min, max);
     setCutPosition(value, min, max);
     setCutToolbarVisible(isEditPanelVisible());
     if (isEditPanelVisible()) activateCutPlane(activeCutMode);
@@ -177,7 +194,9 @@ export function mountTransformPanel(ctx: AppContext): void {
       ? viewer.cutSelectedByPlane?.(plane.normal, plane.constant)
       : viewer.cutSelectedByAxisPlane?.(axis, position));
     if (!didCut) {
-      alert('The cut could not produce closed manifold parts. Try repairing the model or moving the cut plane.');
+      alert(
+        'The cut could not produce closed manifold parts. Try repairing the model or moving the cut plane.',
+      );
       return;
     }
     setCutToolbarVisible(false);
@@ -292,13 +311,19 @@ export function mountTransformPanel(ctx: AppContext): void {
   listen(cutViewerRotateBtn, 'click', () => activateCutPlane('rotate'));
   listen(cutViewerApplyBtn, 'click', applyCut);
   listen(viewer.canvas, 'cut-plane-changed', ((event: CustomEvent) => {
-    const detail = event.detail as { axis?: 'x' | 'y' | 'z'; position?: number; min?: number; max?: number };
+    const detail = event.detail as {
+      axis?: 'x' | 'y' | 'z';
+      position?: number;
+      min?: number;
+      max?: number;
+    };
     if (detail.axis && cutAxis) cutAxis.value = detail.axis;
-    if (typeof detail.position === 'number') setCutPosition(detail.position, detail.min, detail.max);
+    if (typeof detail.position === 'number')
+      setCutPosition(detail.position, detail.min, detail.max);
   }) as EventListener);
   listen(document, 'tool-panel-changed', ((event: CustomEvent) => {
     const detail = event.detail as { panel?: string };
-    if (detail.panel === 'edit') syncCutControls();
+    if (detail.panel === 'scene') syncCutControls();
     else {
       setCutToolbarVisible(false);
       viewer.clearCutPlanePreview?.();

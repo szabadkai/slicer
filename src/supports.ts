@@ -18,6 +18,15 @@ import {
   createBasePanGeometry,
   mergeGeometries,
 } from './supports-geometry';
+import {
+  ROUTE_DIRECTIONS,
+  halton,
+  deduplicatePoints,
+  uniqueSortedNumbers,
+  directionOffset,
+  normalizedAngleDelta,
+  yieldThread,
+} from './supports-utils';
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
@@ -27,11 +36,13 @@ export type { RouteWaypoint, ContactPoint, RouteContext, RouteOptions };
 
 const UP = new THREE.Vector3(0, 1, 0);
 const DOWN = new THREE.Vector3(0, -1, 0);
-const ROUTE_DIRECTIONS = 16;
 const EXTERIOR_RAY_DIRECTIONS = [
-  new THREE.Vector3(1, 0, 0), new THREE.Vector3(-1, 0, 0),
-  new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, -1, 0),
-  new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, -1),
+  new THREE.Vector3(1, 0, 0),
+  new THREE.Vector3(-1, 0, 0),
+  new THREE.Vector3(0, 1, 0),
+  new THREE.Vector3(0, -1, 0),
+  new THREE.Vector3(0, 0, 1),
+  new THREE.Vector3(0, 0, -1),
 ];
 
 interface SupportOptions {
@@ -65,15 +76,24 @@ export async function generateSupports(
   options: SupportOptions = {},
 ): Promise<THREE.BufferGeometry> {
   const {
-    overhangAngle = 30, density = 5, autoDensity = false,
-    tipDiameter = 0.4, supportThickness = 0.8, autoThickness = true,
+    overhangAngle = 30,
+    density = 5,
+    autoDensity = false,
+    tipDiameter = 0.4,
+    supportThickness = 0.8,
+    autoThickness = true,
     internalSupports = false,
     supportScope = internalSupports ? 'all' : 'outside-only',
-    approachMode = 'prefer-angled', maxPillarAngle = 45,
-    modelClearance = 1.5, maxContactOffset = 18,
-    crossBracing = false, basePanEnabled = false,
-    basePanMargin = 4, basePanThickness = 0.8,
-    basePanLipWidth = 1.2, basePanLipHeight = 1,
+    approachMode = 'prefer-angled',
+    maxPillarAngle = 45,
+    modelClearance = 1.5,
+    maxContactOffset = 18,
+    crossBracing = false,
+    basePanEnabled = false,
+    basePanMargin = 4,
+    basePanThickness = 0.8,
+    basePanLipWidth = 1.2,
+    basePanLipHeight = 1,
     onProgress,
   } = options;
 
@@ -91,22 +111,39 @@ export async function generateSupports(
   let effectiveDensity = density;
   if (autoDensity) {
     effectiveDensity = THREE.MathUtils.clamp(
-      Math.round(6.5 - (maxDim / 120) + normalizedFootprint * 1.5 + normalizedHeight), 4, 9,
+      Math.round(6.5 - maxDim / 120 + normalizedFootprint * 1.5 + normalizedHeight),
+      4,
+      9,
     );
   }
 
   if (onProgress) onProgress(0, 'Finding contact points...');
   await yieldThread();
-  const contactPoints = await findContactPoints(geometry, overhangAngle, effectiveDensity, (text) => {
-    if (onProgress) onProgress(0, text);
-  });
+  const contactPoints = await findContactPoints(
+    geometry,
+    overhangAngle,
+    effectiveDensity,
+    (text) => {
+      if (onProgress) onProgress(0, text);
+    },
+  );
 
   if (contactPoints.length === 0) {
     if (!basePanEnabled) return new THREE.BufferGeometry();
-    return createBasePanGeometry(modelBounds, [], basePanMargin, basePanThickness, basePanLipWidth, basePanLipHeight);
+    return createBasePanGeometry(
+      modelBounds,
+      [],
+      basePanMargin,
+      basePanThickness,
+      basePanLipWidth,
+      basePanLipHeight,
+    );
   }
 
-  if (onProgress) { onProgress(0.1, 'Building bounds tree...'); await yieldThread(); }
+  if (onProgress) {
+    onProgress(0.1, 'Building bounds tree...');
+    await yieldThread();
+  }
   if (!(geometry as unknown as { boundsTree: unknown }).boundsTree) geometry.computeBoundsTree();
   const tempMesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
   tempMesh.updateMatrixWorld(true);
@@ -133,7 +170,8 @@ export async function generateSupports(
   const routeOpts: RouteOptions = {
     allowInternalSupports: supportScope === 'all',
     allowCavityContacts: supportScope === 'all',
-    approachMode, maxPillarAngle,
+    approachMode,
+    maxPillarAngle,
     modelClearance: Math.max(modelClearance, pillarRadius * 1.5),
     supportCollisionRadius: Math.max(pillarRadius * 1.1, 0.2),
     maxContactOffset,
@@ -142,8 +180,13 @@ export async function generateSupports(
 
   let supportPoints = contactPoints;
   if (!routeOpts.allowCavityContacts) {
-    if (onProgress) { onProgress(0.08, 'Filtering interior contact points...'); await yieldThread(); }
-    supportPoints = contactPoints.filter((p) => isExteriorContact(p, ctx, routeOpts.modelClearance));
+    if (onProgress) {
+      onProgress(0.08, 'Filtering interior contact points...');
+      await yieldThread();
+    }
+    supportPoints = contactPoints.filter((p) =>
+      isExteriorContact(p, ctx, routeOpts.modelClearance),
+    );
   }
 
   const geometries: THREE.BufferGeometry[] = [];
@@ -152,11 +195,21 @@ export async function generateSupports(
   for (let i = 0; i < supportPoints.length; i++) {
     const { position } = supportPoints[i];
     if (position.y > minSupportHeight) {
-      const route = planSupportRoute(supportPoints[i], ctx, pillarRadius, baseHeight, tipHeight, routeOpts);
+      const route = planSupportRoute(
+        supportPoints[i],
+        ctx,
+        pillarRadius,
+        baseHeight,
+        tipHeight,
+        routeOpts,
+      );
       if (route) routes.push(route);
     }
     if (i % 200 === 0 && onProgress) {
-      onProgress(0.1 + 0.6 * (i / supportPoints.length), `Planning routes... ${Math.round(i / supportPoints.length * 100)}%`);
+      onProgress(
+        0.1 + 0.6 * (i / supportPoints.length),
+        `Planning routes... ${Math.round((i / supportPoints.length) * 100)}%`,
+      );
       await yieldThread();
     }
   }
@@ -164,23 +217,59 @@ export async function generateSupports(
   const supportFloorY = basePanEnabled ? basePanThickness + 0.01 : 0;
   if (onProgress) onProgress(0.7, 'Building geometry...');
   for (let i = 0; i < routes.length; i++) {
-    buildSupportGeometry(routes[i], geometries, actualTipDiameter, tipHeight, pillarRadius, baseRadius, baseHeight, supportFloorY);
+    buildSupportGeometry(
+      routes[i],
+      geometries,
+      actualTipDiameter,
+      tipHeight,
+      pillarRadius,
+      baseRadius,
+      baseHeight,
+      supportFloorY,
+    );
     if (i % 500 === 0 && onProgress) {
-      onProgress(0.7 + 0.2 * (i / routes.length), `Building geometry... ${Math.round(i / routes.length * 100)}%`);
+      onProgress(
+        0.7 + 0.2 * (i / routes.length),
+        `Building geometry... ${Math.round((i / routes.length) * 100)}%`,
+      );
       await yieldThread();
     }
   }
 
   if (crossBracing) {
-    if (onProgress) { onProgress(0.9, 'Generating cross bracing...'); await yieldThread(); }
-    generateCrossBracing(routes, geometries, pillarRadius, baseHeight, tipHeight, ctx, routeOpts.supportCollisionRadius, supportFloorY);
+    if (onProgress) {
+      onProgress(0.9, 'Generating cross bracing...');
+      await yieldThread();
+    }
+    generateCrossBracing(
+      routes,
+      geometries,
+      pillarRadius,
+      baseHeight,
+      tipHeight,
+      ctx,
+      routeOpts.supportCollisionRadius,
+      supportFloorY,
+    );
   }
 
   if (basePanEnabled) {
-    geometries.push(createBasePanGeometry(modelBounds, routes, basePanMargin, basePanThickness, basePanLipWidth, basePanLipHeight));
+    geometries.push(
+      createBasePanGeometry(
+        modelBounds,
+        routes,
+        basePanMargin,
+        basePanThickness,
+        basePanLipWidth,
+        basePanLipHeight,
+      ),
+    );
   }
 
-  if (onProgress) { onProgress(0.95, 'Merging geometry...'); await yieldThread(); }
+  if (onProgress) {
+    onProgress(0.95, 'Merging geometry...');
+    await yieldThread();
+  }
   if (geometries.length === 0) return new THREE.BufferGeometry();
   return mergeGeometries(geometries);
 }
@@ -190,8 +279,12 @@ export async function generateSupports(
 // ---------------------------------------------------------------------------
 
 function planSupportRoute(
-  point: ContactPoint, context: RouteContext, pillarRadius: number,
-  baseHeight: number, tipHeight: number, options: RouteOptions,
+  point: ContactPoint,
+  context: RouteContext,
+  _pillarRadius: number,
+  baseHeight: number,
+  tipHeight: number,
+  options: RouteOptions,
 ): RouteWaypoint[] | null {
   const contactPos = point.position;
   const clearance = options.modelClearance;
@@ -208,8 +301,16 @@ function planSupportRoute(
     if (options.approachMode === 'prefer-angled') {
       const preferredAngle = preferredRouteAngle(point, context);
       const angled = findAngledRoute(
-        contactPos, context, baseHeight, tipHeight, clearance,
-        maxHorizontalPerVertical, options.maxContactOffset, null, preferredAngle, options.supportCollisionRadius,
+        contactPos,
+        context,
+        baseHeight,
+        tipHeight,
+        clearance,
+        maxHorizontalPerVertical,
+        options.maxContactOffset,
+        null,
+        preferredAngle,
+        options.supportCollisionRadius,
       );
       if (angled) return angled;
     }
@@ -217,7 +318,9 @@ function planSupportRoute(
       { x: contactPos.x, y: contactPos.y, z: contactPos.z },
       { x: contactPos.x, y: baseHeight, z: contactPos.z },
     ];
-    return routeCollides(route, context, tipHeight, baseHeight, options.supportCollisionRadius) ? null : route;
+    return routeCollides(route, context, tipHeight, baseHeight, options.supportCollisionRadius)
+      ? null
+      : route;
   }
 
   if (options.approachMode === 'vertical') {
@@ -231,11 +334,15 @@ function planSupportRoute(
   const obstruction = validHits[0];
   const obstructionNormal = obstruction.face?.normal
     ? obstruction.face.normal.clone().normalize()
-    : point.normal?.clone().normalize() ?? new THREE.Vector3(1, 0, 0);
+    : (point.normal?.clone().normalize() ?? new THREE.Vector3(1, 0, 0));
 
   const escapeDir = new THREE.Vector3(obstructionNormal.x, 0, obstructionNormal.z);
   if (escapeDir.length() < 0.01) {
-    const radial = new THREE.Vector3(contactPos.x - context.modelCenter.x, 0, contactPos.z - context.modelCenter.z);
+    const radial = new THREE.Vector3(
+      contactPos.x - context.modelCenter.x,
+      0,
+      contactPos.z - context.modelCenter.z,
+    );
     escapeDir.copy(radial.lengthSq() > 0.01 ? radial : new THREE.Vector3(1, 0, 0));
   }
   escapeDir.normalize();
@@ -249,8 +356,16 @@ function planSupportRoute(
   if (maxUsableOffset >= clearance * 1.5) {
     const preferredAngle = Math.atan2(escapeDir.z, escapeDir.x);
     const route = findAngledRoute(
-      contactPos, context, baseHeight, tipHeight, clearance,
-      maxHorizontalPerVertical, maxUsableOffset, angleStartY, preferredAngle, options.supportCollisionRadius,
+      contactPos,
+      context,
+      baseHeight,
+      tipHeight,
+      clearance,
+      maxHorizontalPerVertical,
+      maxUsableOffset,
+      angleStartY,
+      preferredAngle,
+      options.supportCollisionRadius,
     );
     if (route) return route;
   }
@@ -266,32 +381,57 @@ function planSupportRoute(
 
 function preferredRouteAngle(point: ContactPoint, context: RouteContext): number | null {
   const normal = point.normal?.clone().normalize();
-  if (normal) { normal.y = 0; if (normal.lengthSq() > 0.01) { normal.normalize(); return Math.atan2(normal.z, normal.x); } }
-  const radial = new THREE.Vector3(point.position.x - context.modelCenter.x, 0, point.position.z - context.modelCenter.z);
-  if (radial.lengthSq() > 0.01) { radial.normalize(); return Math.atan2(radial.z, radial.x); }
+  if (normal) {
+    normal.y = 0;
+    if (normal.lengthSq() > 0.01) {
+      normal.normalize();
+      return Math.atan2(normal.z, normal.x);
+    }
+  }
+  const radial = new THREE.Vector3(
+    point.position.x - context.modelCenter.x,
+    0,
+    point.position.z - context.modelCenter.z,
+  );
+  if (radial.lengthSq() > 0.01) {
+    radial.normalize();
+    return Math.atan2(radial.z, radial.x);
+  }
   return null;
 }
 
 function findAngledRoute(
-  contactPos: THREE.Vector3, context: RouteContext,
-  baseHeight: number, tipHeight: number, clearance: number,
-  maxHorizontalPerVertical: number, maxContactOffset: number,
-  forcedAngleStartY: number | null, preferredAngle: number | null, collisionRadius: number,
+  contactPos: THREE.Vector3,
+  context: RouteContext,
+  baseHeight: number,
+  tipHeight: number,
+  clearance: number,
+  maxHorizontalPerVertical: number,
+  maxContactOffset: number,
+  forcedAngleStartY: number | null,
+  preferredAngle: number | null,
+  collisionRadius: number,
 ): RouteWaypoint[] | null {
   const tipBottomY = contactPos.y - tipHeight;
-  const angleStartY = forcedAngleStartY ?? Math.max(baseHeight + clearance, tipBottomY - clearance * 3);
+  const angleStartY =
+    forcedAngleStartY ?? Math.max(baseHeight + clearance, tipBottomY - clearance * 3);
   const verticalDrop = tipBottomY - angleStartY;
   if (verticalDrop <= 0.1) return null;
   const maxOffset = Math.min(maxContactOffset, verticalDrop * maxHorizontalPerVertical);
   if (maxOffset < clearance) return null;
 
-  const distances = uniqueSortedNumbers([clearance * 1.5, clearance * 2.5, clearance * 4, maxOffset].filter((d) => d <= maxOffset));
+  const distances = uniqueSortedNumbers(
+    [clearance * 1.5, clearance * 2.5, clearance * 4, maxOffset].filter((d) => d <= maxOffset),
+  );
   const targetOffset = Math.min(maxOffset, Math.max(clearance * 2.5, 6));
   const candidates: { route: RouteWaypoint[]; score: number }[] = [];
 
   for (const dist of distances) {
     for (let i = 0; i < ROUTE_DIRECTIONS; i++) {
-      const angle = preferredAngle === null ? (i / ROUTE_DIRECTIONS) * Math.PI * 2 : preferredAngle + directionOffset(i);
+      const angle =
+        preferredAngle === null
+          ? (i / ROUTE_DIRECTIONS) * Math.PI * 2
+          : preferredAngle + directionOffset(i);
       const shaftX = contactPos.x + Math.cos(angle) * dist;
       const shaftZ = contactPos.z + Math.sin(angle) * dist;
       const route: RouteWaypoint[] = [
@@ -300,8 +440,12 @@ function findAngledRoute(
         { x: shaftX, y: baseHeight, z: shaftZ },
       ];
       if (!routeCollides(route, context, tipHeight, baseHeight, collisionRadius)) {
-        const preferencePenalty = preferredAngle === null ? 0 : Math.abs(normalizedAngleDelta(angle, preferredAngle));
-        candidates.push({ route, score: Math.abs(dist - targetOffset) + preferencePenalty * clearance });
+        const preferencePenalty =
+          preferredAngle === null ? 0 : Math.abs(normalizedAngleDelta(angle, preferredAngle));
+        candidates.push({
+          route,
+          score: Math.abs(dist - targetOffset) + preferencePenalty * clearance,
+        });
       }
     }
   }
@@ -320,14 +464,22 @@ function isExteriorContact(point: ContactPoint, context: RouteContext, clearance
   return [normal, ...EXTERIOR_RAY_DIRECTIONS].some((dir) => rayEscapesModel(start, dir, context));
 }
 
-function isOutwardFacingSurface(position: THREE.Vector3, normal: THREE.Vector3, modelCenter: THREE.Vector3): boolean {
+function isOutwardFacingSurface(
+  position: THREE.Vector3,
+  normal: THREE.Vector3,
+  modelCenter: THREE.Vector3,
+): boolean {
   const radial = new THREE.Vector3().subVectors(position, modelCenter);
   if (radial.lengthSq() < 1e-6) return true;
   radial.normalize();
   return normal.dot(radial) > -0.1;
 }
 
-function rayEscapesModel(start: THREE.Vector3, direction: THREE.Vector3, context: RouteContext): boolean {
+function rayEscapesModel(
+  start: THREE.Vector3,
+  direction: THREE.Vector3,
+  context: RouteContext,
+): boolean {
   const dir = direction.clone().normalize();
   if (dir.lengthSq() === 0) return false;
   const far = rayDistancePastBounds(start, dir, context.modelBounds);
@@ -337,7 +489,11 @@ function rayEscapesModel(start: THREE.Vector3, direction: THREE.Vector3, context
   return context.raycaster.intersectObject(context.mesh).every((hit) => hit.distance < 0.05);
 }
 
-function rayDistancePastBounds(start: THREE.Vector3, direction: THREE.Vector3, bounds: THREE.Box3): number {
+function rayDistancePastBounds(
+  start: THREE.Vector3,
+  direction: THREE.Vector3,
+  bounds: THREE.Box3,
+): number {
   const expanded = bounds.clone().expandByScalar(1);
   const boxHit = new THREE.Vector3();
   const ray = new THREE.Ray(start, direction);
@@ -350,8 +506,10 @@ function rayDistancePastBounds(start: THREE.Vector3, direction: THREE.Vector3, b
 // ---------------------------------------------------------------------------
 
 async function findContactPoints(
-  geometry: THREE.BufferGeometry, overhangAngleDeg: number,
-  density: number, onProgress: (text: string) => void,
+  geometry: THREE.BufferGeometry,
+  overhangAngleDeg: number,
+  density: number,
+  onProgress: (text: string) => void,
 ): Promise<ContactPoint[]> {
   const pos = geometry.attributes.position;
   const normals = geometry.attributes.normal;
@@ -361,11 +519,19 @@ async function findContactPoints(
   const spacing = 12 - density;
   const points: ContactPoint[] = [];
 
-  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
-  const n = new THREE.Vector3(), edge1 = new THREE.Vector3(), edge2 = new THREE.Vector3(), cross = new THREE.Vector3();
+  const a = new THREE.Vector3(),
+    b = new THREE.Vector3(),
+    c = new THREE.Vector3();
+  const n = new THREE.Vector3(),
+    edge1 = new THREE.Vector3(),
+    edge2 = new THREE.Vector3(),
+    cross = new THREE.Vector3();
 
   for (let i = 0; i < triCount; i++) {
-    if (i % 50000 === 0 && i !== 0) { onProgress(`Finding contact points... ${Math.round((i / triCount) * 100)}%`); await yieldThread(); }
+    if (i % 50000 === 0 && i !== 0) {
+      onProgress(`Finding contact points... ${Math.round((i / triCount) * 100)}%`);
+      await yieldThread();
+    }
 
     const [idxA, idxB, idxC] = index
       ? [index.getX(i * 3), index.getX(i * 3 + 1), index.getX(i * 3 + 2)]
@@ -374,11 +540,17 @@ async function findContactPoints(
     a.set(pos.getX(idxA), pos.getY(idxA), pos.getZ(idxA));
     b.set(pos.getX(idxB), pos.getY(idxB), pos.getZ(idxB));
     c.set(pos.getX(idxC), pos.getY(idxC), pos.getZ(idxC));
-    edge1.subVectors(b, a); edge2.subVectors(c, a); cross.crossVectors(edge1, edge2);
+    edge1.subVectors(b, a);
+    edge2.subVectors(c, a);
+    cross.crossVectors(edge1, edge2);
     n.copy(cross).normalize();
 
-    if (normals && n.dot(new THREE.Vector3(normals.getX(idxA), normals.getY(idxA), normals.getZ(idxA))) < 0) {
-      n.multiplyScalar(-1); cross.multiplyScalar(-1);
+    if (
+      normals &&
+      n.dot(new THREE.Vector3(normals.getX(idxA), normals.getY(idxA), normals.getZ(idxA))) < 0
+    ) {
+      n.multiplyScalar(-1);
+      cross.multiplyScalar(-1);
     }
     if (n.dot(UP) >= -overhangThreshold) continue;
 
@@ -386,59 +558,27 @@ async function findContactPoints(
     const numSamples = Math.max(1, Math.round(area / (spacing * spacing)));
     for (let s = 0; s < numSamples; s++) {
       let u: number, v: number;
-      if (numSamples === 1) { u = 1 / 3; v = 1 / 3; }
-      else { u = halton(i * 31 + s + 1, 2); v = halton(i * 31 + s + 1, 3); }
-      if (u + v > 1) { u = 1 - u; v = 1 - v; }
+      if (numSamples === 1) {
+        u = 1 / 3;
+        v = 1 / 3;
+      } else {
+        u = halton(i * 31 + s + 1, 2);
+        v = halton(i * 31 + s + 1, 3);
+      }
+      if (u + v > 1) {
+        u = 1 - u;
+        v = 1 - v;
+      }
       const w = 1 - u - v;
       points.push({
-        position: new THREE.Vector3(a.x * u + b.x * v + c.x * w, a.y * u + b.y * v + c.y * w, a.z * u + b.z * v + c.z * w),
+        position: new THREE.Vector3(
+          a.x * u + b.x * v + c.x * w,
+          a.y * u + b.y * v + c.y * w,
+          a.z * u + b.z * v + c.z * w,
+        ),
         normal: n.clone(),
       });
     }
   }
   return deduplicatePoints(points, spacing * 0.5);
-}
-
-// ---------------------------------------------------------------------------
-// Utility helpers
-// ---------------------------------------------------------------------------
-
-function halton(index: number, base: number): number {
-  let result = 0, fraction = 1 / base, value = index;
-  while (value > 0) { result += fraction * (value % base); value = Math.floor(value / base); fraction /= base; }
-  return result;
-}
-
-function deduplicatePoints(points: ContactPoint[], minDist: number): ContactPoint[] {
-  if (points.length === 0) return points;
-  const cellSize = minDist;
-  const grid = new Map<string, boolean>();
-  const result: ContactPoint[] = [];
-  for (const p of points) {
-    const k = `${Math.floor(p.position.x / cellSize)},${Math.floor(p.position.y / cellSize)},${Math.floor(p.position.z / cellSize)}`;
-    if (!grid.has(k)) { grid.set(k, true); result.push(p); }
-  }
-  return result;
-}
-
-function uniqueSortedNumbers(values: number[]): number[] {
-  return [...new Set(values.map((v) => Number(v.toFixed(3))))].sort((a, b) => a - b);
-}
-
-function directionOffset(index: number): number {
-  if (index === 0) return 0;
-  const step = Math.ceil(index / 2);
-  const sign = index % 2 === 0 ? 1 : -1;
-  return sign * step * (Math.PI * 2 / ROUTE_DIRECTIONS);
-}
-
-function normalizedAngleDelta(a: number, b: number): number {
-  let delta = a - b;
-  while (delta > Math.PI) delta -= Math.PI * 2;
-  while (delta < -Math.PI) delta += Math.PI * 2;
-  return delta;
-}
-
-function yieldThread(): Promise<void> {
-  return new Promise((r) => setTimeout(r, 0));
 }

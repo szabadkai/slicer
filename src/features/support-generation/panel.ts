@@ -3,6 +3,18 @@
  */
 import type { AppContext } from '@core/types';
 import { listen } from '@features/app-shell/utils';
+import {
+  getIntentBuffer,
+  appearanceReliabilityBalance,
+  cleanupMaterialBalance,
+} from '@features/surface-intent/store';
+import type { IntentSupportParams } from '@features/surface-intent/engine-types';
+import {
+  findNearestPillar,
+  inspectPillar,
+  clearInspection,
+  clearStoredPillars,
+} from './explanation-inspector';
 
 export function mountSupportPanel(ctx: AppContext): void {
   const { viewer } = ctx;
@@ -30,7 +42,9 @@ export function mountSupportPanel(ctx: AppContext): void {
   const basePanMargin = document.getElementById('base-pan-margin') as HTMLInputElement | null;
   const basePanThickness = document.getElementById('base-pan-thickness') as HTMLInputElement | null;
   const basePanLipWidth = document.getElementById('base-pan-lip-width') as HTMLInputElement | null;
-  const basePanLipHeight = document.getElementById('base-pan-lip-height') as HTMLInputElement | null;
+  const basePanLipHeight = document.getElementById(
+    'base-pan-lip-height',
+  ) as HTMLInputElement | null;
   const generateBtn = document.getElementById('generate-supports-btn');
   const clearBtn = document.getElementById('clear-supports-btn');
   const supportAllBtn = document.getElementById('support-all-btn');
@@ -63,7 +77,19 @@ export function mountSupportPanel(ctx: AppContext): void {
     el.style.pointerEvents = enabled ? 'auto' : 'none';
   }
 
-  function getSupportOptions(onProgress: (fraction: number, text: string) => void): Record<string, unknown> {
+  function getSupportOptions(
+    onProgress: (fraction: number, text: string) => void,
+    modelId?: string,
+  ): Record<string, unknown> {
+    const intentBuffer = modelId ? getIntentBuffer(modelId) : undefined;
+    const intentParams: IntentSupportParams | undefined = intentBuffer
+      ? {
+          intentBuffer,
+          appearanceReliabilityBalance: appearanceReliabilityBalance.value,
+          cleanupMaterialBalance: cleanupMaterialBalance.value,
+        }
+      : undefined;
+
     return {
       overhangAngle: parseFloat(overhangAngle?.value ?? '30'),
       density: parseFloat(supportDensity?.value ?? '50'),
@@ -83,6 +109,7 @@ export function mountSupportPanel(ctx: AppContext): void {
       basePanLipWidth: parseFloat(basePanLipWidth?.value ?? '1'),
       basePanLipHeight: parseFloat(basePanLipHeight?.value ?? '0.5'),
       onProgress,
+      intentParams,
     };
   }
 
@@ -92,11 +119,18 @@ export function mountSupportPanel(ctx: AppContext): void {
     const originalIds = targets.map((o) => o.id);
 
     // Dynamic import of legacy supports module
-    const { generateSupports } = await import('../../supports') as unknown as {
-      generateSupports: (geo: unknown, opts: Record<string, unknown>) => Promise<{ attributes: { position: { count: number } } }>;
+    const { generateSupports } = (await import('../../supports')) as unknown as {
+      generateSupports: (
+        geo: unknown,
+        opts: Record<string, unknown>,
+      ) => Promise<{ attributes: { position: { count: number } } }>;
     };
 
-    ctx.showProgress(targets.length === 1 ? 'Generating supports...' : 'Generating supports for selected models...');
+    ctx.showProgress(
+      targets.length === 1
+        ? 'Generating supports...'
+        : 'Generating supports for selected models...',
+    );
     await new Promise((r) => setTimeout(r, 50));
 
     let failureCount = 0;
@@ -106,15 +140,24 @@ export function mountSupportPanel(ctx: AppContext): void {
       const geometry = viewer.getModelGeometry();
       if (!geometry) continue;
 
-      ctx.updateProgress(i / targets.length,
-        targets.length === 1 ? 'Generating supports...' : `Supporting model ${i + 1} / ${targets.length}`);
+      ctx.updateProgress(
+        i / targets.length,
+        targets.length === 1
+          ? 'Generating supports...'
+          : `Supporting model ${i + 1} / ${targets.length}`,
+      );
 
       try {
-        const supportGeo = await generateSupports(geometry, getSupportOptions((fraction, text) => {
-          const overall = (i + fraction) / targets.length;
-          ctx.updateProgress(overall,
-            targets.length === 1 ? text : `Supporting model ${i + 1} / ${targets.length}`);
-        }));
+        const supportGeo = await generateSupports(
+          geometry,
+          getSupportOptions((fraction, text) => {
+            const overall = (i + fraction) / targets.length;
+            ctx.updateProgress(
+              overall,
+              targets.length === 1 ? text : `Supporting model ${i + 1} / ${targets.length}`,
+            );
+          }, obj.id),
+        );
         if (supportGeo.attributes.position?.count > 0) {
           viewer.setSupports(supportGeo);
         } else {
@@ -132,7 +175,9 @@ export function mountSupportPanel(ctx: AppContext): void {
     ctx.updateEstimate();
     ctx.scheduleProjectAutosave();
     if (failureCount > 0) {
-      alert(`Failed to generate supports for ${failureCount} model${failureCount === 1 ? '' : 's'}.`);
+      alert(
+        `Failed to generate supports for ${failureCount} model${failureCount === 1 ? '' : 's'}.`,
+      );
     }
     ctx.hideProgress();
   }
@@ -143,13 +188,33 @@ export function mountSupportPanel(ctx: AppContext): void {
   listen(autoDensity, 'change', syncUi);
   listen(autoThickness, 'change', syncUi);
   listen(basePanEnabled, 'change', syncUi);
-  listen(generateBtn, 'click', () => { handleGenerate(); });
-  listen(supportAllBtn, 'click', () => { handleGenerate(); });
+  listen(generateBtn, 'click', () => {
+    handleGenerate();
+  });
+  listen(supportAllBtn, 'click', () => {
+    handleGenerate();
+  });
   listen(clearBtn, 'click', () => {
     viewer.clearSupports();
+    for (const obj of viewer.objects ?? []) clearStoredPillars(obj.id);
+    clearInspection();
     ctx.updateEstimate();
     ctx.scheduleProjectAutosave();
   });
+
+  // Wire support-click → explanation popup
+  const canvas = document.getElementById('viewer-canvas');
+  listen(canvas, 'support-clicked', ((
+    e: CustomEvent<{ x: number; y: number; z: number; screenX: number; screenY: number }>,
+  ) => {
+    const { x, y, z, screenX, screenY } = e.detail;
+    const match = findNearestPillar(x, y, z);
+    if (match) {
+      inspectPillar(match.pillar, match.explanation, screenX, screenY);
+    } else {
+      clearInspection();
+    }
+  }) as EventListener);
   listen(zElevation, 'change', () => {
     viewer.setElevation(parseFloat(zElevation?.value ?? '0'));
     ctx.clearActivePlateSlice();

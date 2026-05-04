@@ -25,6 +25,7 @@ function makeViewer(overrides: Partial<LegacyViewer> = {}): LegacyViewer {
       modelVolume: 500,
       supportVolume: 0,
     })),
+    objects: [],
     ...overrides,
   } as unknown as LegacyViewer;
 }
@@ -74,13 +75,15 @@ describe('executeSlice', () => {
   });
 
   it('forwards paint marks to the slicer', async () => {
-    const marks = [{
-      x: 1,
-      y: 2,
-      z: 3,
-      radiusMM: 4,
-      depthMM: 0.5,
-    }];
+    const marks = [
+      {
+        x: 1,
+        y: 2,
+        z: 3,
+        radiusMM: 4,
+        depthMM: 0.5,
+      },
+    ];
     const viewer = makeViewer({ getPaintSliceMarks: vi.fn(() => marks) });
     const slicer = {
       ...makeSlicer([new Uint8Array(4)]),
@@ -144,6 +147,7 @@ describe('executeSlice', () => {
         modelVolume: 400,
         supportVolume: 100,
       })),
+      objects: [],
     });
     const slicer = makeSlicer([layer]);
     const result = await executeSlice(viewer, slicer, 0.05, makeProgress());

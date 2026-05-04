@@ -2,15 +2,10 @@
 // Mounts the intent painting UI: intent buttons, priority dropdown,
 // brush controls, tradeoff sliders, and conflict list.
 
-import * as THREE from 'three';
 import type { AppContext } from '@core/types';
 import type { LegacyObject } from '@core/legacy-types';
 import { listen } from '@features/app-shell/utils';
-import {
-  type IntentPriority,
-  ALL_INTENTS,
-  hasAnyIntent,
-} from './types';
+import { type IntentPriority, ALL_INTENTS, hasAnyIntent } from './types';
 import {
   activeIntentBrush,
   appearanceReliabilityBalance,
@@ -20,15 +15,10 @@ import {
   clearIntents,
   getIntentBuffer,
 } from './store';
-import {
-  buildIntentOverlayGeometry,
-  createIntentOverlayMaterial,
-} from './intent-overlay';
+import { mountConflictInspector } from './conflict-inspector';
 
 export function mountIntentPanel(ctx: AppContext): void {
   const { viewer } = ctx;
-  // Cast scene to THREE.Scene for overlay management
-  const scene = viewer.scene as THREE.Scene;
 
   // ─── Intent buttons ──────────────────────────────────────
   for (const intent of ALL_INTENTS) {
@@ -50,7 +40,9 @@ export function mountIntentPanel(ctx: AppContext): void {
   });
 
   // ─── Brush radius ────────────────────────────────────────
-  const brushRadiusInput = document.getElementById('intent-brush-radius') as HTMLInputElement | null;
+  const brushRadiusInput = document.getElementById(
+    'intent-brush-radius',
+  ) as HTMLInputElement | null;
   const brushRadiusVal = document.getElementById('intent-brush-radius-val');
   listen(brushRadiusInput, 'input', () => {
     if (!brushRadiusInput) return;
@@ -77,9 +69,42 @@ export function mountIntentPanel(ctx: AppContext): void {
     _refreshOverlay();
   });
 
+  // ─── Select all / Clear all buttons ──────────────────────
+  const selectAllBtn = document.getElementById('intent-select-all-btn');
+  const clearAllBtn = document.getElementById('intent-clear-all-btn');
+
+  listen(selectAllBtn, 'click', () => {
+    const targets = viewer.selected.length > 0 ? viewer.selected : [];
+    for (const obj of targets) {
+      const triCount = viewer.getObjectTriangleCount(obj.id);
+      if (!triCount) continue;
+      ensureIntentBuffer(obj.id, triCount);
+      const allIndices = Array.from({ length: triCount }, (_, i) => i);
+      const { intent, priority } = activeIntentBrush.value;
+      setFaceIntents(obj.id, allIndices, intent, priority);
+      const buf = getIntentBuffer(obj.id);
+      if (buf) obj.intentBuffer = buf;
+    }
+    _refreshOverlay();
+    _updatePanelState();
+  });
+
+  listen(clearAllBtn, 'click', () => {
+    for (const obj of viewer.objects) {
+      clearIntents(obj.id);
+      obj.intentBuffer = undefined;
+    }
+    _refreshOverlay();
+    _updatePanelState();
+  });
+
   // ─── Tradeoff sliders ────────────────────────────────────
-  const appearanceSlider = document.getElementById('intent-appearance-reliability') as HTMLInputElement | null;
-  const cleanupSlider = document.getElementById('intent-cleanup-material') as HTMLInputElement | null;
+  const appearanceSlider = document.getElementById(
+    'intent-appearance-reliability',
+  ) as HTMLInputElement | null;
+  const cleanupSlider = document.getElementById(
+    'intent-cleanup-material',
+  ) as HTMLInputElement | null;
 
   listen(appearanceSlider, 'input', () => {
     if (!appearanceSlider) return;
@@ -92,16 +117,9 @@ export function mountIntentPanel(ctx: AppContext): void {
   });
 
   // ─── Intent overlay management ────────────────────────────
-  let overlayMesh: THREE.Mesh | null = null;
 
   function _refreshOverlay(): void {
-    // Clean up previous overlay
-    if (overlayMesh) {
-      scene.remove(overlayMesh);
-      overlayMesh.geometry?.dispose();
-      (overlayMesh.material as THREE.Material)?.dispose();
-      overlayMesh = null;
-    }
+    viewer.clearIntentOverlay();
 
     const targets = viewer.selected.length > 0 ? viewer.selected : [];
     if (targets.length === 0) {
@@ -109,42 +127,29 @@ export function mountIntentPanel(ctx: AppContext): void {
       return;
     }
 
-    // Build overlay for first selected object that has intents
+    // Show overlay for first selected object that has intents
     for (const obj of targets) {
       const buffer = getIntentBuffer(obj.id);
       if (!buffer || !hasAnyIntent(buffer)) continue;
-
-      const mesh = obj.mesh as unknown as THREE.Mesh;
-      mesh.updateMatrixWorld(true);
-      const geo = buildIntentOverlayGeometry(
-        mesh.geometry,
-        buffer,
-        mesh.matrixWorld,
-      );
-      if (!geo) continue;
-
-      overlayMesh = new THREE.Mesh(geo, createIntentOverlayMaterial());
-      overlayMesh.renderOrder = 900;
-      scene.add(overlayMesh);
+      viewer.showIntentOverlay(obj.id, buffer);
       break; // one overlay at a time for now
     }
     viewer.requestRender();
   }
 
   // ─── Handle paint events from viewer ───────────────────────
-  listen(viewer.canvas, 'intent-paint-faces', ((e: CustomEvent<{ objectId: string; faceIndices: number[] }>) => {
+  listen(viewer.canvas, 'intent-paint-faces', ((
+    e: CustomEvent<{ objectId: string; faceIndices: number[] }>,
+  ) => {
     const { objectId, faceIndices } = e.detail;
-    const obj = [...viewer.selected, ...viewer.objects].find((o: LegacyObject) => o.id === objectId);
+    const obj = [...viewer.selected, ...viewer.objects].find(
+      (o: LegacyObject) => o.id === objectId,
+    );
     if (!obj) return;
 
-    // Get triangle count from geometry
-    const mesh = obj.mesh as unknown as THREE.Mesh;
-    const geo = mesh.geometry;
-    const pos = geo.attributes.position;
-    if (!pos) return;
-    const triCount = geo.index
-      ? Math.floor(geo.index.count / 3)
-      : Math.floor(pos.count / 3);
+    // Get triangle count from viewer
+    const triCount = viewer.getObjectTriangleCount(objectId);
+    if (!triCount) return;
     ensureIntentBuffer(objectId, triCount);
 
     // Write the active brush intent to the selected faces
@@ -204,4 +209,10 @@ export function mountIntentPanel(ctx: AppContext): void {
 
   _updateActiveButton();
   _updatePanelState();
+
+  // ─── Mount conflict inspector ────────────────────────────
+  const conflictContainer = document.getElementById('intent-conflicts');
+  if (conflictContainer) {
+    mountConflictInspector(conflictContainer);
+  }
 }

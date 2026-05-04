@@ -64,7 +64,7 @@ export class ModelRepairer {
 
   constructor(geometry: THREE.BufferGeometry, options: RepairOptions = {}) {
     this.geometry = geometry;
-    this.options = { ...RepairDefaults, ...options };
+    this.options = { ...RepairDefaults, ...options } as Required<RepairOptions>;
     this._originalGeometry = geometry.clone();
   }
 
@@ -90,9 +90,12 @@ export class ModelRepairer {
     };
     for (const result of results) {
       if (result.stats) {
-        totalStats.verticesRemoved += result.stats.verticesRemoved ?? 0;
-        totalStats.trianglesRemoved += result.stats.trianglesRemoved ?? 0;
-        totalStats.normalsFlipped += result.stats.normalsFlipped ?? 0;
+        totalStats.verticesRemoved =
+          (totalStats.verticesRemoved ?? 0) + (result.stats.verticesRemoved ?? 0);
+        totalStats.trianglesRemoved =
+          (totalStats.trianglesRemoved ?? 0) + (result.stats.trianglesRemoved ?? 0);
+        totalStats.normalsFlipped =
+          (totalStats.normalsFlipped ?? 0) + (result.stats.normalsFlipped ?? 0);
       }
     }
 
@@ -132,7 +135,9 @@ export class ModelRepairer {
 
     const verticesRemoved = pos.count - uniqueVertices.length;
     if (verticesRemoved === 0) {
-      return new RepairResult(true, 'No duplicate vertices found', this.geometry, { verticesRemoved: 0 });
+      return new RepairResult(true, 'No duplicate vertices found', this.geometry, {
+        verticesRemoved: 0,
+      });
     }
 
     const newPos = new Float32Array(uniqueVertices.length * 3);
@@ -156,7 +161,9 @@ export class ModelRepairer {
     newGeom.computeBoundingBox();
     this.geometry = newGeom;
 
-    return new RepairResult(true, `Merged ${verticesRemoved} duplicate vertices`, this.geometry, { verticesRemoved });
+    return new RepairResult(true, `Merged ${verticesRemoved} duplicate vertices`, this.geometry, {
+      verticesRemoved,
+    });
   }
 
   fixDegenerateTriangles(options: { tolerance?: number } = {}): RepairResult {
@@ -171,9 +178,15 @@ export class ModelRepairer {
       const b = index ? index.getX(i * 3 + 1) : i * 3 + 1;
       const c = index ? index.getX(i * 3 + 2) : i * 3 + 2;
 
-      const e1x = pos.getX(b) - pos.getX(a), e1y = pos.getY(b) - pos.getY(a), e1z = pos.getZ(b) - pos.getZ(a);
-      const e2x = pos.getX(c) - pos.getX(a), e2y = pos.getY(c) - pos.getY(a), e2z = pos.getZ(c) - pos.getZ(a);
-      const cx = e1y * e2z - e1z * e2y, cy = e1z * e2x - e1x * e2z, cz = e1x * e2y - e1y * e2x;
+      const e1x = pos.getX(b) - pos.getX(a),
+        e1y = pos.getY(b) - pos.getY(a),
+        e1z = pos.getZ(b) - pos.getZ(a);
+      const e2x = pos.getX(c) - pos.getX(a),
+        e2y = pos.getY(c) - pos.getY(a),
+        e2z = pos.getZ(c) - pos.getZ(a);
+      const cx = e1y * e2z - e1z * e2y,
+        cy = e1z * e2x - e1x * e2z,
+        cz = e1x * e2y - e1y * e2x;
       const area = Math.sqrt(cx * cx + cy * cy + cz * cz) / 2;
 
       if (area >= tolerance) validTriangles.push(a, b, c);
@@ -181,7 +194,9 @@ export class ModelRepairer {
 
     const trianglesRemoved = triCount - validTriangles.length / 3;
     if (trianglesRemoved === 0) {
-      return new RepairResult(true, 'No degenerate triangles found', this.geometry, { trianglesRemoved: 0 });
+      return new RepairResult(true, 'No degenerate triangles found', this.geometry, {
+        trianglesRemoved: 0,
+      });
     }
 
     const usedVertices = new Set(validTriangles);
@@ -221,7 +236,10 @@ export class ModelRepairer {
 
     if (!this.geometry.boundingBox) this.geometry.computeBoundingBox();
     const bb = this.geometry.boundingBox;
-    if (!bb) return new RepairResult(true, 'No bounding box available', this.geometry, { normalsFlipped: 0 });
+    if (!bb)
+      return new RepairResult(true, 'No bounding box available', this.geometry, {
+        normalsFlipped: 0,
+      });
     const cx = (bb.min.x + bb.max.x) / 2;
     const cy = (bb.min.y + bb.max.y) / 2;
     const cz = (bb.min.z + bb.max.z) / 2;
@@ -234,17 +252,31 @@ export class ModelRepairer {
       const b = index ? index.getX(i * 3 + 1) : i * 3 + 1;
       const c = index ? index.getX(i * 3 + 2) : i * 3 + 2;
 
-      const ax = pos.getX(a), ay = pos.getY(a), az = pos.getZ(a);
-      const bx = pos.getX(b), by = pos.getY(b), bz = pos.getZ(b);
-      const ccx = pos.getX(c), ccy = pos.getY(c), ccz = pos.getZ(c);
+      const ax = pos.getX(a),
+        ay = pos.getY(a),
+        az = pos.getZ(a);
+      const bx = pos.getX(b),
+        by = pos.getY(b),
+        bz = pos.getZ(b);
+      const ccx = pos.getX(c),
+        ccy = pos.getY(c),
+        ccz = pos.getZ(c);
 
-      const e1x = bx - ax, e1y = by - ay, e1z = bz - az;
-      const e2x = ccx - ax, e2y = ccy - ay, e2z = ccz - az;
+      const e1x = bx - ax,
+        e1y = by - ay,
+        e1z = bz - az;
+      const e2x = ccx - ax,
+        e2y = ccy - ay,
+        e2z = ccz - az;
       let nx = e1y * e2z - e1z * e2y;
       let ny = e1z * e2x - e1x * e2z;
       let nz = e1x * e2y - e1y * e2x;
       const nl = Math.sqrt(nx * nx + ny * ny + nz * nz);
-      if (nl > 0) { nx /= nl; ny /= nl; nz /= nl; }
+      if (nl > 0) {
+        nx /= nl;
+        ny /= nl;
+        nz /= nl;
+      }
 
       const fx = (ax + bx + ccx) / 3;
       const fy = (ay + by + ccy) / 3;
@@ -280,7 +312,9 @@ export class ModelRepairer {
     }
 
     this.geometry.computeVertexNormals();
-    return new RepairResult(true, `Flipped ${triCount} triangle normals`, this.geometry, { normalsFlipped: triCount });
+    return new RepairResult(true, `Flipped ${triCount} triangle normals`, this.geometry, {
+      normalsFlipped: triCount,
+    });
   }
 
   fillSmallHoles(options: { maxHoleSize?: number } = {}): RepairResult {
@@ -291,19 +325,26 @@ export class ModelRepairer {
     const edgeMap = new Map<string, BoundaryEdge>();
     const addEdge = (v1: number, v2: number): void => {
       const key = v1 < v2 ? `${v1}_${v2}` : `${v2}_${v1}`;
-      if (!edgeMap.has(key)) edgeMap.set(key, { count: 0, vertices: [Math.min(v1, v2), Math.max(v1, v2)] });
+      if (!edgeMap.has(key))
+        edgeMap.set(key, { count: 0, vertices: [Math.min(v1, v2), Math.max(v1, v2)] });
       const edge = edgeMap.get(key);
       if (edge) edge.count++;
     };
 
     if (index) {
       for (let i = 0; i < index.count; i += 3) {
-        const a = index.getX(i), b = index.getX(i + 1), c = index.getX(i + 2);
-        addEdge(a, b); addEdge(b, c); addEdge(c, a);
+        const a = index.getX(i),
+          b = index.getX(i + 1),
+          c = index.getX(i + 2);
+        addEdge(a, b);
+        addEdge(b, c);
+        addEdge(c, a);
       }
     } else {
       for (let i = 0; i < pos.count; i += 3) {
-        addEdge(i, i + 1); addEdge(i + 1, i + 2); addEdge(i + 2, i);
+        addEdge(i, i + 1);
+        addEdge(i + 1, i + 2);
+        addEdge(i + 2, i);
       }
     }
 
@@ -326,11 +367,21 @@ export class ModelRepairer {
     });
 
     if (smallHoles.length === 0) {
-      return new RepairResult(true, `Found ${holes.length} hole(s), none < ${maxHoleSize}mm`, this.geometry, { holesFilled: 0 });
+      return new RepairResult(
+        true,
+        `Found ${holes.length} hole(s), none < ${maxHoleSize}mm`,
+        this.geometry,
+        { holesFilled: 0 },
+      );
     }
 
     this.fixDuplicateVertices({ tolerance: maxHoleSize / 10 });
-    return new RepairResult(true, `Attempted to fill ${smallHoles.length} small hole(s)`, this.geometry, { holesFilled: smallHoles.length });
+    return new RepairResult(
+      true,
+      `Attempted to fill ${smallHoles.length} small hole(s)`,
+      this.geometry,
+      { holesFilled: smallHoles.length },
+    );
   }
 
   private _findHoleChains(boundaryEdges: BoundaryEdge[]): BoundaryEdge[][] {
@@ -357,8 +408,13 @@ export class ModelRepairer {
         for (const nextEdge of vertexEdges.get(currentVertex) ?? []) {
           const nk = `${nextEdge.vertices[0]}_${nextEdge.vertices[1]}`;
           if (visited.has(nk)) continue;
-          const nextVertex = nextEdge.vertices[0] === currentVertex ? nextEdge.vertices[1] : nextEdge.vertices[0];
-          if (nextVertex === chain[0].vertices[0]) { visited.add(nk); extended = false; break; }
+          const nextVertex =
+            nextEdge.vertices[0] === currentVertex ? nextEdge.vertices[1] : nextEdge.vertices[0];
+          if (nextVertex === chain[0].vertices[0]) {
+            visited.add(nk);
+            extended = false;
+            break;
+          }
           chain.push(nextEdge);
           visited.add(nk);
           currentVertex = nextVertex;
@@ -380,17 +436,23 @@ export class ModelRepairer {
     const parent = new Int32Array(triCount);
     for (let i = 0; i < triCount; i++) parent[i] = i;
     const find = (x: number): number => {
-      while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; }
+      while (parent[x] !== x) {
+        parent[x] = parent[parent[x]];
+        x = parent[x];
+      }
       return x;
     };
     const union = (a: number, b: number): void => {
-      const rA = find(a), rB = find(b);
+      const rA = find(a),
+        rB = find(b);
       if (rA !== rB) parent[rB] = rA;
     };
 
     const vertexTriangles = new Map<number, number[]>();
     const getTriVerts = (ti: number): number[] =>
-      index ? [index.getX(ti * 3), index.getX(ti * 3 + 1), index.getX(ti * 3 + 2)] : [ti * 3, ti * 3 + 1, ti * 3 + 2];
+      index
+        ? [index.getX(ti * 3), index.getX(ti * 3 + 1), index.getX(ti * 3 + 2)]
+        : [ti * 3, ti * 3 + 1, ti * 3 + 2];
 
     for (let ti = 0; ti < triCount; ti++) {
       for (const v of getTriVerts(ti)) {
@@ -420,7 +482,9 @@ export class ModelRepairer {
     }
 
     if (smallRemoved === 0) {
-      return new RepairResult(true, 'No small components found', this.geometry, { componentsRemoved: 0 });
+      return new RepairResult(true, 'No small components found', this.geometry, {
+        componentsRemoved: 0,
+      });
     }
 
     const usedVertices = new Set(validTriangles);
@@ -431,7 +495,8 @@ export class ModelRepairer {
       newPositions.push(pos.getX(vi), pos.getY(vi), pos.getZ(vi));
     }
     const newIndices = new Uint32Array(validTriangles.length);
-    for (let i = 0; i < validTriangles.length; i++) newIndices[i] = vertexRemap.get(validTriangles[i]) ?? 0;
+    for (let i = 0; i < validTriangles.length; i++)
+      newIndices[i] = vertexRemap.get(validTriangles[i]) ?? 0;
 
     const newGeom = new THREE.BufferGeometry();
     newGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(newPositions), 3));
@@ -440,11 +505,19 @@ export class ModelRepairer {
     newGeom.computeBoundingBox();
     this.geometry = newGeom;
 
-    return new RepairResult(true, `Removed ${smallRemoved} triangles from small components`, this.geometry, { componentsRemoved: smallRemoved });
+    return new RepairResult(
+      true,
+      `Removed ${smallRemoved} triangles from small components`,
+      this.geometry,
+      { componentsRemoved: smallRemoved },
+    );
   }
 }
 
-export function repairGeometry(geometry: THREE.BufferGeometry, options: RepairOptions = {}): RepairResult {
+export function repairGeometry(
+  geometry: THREE.BufferGeometry,
+  options: RepairOptions = {},
+): RepairResult {
   const repairer = new ModelRepairer(geometry, options);
   return repairer.autoRepair();
 }

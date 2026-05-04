@@ -7,8 +7,8 @@
 
 interface BufferAttribute {
   getX(index: number): number;
-  getY?(index: number): number;
-  getZ?(index: number): number;
+  getY(index: number): number;
+  getZ(index: number): number;
   count: number;
 }
 
@@ -27,9 +27,9 @@ interface PrinterSpecLike {
 }
 
 export function computeMeshVolume(geometry: GeometryLike | null): number {
-  if (!geometry?.attributes?.position) return 0;
-  const pos = geometry.attributes.position;
-  const index = geometry.index;
+  const pos = geometry?.attributes?.position;
+  if (!pos) return 0;
+  const index = geometry?.index;
 
   const ax = (i: number): number => pos.getX(i);
   const ay = (i: number): number => pos.getY(i);
@@ -89,9 +89,15 @@ export function computeMeshVolume(geometry: GeometryLike | null): number {
       const b = index.getX(tri * 3 + 1);
       const c = index.getX(tri * 3 + 2);
       componentVolume[tri] = signedTetVolume(
-        ax(a), ay(a), az(a),
-        ax(b), ay(b), az(b),
-        ax(c), ay(c), az(c),
+        ax(a),
+        ay(a),
+        az(a),
+        ax(b),
+        ay(b),
+        az(b),
+        ax(c),
+        ay(c),
+        az(c),
       );
       connectVertex(a, tri);
       connectVertex(b, tri);
@@ -101,9 +107,15 @@ export function computeMeshVolume(geometry: GeometryLike | null): number {
     for (let tri = 0; tri < triCount; tri++) {
       const i = tri * 3;
       componentVolume[tri] = signedTetVolume(
-        ax(i), ay(i), az(i),
-        ax(i + 1), ay(i + 1), az(i + 1),
-        ax(i + 2), ay(i + 2), az(i + 2),
+        ax(i),
+        ay(i),
+        az(i),
+        ax(i + 1),
+        ay(i + 1),
+        az(i + 1),
+        ax(i + 2),
+        ay(i + 2),
+        az(i + 2),
       );
       connectVertex(i, tri);
       connectVertex(i + 1, tri);
@@ -125,9 +137,15 @@ export function computeMeshVolume(geometry: GeometryLike | null): number {
 }
 
 function signedTetVolume(
-  x0: number, y0: number, z0: number,
-  x1: number, y1: number, z1: number,
-  x2: number, y2: number, z2: number,
+  x0: number,
+  y0: number,
+  z0: number,
+  x1: number,
+  y1: number,
+  z1: number,
+  x2: number,
+  y2: number,
+  z2: number,
 ): number {
   const cx = y1 * z2 - z1 * y2;
   const cy = z1 * x2 - x1 * z2;

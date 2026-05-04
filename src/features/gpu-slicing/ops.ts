@@ -4,11 +4,17 @@
  */
 import type { LegacySlicer, LegacyViewer, SlicedVolumes } from '@core/legacy-types';
 import { countWhitePixels } from '@core/pixel-utils';
+import type { IntentConflict } from '@features/surface-intent/engine-types';
+import { getIntentBuffer } from '@features/surface-intent/store';
+import { detectConflicts } from '@features/surface-intent/engine';
+import { detectOverhangs } from '@features/support-generation/detect';
 
 export interface SliceResult {
   layerCount: number;
   volumes: SlicedVolumes;
   perLayerWhitePixels: Float64Array;
+  /** Conflicts detected during pre-slice analysis (if intent buffers present) */
+  conflicts: IntentConflict[];
 }
 
 export interface SliceProgress {
@@ -55,6 +61,8 @@ function computeVolumes(
 /**
  * Execute the full slice pipeline for the current plate.
  * Returns null if there's no geometry to slice.
+ * When models have intent buffers, runs conflict detection and builds
+ * IntentSupportParams for downstream use.
  */
 export async function executeSlice(
   viewer: LegacyViewer,
@@ -68,6 +76,27 @@ export async function executeSlice(
 
   progress.showProgress('Merging & Uploading geometry...');
   await new Promise((r) => setTimeout(r, 50));
+
+  // ─── Intent-aware pre-slice analysis ──────────────────────
+  const conflicts: IntentConflict[] = [];
+
+  for (const obj of viewer.objects) {
+    const buffer = getIntentBuffer(obj.id);
+    if (!buffer) continue;
+
+    // Run overhang detection for conflict analysis
+    const geo = obj.mesh.geometry as {
+      attributes?: { position?: { array: Float32Array; count: number } };
+      index?: { count: number };
+    };
+    const posAttr = geo.attributes?.position;
+    if (posAttr) {
+      const triCount = geo.index ? Math.floor(geo.index.count / 3) : Math.floor(posAttr.count / 3);
+      const { overhangTriangles } = detectOverhangs(posAttr.array, triCount);
+      const modelConflicts = detectConflicts(buffer, overhangTriangles, posAttr.array, triCount);
+      conflicts.push(...modelConflicts);
+    }
+  }
 
   slicer.uploadGeometry(mergedModelGeo, mergedSupportGeo);
   slicer.setInstances(0, null);
@@ -108,5 +137,6 @@ export async function executeSlice(
     layerCount: perLayerWhite.length,
     volumes,
     perLayerWhitePixels: new Float64Array(perLayerWhite),
+    conflicts,
   };
 }

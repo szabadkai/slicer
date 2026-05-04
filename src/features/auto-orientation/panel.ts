@@ -3,6 +3,8 @@
  */
 import type { AppContext } from '@core/types';
 import { listen } from '@features/app-shell/utils';
+import { getIntentBuffer } from '@features/surface-intent/store';
+import type { IntentBuffer } from '@features/surface-intent/types';
 
 export function mountOrientationPanel(ctx: AppContext): void {
   const { viewer } = ctx;
@@ -14,11 +16,18 @@ export function mountOrientationPanel(ctx: AppContext): void {
     if (targets.length === 0) return;
     const originalIds = targets.map((o) => o.id);
 
-    const { optimizeOrientationAsync } = await import('../../orientation') as {
-      optimizeOrientationAsync: (geo: unknown, preset: string, onProgress: (f: number, t: string) => void) => Promise<unknown>;
+    const { optimizeOrientationAsync } = (await import('../../orientation')) as {
+      optimizeOrientationAsync: (
+        geo: unknown,
+        preset: string,
+        onProgress: (f: number, t: string) => void,
+        intentBuffer?: IntentBuffer,
+      ) => Promise<unknown>;
     };
 
-    ctx.showProgress(targets.length === 1 ? 'Optimizing orientation...' : 'Optimizing selected models...');
+    ctx.showProgress(
+      targets.length === 1 ? 'Optimizing orientation...' : 'Optimizing selected models...',
+    );
 
     let failureCount = 0;
     for (let i = 0; i < targets.length; i++) {
@@ -27,15 +36,27 @@ export function mountOrientationPanel(ctx: AppContext): void {
       const geometry = viewer.getModelGeometry();
       if (!geometry) continue;
 
-      ctx.updateProgress(i / targets.length,
-        targets.length === 1 ? 'Optimizing orientation...' : `Orienting model ${i + 1} / ${targets.length}`);
+      ctx.updateProgress(
+        i / targets.length,
+        targets.length === 1
+          ? 'Optimizing orientation...'
+          : `Orienting model ${i + 1} / ${targets.length}`,
+      );
 
       try {
-        const quaternion = await optimizeOrientationAsync(geometry, preset, (fraction, text) => {
-          const overall = (i + fraction) / targets.length;
-          ctx.updateProgress(overall,
-            targets.length === 1 ? text : `Orienting model ${i + 1} / ${targets.length}`);
-        });
+        const intentBuf = getIntentBuffer(obj.id);
+        const quaternion = await optimizeOrientationAsync(
+          geometry,
+          preset,
+          (fraction, text) => {
+            const overall = (i + fraction) / targets.length;
+            ctx.updateProgress(
+              overall,
+              targets.length === 1 ? text : `Orienting model ${i + 1} / ${targets.length}`,
+            );
+          },
+          intentBuf,
+        );
         viewer.applyRotation(quaternion);
       } catch (error) {
         failureCount += 1;

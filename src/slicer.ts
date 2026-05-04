@@ -12,6 +12,12 @@
  */
 
 import printersData from './data/printers.json';
+import {
+  paintPatternHeightAt,
+  isFilledMask,
+  hasFilledWithin,
+  mat4Multiply,
+} from './slicer-paint-texture';
 
 export interface PrinterSpec {
   name: string;
@@ -63,107 +69,6 @@ export interface PaintTextureConfig {
   strength: number;
   pattern: number;
   patternScaleMM: number;
-}
-
-function slHash(x: number, y: number): number {
-  let px = fract(x * 0.1031);
-  let py = fract(y * 0.1031);
-  const pz = fract(x * 0.1031);
-  const d = px * (py + 33.33) + py * (pz + 33.33) + pz * (px + 33.33);
-  px += d; py += d;
-  return fract((px + py) * (pz + d));
-}
-
-function slNoise(x: number, y: number): number {
-  const ix = Math.floor(x);
-  const iy = Math.floor(y);
-  let fx = x - ix;
-  let fy = y - iy;
-  fx = fx * fx * (3 - 2 * fx);
-  fy = fy * fy * (3 - 2 * fy);
-  const a = slHash(ix, iy);
-  const b = slHash(ix + 1, iy);
-  const c = slHash(ix, iy + 1);
-  const d = slHash(ix + 1, iy + 1);
-  return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
-}
-
-function slFbm(x: number, y: number): number {
-  let v = 0.5 * slNoise(x, y);
-  v += 0.25 * slNoise(x * 2 + 17, y * 2 + 31);
-  v += 0.125 * slNoise(x * 4 + 53, y * 4 + 97);
-  return v / 0.875;
-}
-
-function paintPatternHeightAt(x: number, z: number, pattern: number, scaleMM: number): number {
-  if (pattern <= 0) return 1;
-  const scale = Math.max(scaleMM, 0.001);
-  const u = x / scale;
-  const v = z / scale;
-  if (pattern === 1) {
-    const weaveA = Math.floor((u + v) * 0.5) & 1;
-    const weaveB = Math.floor((u - v) * 0.5) & 1;
-    return ((Math.floor(v * 0.25) & 1) === 0 ? weaveA : weaveB) ? 1 : -1;
-  }
-  if (pattern === 2) {
-    const diagA = Math.abs(fract(u + v) - 0.5);
-    const diagB = Math.abs(fract(u - v) - 0.5);
-    return diagA < 0.16 || diagB < 0.16 ? 1 : -1;
-  }
-  if (pattern === 3) {
-    return Math.abs(fract(u) - 0.5) < 0.22 ? 1 : -1;
-  }
-  if (pattern === 4) {
-    // noise — organic value noise, threshold at 0.5
-    return slFbm(u * 3, v * 3) > 0.5 ? 1 : -1;
-  }
-  if (pattern === 5) {
-    // bumps — soft hemispheres on a grid
-    const fx = fract(u) - 0.5;
-    const fz = fract(v) - 0.5;
-    return Math.sqrt(fx * fx + fz * fz) < 0.35 ? 1 : -1;
-  }
-  return 1;
-}
-
-function fract(value: number): number {
-  return value - Math.floor(value);
-}
-
-function isFilledMask(mask: Uint8Array, w: number, x: number, y: number): boolean {
-  return mask[y * w + x] > 128;
-}
-
-function hasFilledWithin(mask: Uint8Array, w: number, h: number, x: number, y: number, radiusPx: number): boolean {
-  const radiusSq = radiusPx * radiusPx;
-  const minX = Math.max(0, Math.floor(x - radiusPx));
-  const maxX = Math.min(w - 1, Math.ceil(x + radiusPx));
-  const minY = Math.max(0, Math.floor(y - radiusPx));
-  const maxY = Math.min(h - 1, Math.ceil(y + radiusPx));
-  for (let yy = minY; yy <= maxY; yy++) {
-    const dy = yy - y;
-    for (let xx = minX; xx <= maxX; xx++) {
-      const dx = xx - x;
-      if (dx * dx + dy * dy <= radiusSq && isFilledMask(mask, w, xx, yy)) return true;
-    }
-  }
-  return false;
-}
-
-
-// --- Column-major 4×4 matrix helpers (no THREE.js) ---
-
-function mat4Multiply(a: Float32Array, b: Float32Array, out: Float32Array): Float32Array {
-  for (let col = 0; col < 4; col++) {
-    for (let row = 0; row < 4; row++) {
-      out[col * 4 + row] =
-        a[row] * b[col * 4] +
-        a[4 + row] * b[col * 4 + 1] +
-        a[8 + row] * b[col * 4 + 2] +
-        a[12 + row] * b[col * 4 + 3];
-    }
-  }
-  return out;
 }
 
 export class Slicer {
@@ -281,9 +186,7 @@ export class Slicer {
 
     const data = new Float32Array(positions);
     this.vertexCount = data.length / 3;
-    this.drawRanges = drawRanges.length > 0
-      ? drawRanges
-      : [{ start: 0, count: this.vertexCount }];
+    this.drawRanges = drawRanges.length > 0 ? drawRanges : [{ start: 0, count: this.vertexCount }];
 
     if (this.meshBuffer) gl.deleteBuffer(this.meshBuffer);
     this.meshBuffer = gl.createBuffer();
@@ -333,7 +236,8 @@ export class Slicer {
   }
 
   private _findTriangleComponents(geometry: GeometryLike): number[][] {
-    const pos = geometry.attributes.position;
+    const pos = geometry.attributes?.position;
+    if (!pos) return [];
     const index = geometry.index;
     const triCount = index ? Math.floor(index.count / 3) : Math.floor(pos.count / 3);
     if (triCount === 0) return [];
@@ -358,7 +262,9 @@ export class Slicer {
       let rootB = find(b);
       if (rootA === rootB) return;
       if (rank[rootA] < rank[rootB]) {
-        const tmp = rootA; rootA = rootB; rootB = tmp;
+        const tmp = rootA;
+        rootA = rootB;
+        rootB = tmp;
       }
       parent[rootB] = rootA;
       if (rank[rootA] === rank[rootB]) rank[rootA]++;
@@ -443,10 +349,17 @@ export class Slicer {
       const z = this.minY + (i + 0.5) * layerHeightMM;
       this._renderSlice(z);
 
-      const pixels = collect ? new Uint8Array(pixelByteCount) : reusable ?? new Uint8Array(pixelByteCount);
+      const pixels = collect
+        ? new Uint8Array(pixelByteCount)
+        : (reusable ?? new Uint8Array(pixelByteCount));
       gl.readPixels(
-        0, 0, this.printer.resolutionX, this.printer.resolutionY,
-        gl.RGBA, gl.UNSIGNED_BYTE, pixels,
+        0,
+        0,
+        this.printer.resolutionX,
+        this.printer.resolutionY,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        pixels,
       );
       this._applyPaintSliceMarks(pixels, z, layerHeightMM);
       if (collect && layers) layers.push(pixels);
@@ -474,8 +387,13 @@ export class Slicer {
     const z = this.minY + (layerIndex + 0.5) * layerHeightMM;
     this._renderSlice(z);
     gl.readPixels(
-      0, 0, this.printer.resolutionX, this.printer.resolutionY,
-      gl.RGBA, gl.UNSIGNED_BYTE, pixels,
+      0,
+      0,
+      this.printer.resolutionX,
+      this.printer.resolutionY,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      pixels,
     );
     this._applyPaintSliceMarks(pixels, z, layerHeightMM);
     return pixels;
@@ -527,7 +445,10 @@ export class Slicer {
           );
           const displacementPx = Math.max(1, Math.ceil(patternHeight * maxOffsetPx));
           const filled = isFilledMask(sourceMask, w, px, py);
-          const shouldAdd = patternHeight > 0 && !filled && hasFilledWithin(sourceMask, w, h, px, py, displacementPx);
+          const shouldAdd =
+            patternHeight > 0 &&
+            !filled &&
+            hasFilledWithin(sourceMask, w, h, px, py, displacementPx);
           if (!shouldAdd) continue;
 
           const value = 255;
@@ -557,9 +478,8 @@ export class Slicer {
     const halfD = this.printer.buildDepthMM / 2;
     const proj = this._ortho(-halfW, halfW, -halfD, halfD, near, far);
 
-    const ranges = this.drawRanges.length > 0
-      ? this.drawRanges
-      : [{ start: 0, count: this.vertexCount }];
+    const ranges =
+      this.drawRanges.length > 0 ? this.drawRanges : [{ start: 0, count: this.vertexCount }];
 
     // Single stencil pass for all components — INCR_WRAP/DECR_WRAP is additive,
     // so multiple disconnected shells accumulate correctly without per-range clears.
@@ -627,10 +547,7 @@ export class Slicer {
   }
 
   private readonly _sliceModelView = new Float32Array([
-    1, 0,  0, 0,
-    0, 0, -1, 0,
-    0, 1,  0, 0,
-    0, 0,  0, 1,
+    1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 1,
   ]);
 
   private _modelViewForSlice(): Float32Array {
@@ -638,17 +555,33 @@ export class Slicer {
   }
 
   private _ortho(
-    left: number, right: number, bottom: number, top: number,
-    near: number, far: number,
+    left: number,
+    right: number,
+    bottom: number,
+    top: number,
+    near: number,
+    far: number,
   ): Float32Array {
     const lr = 1 / (left - right);
     const bt = 1 / (bottom - top);
     const nf = 1 / (near - far);
     return new Float32Array([
-      -2 * lr, 0, 0, 0,
-      0, -2 * bt, 0, 0,
-      0, 0, 2 * nf, 0,
-      (left + right) * lr, (top + bottom) * bt, (near + far) * nf, 1,
+      -2 * lr,
+      0,
+      0,
+      0,
+      0,
+      -2 * bt,
+      0,
+      0,
+      0,
+      0,
+      2 * nf,
+      0,
+      (left + right) * lr,
+      (top + bottom) * bt,
+      (near + far) * nf,
+      1,
     ]);
   }
 

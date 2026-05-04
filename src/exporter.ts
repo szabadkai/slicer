@@ -68,20 +68,34 @@ function getGeometryTriangles(geometries: GeometryLike[]): Triangle[] {
       const ib = indexArray ? indexArray[i * 3 + 1] : i * 3 + 1;
       const ic = indexArray ? indexArray[i * 3 + 2] : i * 3 + 2;
 
-      const ax = pos.getX(ia), ay = pos.getY(ia), az = pos.getZ(ia);
-      const bx = pos.getX(ib), by = pos.getY(ib), bz = pos.getZ(ib);
-      const cx = pos.getX(ic), cy = pos.getY(ic), cz = pos.getZ(ic);
+      const ax = pos.getX(ia),
+        ay = pos.getY(ia),
+        az = pos.getZ(ia);
+      const bx = pos.getX(ib),
+        by = pos.getY(ib),
+        bz = pos.getZ(ib);
+      const cx = pos.getX(ic),
+        cy = pos.getY(ic),
+        cz = pos.getZ(ic);
 
       // cb = c - b, ab = a - b
-      const cbx = cx - bx, cby = cy - by, cbz = cz - bz;
-      const abx = ax - bx, aby = ay - by, abz = az - bz;
+      const cbx = cx - bx,
+        cby = cy - by,
+        cbz = cz - bz;
+      const abx = ax - bx,
+        aby = ay - by,
+        abz = az - bz;
 
       // normal = cross(cb, ab), normalized
       let nx = cby * abz - cbz * aby;
       let ny = cbz * abx - cbx * abz;
       let nz = cbx * aby - cby * abx;
       const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
-      if (len > 0) { nx /= len; ny /= len; nz /= len; }
+      if (len > 0) {
+        nx /= len;
+        ny /= len;
+        nz /= len;
+      }
 
       triangles.push({
         normal: { x: nx, y: ny, z: nz },
@@ -250,12 +264,10 @@ export async function exportZip(
   if (!ctx) throw new Error('Failed to get 2D canvas context');
 
   for (let i = 0; i < layers.length; i++) {
-    const pixels = new Uint8ClampedArray(layers[i].buffer.slice(0));
-    const imageData = new ImageData(
-      pixels,
-      resolutionX,
-      resolutionY,
-    );
+    const pixels = new Uint8ClampedArray(
+      layers[i].buffer.slice(0),
+    ) as Uint8ClampedArray<ArrayBuffer>;
+    const imageData = new ImageData(pixels, resolutionX, resolutionY);
 
     ctx.clearRect(0, 0, resolutionX, resolutionY);
     ctx.save();
@@ -265,7 +277,10 @@ export async function exportZip(
 
     const blob = await new Promise<Blob>((resolve, reject) =>
       canvas.toBlob((b) => {
-        if (!b) { reject(new Error('Failed to create blob from canvas')); return; }
+        if (!b) {
+          reject(new Error('Failed to create blob from canvas'));
+          return;
+        }
         resolve(b);
       }, 'image/png'),
     );
@@ -298,7 +313,7 @@ export async function exportZip(
     metadata.supportVolume_mm3 = settings.supportVolumeMm3 ?? 0;
     metadata.volumeBreakdownExact = settings.volumeBreakdownExact !== false;
     metadata.totalVolume_mL =
-      (settings.totalVolumeMm3 ?? (settings.modelVolumeMm3 + (settings.supportVolumeMm3 ?? 0))) /
+      (settings.totalVolumeMm3 ?? settings.modelVolumeMm3 + (settings.supportVolumeMm3 ?? 0)) /
       1000;
   }
   zip.file('metadata.json', JSON.stringify(metadata, null, 2));
@@ -316,7 +331,10 @@ export async function exportZip(
  */
 export function estimatePrintTime(
   layerCount: number,
-  settings: Pick<SliceSettings, 'normalExposure' | 'bottomLayers' | 'bottomExposure' | 'liftHeight' | 'liftSpeed'>,
+  settings: Pick<
+    SliceSettings,
+    'normalExposure' | 'bottomLayers' | 'bottomExposure' | 'liftHeight' | 'liftSpeed'
+  >,
 ): { totalSeconds: number; hours: number; minutes: number } {
   const { normalExposure, bottomLayers, bottomExposure, liftHeight, liftSpeed } = settings;
   const liftTime = (liftHeight * 2) / liftSpeed;

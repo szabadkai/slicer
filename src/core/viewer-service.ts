@@ -26,9 +26,13 @@ export function createViewerService(canvas: HTMLCanvasElement): ViewerService {
 
     addModel(geometry: unknown, opts?: { name?: string }): string {
       if (!viewer) throw new Error('ViewerService not initialized');
-      const obj = viewer.addModel(geometry, 5);
+      const obj = (
+        viewer as unknown as {
+          addModel(g: unknown, e: number): { id: string; mesh: { name: string } };
+        }
+      ).addModel(geometry, 5);
       if (opts?.name) obj.mesh.name = opts.name;
-      return obj.id as string;
+      return obj.id;
     },
 
     removeModel(id: string): void {
@@ -44,9 +48,8 @@ export function createViewerService(canvas: HTMLCanvasElement): ViewerService {
       return { id: obj.id, name: obj.mesh.name || obj.id };
     },
 
-    setLayerImage(_image: ImageData | null): void { // eslint-disable-line @typescript-eslint/no-unused-vars
-      // Layer image is rendered to a separate canvas by the layer-preview feature
-    },
+    // Layer image is rendered to a separate canvas by the layer-preview feature
+    setLayerImage(_image: ImageData | null): void {}, // eslint-disable-line @typescript-eslint/no-unused-vars
 
     setPrinter(spec: PrinterSpec): void {
       if (!viewer) return;
@@ -60,10 +63,10 @@ export function createViewerService(canvas: HTMLCanvasElement): ViewerService {
 
     // ─── Extended API for feature integration ────────────
     get legacy(): LegacyViewer {
+      if (!viewer) throw new Error('ViewerService not initialized');
       return viewer;
     },
   };
 
   return service;
 }
-

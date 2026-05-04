@@ -1,10 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import {
-  generateCandidateUpVectors,
-  scoreCandidates,
-  STRATEGY_PRESETS,
-} from './engine';
+import { generateCandidateUpVectors, scoreCandidates, STRATEGY_PRESETS } from './engine';
 import type { Strategy } from './engine';
+import { createIntentBuffer, encodeIntent } from '@features/surface-intent/types';
 
 // A tall narrow box: 1×1×10 (Z-tall)
 function makeTallBox(): { positions: Float32Array; triangleCount: number } {
@@ -47,11 +44,13 @@ describe('auto-orientation engine', () => {
     const strategies: Strategy[] = ['print-speed', 'minimal-supports', 'surface-quality'];
     for (const s of strategies) {
       const w = STRATEGY_PRESETS[s];
+      // Base orientation weights sum to 1; cosmeticOverhangPenalty is separate
       expect(w.height + w.overhangArea + w.staircaseMetric + w.flatBottomArea).toBeCloseTo(1, 5);
+      expect(w.cosmeticOverhangPenalty).toBeGreaterThan(0);
     }
   });
 
-  it('scoreCandidates returns results for 26 directions (no protected face)', () => {
+  it('scoreCandidates returns results for 26 directions', () => {
     const { positions, triangleCount } = makeTallBox();
     const results = scoreCandidates(positions, triangleCount, 'print-speed');
     expect(results.length).toBe(26);
@@ -66,16 +65,52 @@ describe('auto-orientation engine', () => {
     expect(best.metrics.height).toBeLessThanOrEqual(1.01);
   });
 
-  it('protected face constraint filters orientations', () => {
+  it('cosmeticOverhangArea is 0 when no intent buffer provided', () => {
     const { positions, triangleCount } = makeTallBox();
-    const protectedNormal = { x: 0, y: 1, z: 0 }; // top face must stay up
-    const results = scoreCandidates(positions, triangleCount, 'print-speed', protectedNormal);
-    // Some orientations filtered out
-    expect(results.length).toBeLessThan(26);
-    // All remaining have upY dot protectedNormal >= 0
+    const results = scoreCandidates(positions, triangleCount, 'minimal-supports');
     for (const c of results) {
-      const dot = c.upX * protectedNormal.x + c.upY * protectedNormal.y + c.upZ * protectedNormal.z;
-      expect(dot).toBeGreaterThanOrEqual(0);
+      expect(c.metrics.cosmeticOverhangArea).toBe(0);
     }
+  });
+
+  it('tracks cosmetic overhang area when intent buffer present', () => {
+    const { positions, triangleCount } = makeTallBox();
+    const intentBuffer = createIntentBuffer(triangleCount);
+    // Mark bottom face triangles (indices 6,7) as cosmetic
+    intentBuffer[6] = encodeIntent('cosmetic', 'high');
+    intentBuffer[7] = encodeIntent('cosmetic', 'high');
+
+    const results = scoreCandidates(positions, triangleCount, 'surface-quality', intentBuffer);
+    // At least some orientations should have non-zero cosmetic overhang area
+    const hasCosmeticOverhang = results.some((c) => c.metrics.cosmeticOverhangArea > 0);
+    expect(hasCosmeticOverhang).toBe(true);
+  });
+
+  it('penalizes orientations that create cosmetic overhangs', () => {
+    const { positions, triangleCount } = makeTallBox();
+    const intentBuffer = createIntentBuffer(triangleCount);
+    // Mark top face (indices 4,5) as cosmetic
+    intentBuffer[4] = encodeIntent('cosmetic', 'high');
+    intentBuffer[5] = encodeIntent('cosmetic', 'high');
+
+    const withIntent = scoreCandidates(positions, triangleCount, 'surface-quality', intentBuffer);
+    const withoutIntent = scoreCandidates(positions, triangleCount, 'surface-quality');
+
+    // Find the same orientation in both results and compare scores
+    // Orientations with cosmetic overhang should score worse with intent
+    const intentMap = new Map(withIntent.map((c) => [`${c.upX},${c.upY},${c.upZ}`, c]));
+    for (const noInt of withoutIntent) {
+      const key = `${noInt.upX},${noInt.upY},${noInt.upZ}`;
+      const withInt = intentMap.get(key);
+      if (withInt && withInt.metrics.cosmeticOverhangArea > 0) {
+        expect(withInt.score).toBeGreaterThan(noInt.score);
+      }
+    }
+  });
+
+  it('backward compatible — works with undefined intent buffer', () => {
+    const { positions, triangleCount } = makeTallBox();
+    const results = scoreCandidates(positions, triangleCount, 'print-speed');
+    expect(results.length).toBe(26);
   });
 });

@@ -34,14 +34,6 @@ export const sliceParams = signal<SliceParams>({
   liftSpeedMMs: 3,
 });
 
-// ─── Orientation ───────────────────────────────────────────
-
-export const protectedFace = signal<{
-  objectId: string;
-  point: [number, number, number];
-  normal: [number, number, number];
-} | null>(null);
-
 // ─── Slice Results (per active plate) ──────────────────────
 
 export const slicedLayerCount = signal<number>(0);

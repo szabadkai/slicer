@@ -121,6 +121,14 @@ export type CommandMap = {
   'cancel-slice': undefined;
   export: { format: 'stl' | 'obj' | '3mf' | 'png-zip' };
   'auto-orient': { modelId: string };
+  'assign-intent': {
+    modelId: string;
+    triangleIndices: number[];
+    intent: string;
+    priority: string;
+  };
+  'clear-intent': { modelId: string };
+  'generate-supports': { modelId: string };
 };
 
 export type CommandName = keyof CommandMap;

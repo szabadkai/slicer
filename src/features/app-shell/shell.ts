@@ -6,33 +6,35 @@ import { listen } from './utils';
 import { getSlicedLayerCount } from './mount';
 import { handleKeydown } from './keyboard-shortcuts';
 
-const TOOL_PANELS = ['edit', 'transform', 'orient', 'hollow', 'supports', 'intent', 'materials', 'paint', 'health', 'slice'] as const;
-type ToolPanel = typeof TOOL_PANELS[number];
+const TOOL_PANELS = [
+  'scene',
+  'orient',
+  'modify',
+  'supports',
+  'surface',
+  'inspect',
+  'slice',
+] as const;
+type ToolPanel = (typeof TOOL_PANELS)[number];
 
 const TOOL_BTN_IDS: Record<ToolPanel, string> = {
-  edit: 'edit-btn',
-  transform: 'transform-btn',
+  scene: 'scene-btn',
   orient: 'orient-btn',
-  hollow: 'hollow-tool-btn',
+  modify: 'modify-btn',
   supports: 'support-tool-btn',
-  intent: 'intent-tool-btn',
-  materials: 'material-btn',
-  paint: 'paint-btn',
-  health: 'health-btn',
+  surface: 'surface-btn',
+  inspect: 'inspect-btn',
   slice: 'slice-tool-btn',
 };
 
-const PANEL_IDS: Record<ToolPanel, string> = {
-  edit: 'edit-panel',
-  transform: 'transform-panel',
-  orient: 'orientation-panel',
-  hollow: 'hollow-panel',
-  supports: 'supports-panel',
-  intent: 'intent-panel',
-  materials: 'materials-panel',
-  paint: 'paint-panel',
-  health: 'health-panel',
-  slice: 'slice-panel',
+const PANEL_IDS: Record<ToolPanel, string[]> = {
+  scene: ['edit-panel', 'transform-panel'],
+  orient: ['orientation-panel'],
+  modify: ['hollow-panel'],
+  supports: ['supports-panel'],
+  surface: ['materials-panel', 'paint-panel'],
+  inspect: ['health-panel'],
+  slice: ['slice-panel'],
 };
 
 export function mountShell(ctx: AppContext): {
@@ -40,10 +42,21 @@ export function mountShell(ctx: AppContext): {
   getActiveToolPanel: () => string;
 } {
   const { viewer } = ctx;
-  let activeToolPanel: ToolPanel = 'edit';
+  let activeToolPanel: ToolPanel = 'scene';
 
   function showToolPanel(name: string): void {
-    const panel = name as ToolPanel;
+    // Support legacy panel names for backward compatibility (saved preferences)
+    const LEGACY_MAP: Record<string, string> = {
+      edit: 'scene',
+      transform: 'scene',
+      hollow: 'modify',
+      intent: 'orient',
+      materials: 'surface',
+      paint: 'surface',
+      health: 'inspect',
+    };
+    const resolved = LEGACY_MAP[name] ?? name;
+    const panel = resolved as ToolPanel;
     if (!TOOL_PANELS.includes(panel)) return;
 
     // Expand the sidebar if it was collapsed
@@ -55,30 +68,48 @@ export function mountShell(ctx: AppContext): {
     }
 
     for (const p of TOOL_PANELS) {
-      const panelEl = document.getElementById(PANEL_IDS[p]);
+      for (const id of PANEL_IDS[p]) {
+        const panelEl = document.getElementById(id);
+        if (panelEl) panelEl.hidden = true;
+      }
       const btnEl = document.getElementById(TOOL_BTN_IDS[p]);
-      if (panelEl) panelEl.hidden = true;
       if (btnEl) btnEl.classList.remove('active');
     }
 
     const layerPanel = document.getElementById('layer-preview-panel');
     const footerActions = document.getElementById('footer-actions');
+    const orientFooter = document.getElementById('orient-footer-actions');
     if (layerPanel) layerPanel.hidden = true;
     if (footerActions) footerActions.hidden = panel !== 'slice';
+    if (orientFooter) orientFooter.hidden = panel !== 'orient';
 
-    const activePanel = document.getElementById(PANEL_IDS[panel]);
+    for (const id of PANEL_IDS[panel]) {
+      const el = document.getElementById(id);
+      if (el) el.hidden = false;
+    }
     const activeBtn = document.getElementById(TOOL_BTN_IDS[panel]);
-    if (activePanel) activePanel.hidden = false;
     if (activeBtn) activeBtn.classList.add('active');
     activeToolPanel = panel;
 
-    if (panel === 'transform') {
-      const activeMode = document.getElementById('transform-panel')?.querySelector('.mode-btn.active') as HTMLElement | null;
+    if (panel === 'scene') {
+      const activeMode = document
+        .getElementById('transform-panel')
+        ?.querySelector('.mode-btn.active') as HTMLElement | null;
       if (activeMode) viewer.setTransformMode(activeMode.dataset.mode ?? 'translate');
     } else {
       viewer.setTransformMode(null);
     }
-    viewer.setPaintToolEnabled?.(panel === 'paint');
+
+    // Paint tools must only be active when explicitly toggled via their buttons.
+    // Leaving the surface/orient panel always disables them.
+    if (panel !== 'surface') {
+      viewer.setPaintToolEnabled?.(false);
+    }
+    if (panel !== 'orient') {
+      viewer.setIntentPaintMode(false);
+      const intentPaintBtn = document.getElementById('intent-paint-btn');
+      if (intentPaintBtn) intentPaintBtn.classList.remove('active');
+    }
 
     if (panel === 'slice' && getSlicedLayerCount() > 0) {
       if (layerPanel) layerPanel.hidden = false;
@@ -124,11 +155,17 @@ export function mountShell(ctx: AppContext): {
   const shortcutsBtn = document.getElementById('shortcuts-btn');
   const shortcutsModal = document.getElementById('shortcuts-modal');
   const shortcutsClose = document.getElementById('shortcuts-modal-close');
-  listen(shortcutsBtn, 'click', () => { if (shortcutsModal) shortcutsModal.hidden = false; });
-  listen(shortcutsClose, 'click', () => { if (shortcutsModal) shortcutsModal.hidden = true; });
-  listen(shortcutsModal, 'click', (e) => { if (e.target === shortcutsModal && shortcutsModal) shortcutsModal.hidden = true; });
+  listen(shortcutsBtn, 'click', () => {
+    if (shortcutsModal) shortcutsModal.hidden = false;
+  });
+  listen(shortcutsClose, 'click', () => {
+    if (shortcutsModal) shortcutsModal.hidden = true;
+  });
+  listen(shortcutsModal, 'click', (e) => {
+    if (e.target === shortcutsModal && shortcutsModal) shortcutsModal.hidden = true;
+  });
 
-  showToolPanel('edit');
+  showToolPanel('scene');
 
   return {
     showToolPanel,

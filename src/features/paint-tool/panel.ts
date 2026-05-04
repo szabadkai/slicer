@@ -31,7 +31,8 @@ function hash21(x: number, y: number): number {
   let py = fract(y * 0.1031);
   const pz = fract(x * 0.1031);
   const d = px * (py + 33.33) + py * (pz + 33.33) + pz * (px + 33.33);
-  px += d; py += d;
+  px += d;
+  py += d;
   return fract((px + py) * (pz + d));
 }
 
@@ -72,10 +73,7 @@ function evalPattern(patternId: number, u: number, v: number): number {
     // knurl — dual diagonal ridges
     const diagA = Math.abs(fract(u + v) - 0.5);
     const diagB = Math.abs(fract(u - v) - 0.5);
-    return Math.max(
-      1 - smoothstep(0.04, 0.16, diagA),
-      1 - smoothstep(0.04, 0.16, diagB),
-    );
+    return Math.max(1 - smoothstep(0.04, 0.16, diagA), 1 - smoothstep(0.04, 0.16, diagB));
   }
   if (patternId === 3) {
     // ribbed — vertical lines
@@ -95,11 +93,7 @@ function evalPattern(patternId: number, u: number, v: number): number {
 }
 
 /** Render a pattern preview into a small canvas. */
-function renderPreview(
-  canvas: HTMLCanvasElement,
-  patternId: number,
-  scaleMM: number,
-): void {
+function renderPreview(canvas: HTMLCanvasElement, patternId: number, scaleMM: number): void {
   const dpr = Math.min(window.devicePixelRatio || 1, 3);
   const cssW = canvas.clientWidth || 64;
   const cssH = canvas.clientHeight || 64;
@@ -119,9 +113,13 @@ function renderPreview(
   const scale = Math.max(scaleMM, 0.001);
 
   // Background: neutral warm-gray
-  const bgR = 52, bgG = 55, bgB = 62;
+  const bgR = 52,
+    bgG = 55,
+    bgB = 62;
   // Foreground: the fixed paint red
-  const fgR = 239, fgG = 68, fgB = 68;
+  const fgR = 239,
+    fgG = 68,
+    fgB = 68;
 
   for (let py = 0; py < h; py++) {
     const z = (py / h) * PREVIEW_VIEW_MM;
@@ -147,7 +145,10 @@ function renderPreview(
 
 export function mountPaintPanel(ctx: AppContext): void {
   const { viewer } = ctx;
-  const patternScaleInput = document.getElementById('paint-pattern-scale') as HTMLInputElement | null;
+  const toggleBtn = document.getElementById('paint-toggle-btn') as HTMLButtonElement | null;
+  const patternScaleInput = document.getElementById(
+    'paint-pattern-scale',
+  ) as HTMLInputElement | null;
   const depthInput = document.getElementById('paint-depth') as HTMLInputElement | null;
   const patternScaleValue = document.getElementById('paint-pattern-scale-value');
   const depthValue = document.getElementById('paint-depth-value');
@@ -227,8 +228,25 @@ export function mountPaintPanel(ctx: AppContext): void {
   listen(viewer.canvas, 'paint-changed', syncStatus);
   listen(viewer.canvas, 'selection-changed', syncStatus);
 
+  // Toggle paint tool on/off
+  function syncToggleBtn(): void {
+    const active = viewer.paintToolEnabled;
+    if (toggleBtn) {
+      toggleBtn.textContent = active ? 'Stop Painting' : 'Start Painting';
+      toggleBtn.classList.toggle('active', active);
+    }
+  }
+  listen(toggleBtn, 'click', () => {
+    const enabled = !viewer.paintToolEnabled;
+    viewer.setPaintToolEnabled?.(enabled);
+    syncToggleBtn();
+  });
+  // Keep button in sync when panel is hidden/shown externally
+  listen(document, 'tool-panel-changed', syncToggleBtn);
+
   syncBrush();
   syncStatus();
+  syncToggleBtn();
   // Defer first render so layout has resolved canvas sizes
   requestAnimationFrame(updatePreviews);
 }

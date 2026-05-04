@@ -9,7 +9,6 @@ import {
   selectedMaterialId,
   selectedPrinterKey,
   sliceParams,
-  protectedFace,
 } from './state';
 import type { Plate } from './types';
 
@@ -55,11 +54,7 @@ describe('state signals', () => {
     selectedMaterialId.value = 'siraya-fast-white';
     selectedMaterialId.value = 'siraya-fast-smoky-black';
 
-    expect(log).toEqual([
-      'siraya-fast-navy-grey',
-      'siraya-fast-white',
-      'siraya-fast-smoky-black',
-    ]);
+    expect(log).toEqual(['siraya-fast-navy-grey', 'siraya-fast-white', 'siraya-fast-smoky-black']);
 
     dispose();
     selectedMaterialId.value = 'another';
@@ -87,17 +82,5 @@ describe('state signals', () => {
   it('selectedModelIds holds array of model IDs', () => {
     selectedModelIds.value = ['m1', 'm2'];
     expect(selectedModelIds.value).toEqual(['m1', 'm2']);
-  });
-
-  it('protectedFace is nullable', () => {
-    expect(protectedFace.value).toBeNull();
-    protectedFace.value = {
-      objectId: 'obj1',
-      point: [1, 2, 3],
-      normal: [0, 0, 1],
-    };
-    expect(protectedFace.value?.objectId).toBe('obj1');
-    protectedFace.value = null;
-    expect(protectedFace.value).toBeNull();
   });
 });

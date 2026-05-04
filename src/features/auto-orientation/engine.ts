@@ -1,6 +1,9 @@
 // ─── Auto-orientation candidate generation & scoring ────────
 // Pure functions — no THREE.js, no DOM.
 
+import type { IntentBuffer } from '@features/surface-intent/types';
+import { decodeIntent } from '@features/surface-intent/types';
+
 export type Strategy = 'print-speed' | 'minimal-supports' | 'surface-quality';
 
 export interface StrategyWeights {
@@ -8,21 +11,31 @@ export interface StrategyWeights {
   overhangArea: number;
   staircaseMetric: number;
   flatBottomArea: number;
+  /** Penalty weight for cosmetic faces that become overhang */
+  cosmeticOverhangPenalty: number;
 }
 
 export const STRATEGY_PRESETS: Record<Strategy, StrategyWeights> = {
-  'print-speed': { height: 0.7, overhangArea: 0.1, staircaseMetric: 0.1, flatBottomArea: 0.1 },
+  'print-speed': {
+    height: 0.7,
+    overhangArea: 0.1,
+    staircaseMetric: 0.1,
+    flatBottomArea: 0.1,
+    cosmeticOverhangPenalty: 0.3,
+  },
   'minimal-supports': {
     height: 0.1,
     overhangArea: 0.6,
     staircaseMetric: 0.1,
     flatBottomArea: 0.2,
+    cosmeticOverhangPenalty: 0.5,
   },
   'surface-quality': {
     height: 0.1,
     overhangArea: 0.1,
     staircaseMetric: 0.6,
     flatBottomArea: 0.2,
+    cosmeticOverhangPenalty: 0.8,
   },
 };
 
@@ -41,6 +54,8 @@ export interface CandidateMetrics {
   overhangArea: number;
   staircaseMetric: number;
   flatBottomArea: number;
+  /** Area of cosmetic-intent faces that become overhang in this orientation */
+  cosmeticOverhangArea: number;
 }
 
 /**
@@ -83,30 +98,27 @@ export function generateCandidateUpVectors(): Array<{ x: number; y: number; z: n
 /**
  * Score all 26 candidates against a mesh and strategy.
  * Mesh is represented as non-indexed Float32Array positions.
+ * When an intentBuffer is provided, cosmetic faces that become overhang
+ * are penalized to avoid support placement on appearance-critical surfaces.
  */
 export function scoreCandidates(
   positions: Float32Array,
   triangleCount: number,
   strategy: Strategy,
-  protectedNormal?: { x: number; y: number; z: number } | null,
+  intentBuffer?: IntentBuffer,
 ): Candidate[] {
   const upVectors = generateCandidateUpVectors();
   const weights = STRATEGY_PRESETS[strategy];
   const candidates: Candidate[] = [];
 
   for (const up of upVectors) {
-    // Filter out orientations that violate protected face constraint
-    if (protectedNormal) {
-      const dot = protectedNormal.x * up.x + protectedNormal.y * up.y + protectedNormal.z * up.z;
-      if (dot < 0) continue; // protected face would point toward plate
-    }
-
-    const metrics = computeMetrics(positions, triangleCount, up);
+    const metrics = computeMetrics(positions, triangleCount, up, intentBuffer);
     const score =
       weights.height * metrics.height +
       weights.overhangArea * metrics.overhangArea +
       weights.staircaseMetric * metrics.staircaseMetric -
-      weights.flatBottomArea * metrics.flatBottomArea; // flat bottom is good → subtract
+      weights.flatBottomArea * metrics.flatBottomArea +
+      weights.cosmeticOverhangPenalty * metrics.cosmeticOverhangArea;
 
     candidates.push({ upX: up.x, upY: up.y, upZ: up.z, score, metrics });
   }
@@ -121,12 +133,14 @@ function computeMetrics(
   positions: Float32Array,
   triangleCount: number,
   up: { x: number; y: number; z: number },
+  intentBuffer?: IntentBuffer,
 ): CandidateMetrics {
   let minProj = Infinity;
   let maxProj = -Infinity;
   let overhangArea = 0;
   let flatBottomArea = 0;
   let staircaseMetric = 0;
+  let cosmeticOverhangArea = 0;
 
   const overhangCos = Math.cos((60 * Math.PI) / 180); // 60° from up = 30° overhang
 
@@ -166,6 +180,14 @@ function computeMetrics(
     // Overhang: normal points away from up (downward)
     if (-dotUp > overhangCos) {
       overhangArea += triArea;
+
+      // Penalize cosmetic faces that become overhang
+      if (intentBuffer && tri < intentBuffer.length) {
+        const decoded = decodeIntent(intentBuffer[tri]);
+        if (decoded?.intent === 'cosmetic') {
+          cosmeticOverhangArea += triArea;
+        }
+      }
     }
 
     // Flat bottom: normal points directly opposite to up (good for adhesion)
@@ -181,5 +203,5 @@ function computeMetrics(
   }
 
   const height = maxProj - minProj;
-  return { height, overhangArea, staircaseMetric, flatBottomArea };
+  return { height, overhangArea, staircaseMetric, flatBottomArea, cosmeticOverhangArea };
 }

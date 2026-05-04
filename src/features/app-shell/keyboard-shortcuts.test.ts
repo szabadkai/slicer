@@ -16,7 +16,7 @@ function makeCtx(overrides: Partial<ShortcutContext> = {}): ShortcutContext {
       fillPlatform: vi.fn(),
     } as unknown as ShortcutContext['viewer'],
     showToolPanel: vi.fn(),
-    getActiveToolPanel: () => 'edit',
+    getActiveToolPanel: () => 'scene',
     hasSlicedLayers: () => false,
     toggleSidebar: vi.fn(),
     ...overrides,
@@ -134,48 +134,48 @@ describe('keyboard-shortcuts', () => {
   });
 
   describe('numeric panel switching', () => {
-    it('1 shows edit panel', () => {
+    it('1 shows scene panel', () => {
       const ctx = makeCtx();
       handleKeydown(keyEvent('1'), ctx);
-      expect(ctx.showToolPanel).toHaveBeenCalledWith('edit');
+      expect(ctx.showToolPanel).toHaveBeenCalledWith('scene');
     });
 
-    it('7 shows paint panel', () => {
+    it('5 shows surface panel', () => {
+      const ctx = makeCtx();
+      handleKeydown(keyEvent('5'), ctx);
+      expect(ctx.showToolPanel).toHaveBeenCalledWith('surface');
+    });
+
+    it('7 shows slice panel', () => {
       const ctx = makeCtx();
       handleKeydown(keyEvent('7'), ctx);
-      expect(ctx.showToolPanel).toHaveBeenCalledWith('paint');
-    });
-
-    it('8 shows health panel', () => {
-      const ctx = makeCtx();
-      handleKeydown(keyEvent('8'), ctx);
-      expect(ctx.showToolPanel).toHaveBeenCalledWith('health');
+      expect(ctx.showToolPanel).toHaveBeenCalledWith('slice');
     });
   });
 
   describe('Tab panel cycling', () => {
     it('Tab cycles forward', () => {
-      const ctx = makeCtx({ getActiveToolPanel: () => 'edit' });
+      const ctx = makeCtx({ getActiveToolPanel: () => 'scene' });
       handleKeydown(keyEvent('Tab'), ctx);
-      expect(ctx.showToolPanel).toHaveBeenCalledWith('transform');
+      expect(ctx.showToolPanel).toHaveBeenCalledWith('orient');
     });
 
     it('Shift+Tab cycles backward', () => {
-      const ctx = makeCtx({ getActiveToolPanel: () => 'edit' });
+      const ctx = makeCtx({ getActiveToolPanel: () => 'scene' });
       handleKeydown(keyEvent('Tab', { shiftKey: true }), ctx);
       expect(ctx.showToolPanel).toHaveBeenCalledWith('slice');
     });
   });
 
   describe('space key', () => {
-    it('shows transform panel when objects exist', () => {
+    it('shows scene panel when objects exist', () => {
       const ctx = makeCtx();
       (ctx.viewer as unknown as { objects: unknown[] }).objects = [{}];
       handleKeydown(keyEvent(' '), ctx);
-      expect(ctx.showToolPanel).toHaveBeenCalledWith('transform');
+      expect(ctx.showToolPanel).toHaveBeenCalledWith('scene');
     });
 
-    it('does not show transform when no objects or selection', () => {
+    it('does not show scene when no objects or selection', () => {
       const ctx = makeCtx();
       handleKeydown(keyEvent(' '), ctx);
       expect(ctx.showToolPanel).not.toHaveBeenCalled();

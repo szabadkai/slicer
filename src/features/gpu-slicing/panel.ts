@@ -5,10 +5,13 @@ import type { AppContext, ProjectState } from '@core/types';
 import type { LegacyPlate, LegacySlicer } from '@core/legacy-types';
 import { listen } from '@features/app-shell/utils';
 import {
-  getSlicedLayerCount, setSlicedLayerCount, setSlicedVolumes,
+  getSlicedLayerCount,
+  setSlicedLayerCount,
+  setSlicedVolumes,
   setInspectorAreaData,
 } from '@features/app-shell/mount';
 import { executeSlice } from './ops';
+import { setConflicts } from '@features/surface-intent/conflict-inspector';
 
 export function mountSlicePanel(
   ctx: AppContext,
@@ -34,8 +37,12 @@ export function mountSlicePanel(
   const layerSlider = document.getElementById('layer-slider') as HTMLInputElement | null;
 
   function getSettings(): {
-    layerHeight: number; normalExposure: number; bottomLayers: number;
-    bottomExposure: number; liftHeight: number; liftSpeed: number;
+    layerHeight: number;
+    normalExposure: number;
+    bottomLayers: number;
+    bottomExposure: number;
+    liftHeight: number;
+    liftSpeed: number;
   } {
     return {
       layerHeight: Number.parseFloat(layerHeightInput?.value ?? '0.05'),
@@ -56,6 +63,11 @@ export function mountSlicePanel(
     });
 
     if (!result) return false;
+
+    // Surface intent conflicts detected during pre-slice analysis
+    if (result.conflicts.length > 0) {
+      setConflicts(result.conflicts);
+    }
 
     setInspectorAreaData(result.perLayerWhitePixels);
     setSlicedLayerCount(result.layerCount);
@@ -117,7 +129,7 @@ export function mountSlicePanel(
     const mm3ToMl = (v: number): number => v / 1000;
     const modelMl = mm3ToMl(vols ? vols.model : (info.modelVolume ?? 0));
     const supportMl = mm3ToMl(vols ? vols.supports : (info.supportVolume ?? 0));
-    const totalMl = mm3ToMl(vols?.total ?? ((info.modelVolume ?? 0) + (info.supportVolume ?? 0)));
+    const totalMl = mm3ToMl(vols?.total ?? (info.modelVolume ?? 0) + (info.supportVolume ?? 0));
 
     const rows = [
       `<div class="estimate-row"><span class="estimate-label">Layers</span><span class="estimate-value">${layerCount}</span></div>`,
@@ -125,23 +137,39 @@ export function mountSlicePanel(
       `<div class="estimate-row"><span class="estimate-label">Model</span><span class="estimate-value">${modelMl.toFixed(1)} mL</span></div>`,
     ];
     if (supportMl > 0 || vols) {
-      rows.push(`<div class="estimate-row"><span class="estimate-label">Supports</span><span class="estimate-value">${supportMl.toFixed(1)} mL</span></div>`);
+      rows.push(
+        `<div class="estimate-row"><span class="estimate-label">Supports</span><span class="estimate-value">${supportMl.toFixed(1)} mL</span></div>`,
+      );
     }
     if (vols) {
-      rows.push(`<div class="estimate-row"><span class="estimate-label">Total</span><span class="estimate-value">${totalMl.toFixed(1)} mL</span></div>`);
+      rows.push(
+        `<div class="estimate-row"><span class="estimate-label">Total</span><span class="estimate-value">${totalMl.toFixed(1)} mL</span></div>`,
+      );
     }
-    rows.push(`<div class="estimate-row"><span class="estimate-label">Total Time</span><span class="estimate-value">${hours}h ${minutes}m</span></div>`);
+    rows.push(
+      `<div class="estimate-row"><span class="estimate-label">Total Time</span><span class="estimate-value">${hours}h ${minutes}m</span></div>`,
+    );
 
     if (printEstimate) printEstimate.innerHTML = rows.join('');
   }
 
   // Wire buttons
-  listen(sliceBtn, 'click', () => { handleSlice(); });
-  listen(sliceAllBtn, 'click', () => { handleSliceAll(); });
+  listen(sliceBtn, 'click', () => {
+    handleSlice();
+  });
+  listen(sliceAllBtn, 'click', () => {
+    handleSliceAll();
+  });
 
   // Settings change → update estimate
-  [layerHeightInput, normalExposureInput, bottomLayersInput, bottomExposureInput, liftHeightInput, liftSpeedInput]
-    .forEach((el) => listen(el, 'change', updateEstimate));
+  [
+    layerHeightInput,
+    normalExposureInput,
+    bottomLayersInput,
+    bottomExposureInput,
+    liftHeightInput,
+    liftSpeedInput,
+  ].forEach((el) => listen(el, 'change', updateEstimate));
 
   return { updateEstimate };
 }

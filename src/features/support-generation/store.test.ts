@@ -11,9 +11,12 @@ import type { GenerateResult } from './build';
 const mockResult: GenerateResult = {
   pillars: [
     {
-      contact: { x: 0, y: 5, z: 0 },
-      tip: { x: 0, y: 4.5, z: 0 },
-      base: { x: 0, y: 0, z: 0 },
+      contact: { x: 0, y: 5, z: 0, triangleIndex: 0 },
+      path: [
+        { x: 0, y: 5, z: 0 },
+        { x: 0, y: 0, z: 0 },
+      ],
+      routed: false,
     },
   ],
   skippedCount: 0,

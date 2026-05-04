@@ -20,23 +20,39 @@ export interface ShortcutContext {
 }
 
 const TOOL_PANEL_KEYS: Record<string, string> = {
-  '1': 'edit',
-  '2': 'transform',
-  '3': 'orient',
-  '4': 'hollow',
-  '5': 'supports',
-  '6': 'materials',
-  '7': 'paint',
-  '8': 'health',
-  '9': 'slice',
+  '1': 'scene',
+  '2': 'orient',
+  '3': 'modify',
+  '4': 'supports',
+  '5': 'surface',
+  '6': 'inspect',
+  '7': 'slice',
 };
 
-const TOOL_PANELS = ['edit', 'transform', 'orient', 'hollow', 'supports', 'materials', 'paint', 'health', 'slice'] as const;
+const TOOL_PANELS = [
+  'scene',
+  'orient',
+  'modify',
+  'supports',
+  'surface',
+  'inspect',
+  'slice',
+] as const;
 
 const MOD_SHIFT_BINDINGS: ShortcutBinding[] = [
   { key: 'a', mod: true, shift: true, action: ({ viewer }) => viewer.autoArrange() },
-  { key: 's', mod: true, shift: true, action: () => document.getElementById('slice-all-btn')?.click() },
-  { key: 'e', mod: true, shift: true, action: () => document.getElementById('export-all-btn')?.click() },
+  {
+    key: 's',
+    mod: true,
+    shift: true,
+    action: () => document.getElementById('slice-all-btn')?.click(),
+  },
+  {
+    key: 'e',
+    mod: true,
+    shift: true,
+    action: () => document.getElementById('export-all-btn')?.click(),
+  },
 ];
 
 const MOD_BINDINGS: ShortcutBinding[] = [
@@ -73,7 +89,7 @@ function handleTabCycle(e: KeyboardEvent, ctx: ShortcutContext): boolean {
   if (e.key !== 'Tab') return false;
 
   e.preventDefault();
-  const idx = TOOL_PANELS.indexOf(ctx.getActiveToolPanel() as typeof TOOL_PANELS[number]);
+  const idx = TOOL_PANELS.indexOf(ctx.getActiveToolPanel() as (typeof TOOL_PANELS)[number]);
   const next = e.shiftKey
     ? (idx - 1 + TOOL_PANELS.length) % TOOL_PANELS.length
     : (idx + 1) % TOOL_PANELS.length;
@@ -85,7 +101,24 @@ function shouldIgnoreEvent(e: KeyboardEvent): boolean {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return true;
   const inspectorModal = document.getElementById('layer-inspector');
   if (inspectorModal && !inspectorModal.hidden) return true;
-  return e.key === 'Escape';
+  return false;
+}
+
+function handleEscape(_e: KeyboardEvent, ctx: ShortcutContext): boolean {
+  // Cancel active paint tools first
+  if (ctx.viewer.intentPaintMode) {
+    ctx.viewer.setIntentPaintMode(false);
+    const btn = document.getElementById('intent-paint-btn');
+    if (btn) btn.classList.remove('active');
+    return true;
+  }
+  if (ctx.viewer.paintToolEnabled) {
+    ctx.viewer.setPaintToolEnabled?.(false);
+    const btn = document.getElementById('paint-toggle-btn');
+    if (btn) btn.classList.remove('active');
+    return true;
+  }
+  return true; // consume ESC even if no tool active
 }
 
 function handleSpecialKeys(e: KeyboardEvent, ctx: ShortcutContext): boolean {
@@ -111,26 +144,40 @@ function handleModifierCombos(e: KeyboardEvent, ctx: ShortcutContext): boolean {
 
   if (e.shiftKey) {
     const binding = MOD_SHIFT_BINDINGS.find((b) => b.key === e.key.toLowerCase());
-    if (binding) { e.preventDefault(); binding.action(ctx); return true; }
+    if (binding) {
+      e.preventDefault();
+      binding.action(ctx);
+      return true;
+    }
   }
 
   const binding = MOD_BINDINGS.find((b) => b.key === e.key.toLowerCase());
-  if (binding) { e.preventDefault(); binding.action(ctx); return true; }
+  if (binding) {
+    e.preventDefault();
+    binding.action(ctx);
+    return true;
+  }
   return false;
 }
 
 function handleSimpleKeys(e: KeyboardEvent, ctx: ShortcutContext): boolean {
   const simpleBinding = SIMPLE_BINDINGS.find((b) => b.key === e.key.toLowerCase());
-  if (simpleBinding) { simpleBinding.action(ctx); return true; }
+  if (simpleBinding) {
+    simpleBinding.action(ctx);
+    return true;
+  }
 
   if (handleTabCycle(e, ctx)) return true;
 
-  if (TOOL_PANEL_KEYS[e.key]) { ctx.showToolPanel(TOOL_PANEL_KEYS[e.key]); return true; }
+  if (TOOL_PANEL_KEYS[e.key]) {
+    ctx.showToolPanel(TOOL_PANEL_KEYS[e.key]);
+    return true;
+  }
 
   if (e.key === ' ') {
     e.preventDefault();
     if (ctx.viewer.selected.length > 0 || ctx.viewer.objects.length > 0) {
-      ctx.showToolPanel('transform');
+      ctx.showToolPanel('scene');
     }
     return true;
   }
@@ -139,6 +186,10 @@ function handleSimpleKeys(e: KeyboardEvent, ctx: ShortcutContext): boolean {
 }
 
 export function handleKeydown(e: KeyboardEvent, ctx: ShortcutContext): void {
+  if (e.key === 'Escape') {
+    handleEscape(e, ctx);
+    return;
+  }
   if (shouldIgnoreEvent(e)) return;
   if (handleSpecialKeys(e, ctx)) return;
   if (handleModifierCombos(e, ctx)) return;

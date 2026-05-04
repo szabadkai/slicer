@@ -8,10 +8,10 @@ import type { SupportExplanation, IntentConflict } from './engine-types';
 // Returns a scale factor applied to support density for a given face.
 
 const DENSITY_BASE: Record<SurfaceIntent, { low: number; medium: number; high: number }> = {
-  'cosmetic':            { low: 0.6, medium: 0.35, high: 0.15 },
-  'hidden':              { low: 1.1, medium: 1.3,  high: 1.5 },
-  'reliability-critical': { low: 1.3, medium: 1.8,  high: 2.5 },
-  'removal-sensitive':   { low: 0.9, medium: 0.85, high: 0.8 },
+  cosmetic: { low: 0.6, medium: 0.35, high: 0.15 },
+  hidden: { low: 1.1, medium: 1.3, high: 1.5 },
+  'reliability-critical': { low: 1.3, medium: 1.8, high: 2.5 },
+  'removal-sensitive': { low: 0.9, medium: 0.85, high: 0.8 },
 };
 
 /**
@@ -37,10 +37,10 @@ export function computeIntentDensityMultiplier(
 // ─── Tip size scaling ────────────────────────────────────────
 
 const TIP_SCALE: Record<SurfaceIntent, { low: number; medium: number; high: number }> = {
-  'cosmetic':            { low: 0.85, medium: 0.7, high: 0.6 },
-  'hidden':              { low: 1.0,  medium: 1.0, high: 1.0 },
-  'reliability-critical': { low: 1.1,  medium: 1.3, high: 1.5 },
-  'removal-sensitive':   { low: 0.8,  medium: 0.65, high: 0.5 },
+  cosmetic: { low: 0.85, medium: 0.7, high: 0.6 },
+  hidden: { low: 1.0, medium: 1.0, high: 1.0 },
+  'reliability-critical': { low: 1.1, medium: 1.3, high: 1.5 },
+  'removal-sensitive': { low: 0.8, medium: 0.65, high: 0.5 },
 };
 
 /**
@@ -105,9 +105,8 @@ export function generateExplanation(
   reason: SupportExplanation['reason'],
   overhangAngle?: number,
 ): SupportExplanation {
-  const decoded = triangleIndex < intentBuffer.length
-    ? decodeIntent(intentBuffer[triangleIndex])
-    : null;
+  const decoded =
+    triangleIndex < intentBuffer.length ? decodeIntent(intentBuffer[triangleIndex]) : null;
 
   if (!decoded) {
     const reasonText = REASON_TEXTS[reason];
@@ -154,16 +153,16 @@ export function generateExplanation(
 }
 
 const REASON_TEXTS: Record<SupportExplanation['reason'], string> = {
-  'overhang': 'Placed due to overhang angle',
-  'island': 'Required to prevent unsupported island',
+  overhang: 'Placed due to overhang angle',
+  island: 'Required to prevent unsupported island',
   'suction-risk': 'Added to mitigate suction/cupping risk',
   'trap-prevention': 'Placed to assist resin drainage',
-  'structural': 'Added for structural reinforcement',
+  structural: 'Added for structural reinforcement',
 };
 
 const INTENT_LABELS: Record<SurfaceIntent, string> = {
-  'cosmetic': 'cosmetic',
-  'hidden': 'hidden',
+  cosmetic: 'cosmetic',
+  hidden: 'hidden',
   'reliability-critical': 'reliability-critical',
   'removal-sensitive': 'removal-sensitive',
 };
@@ -181,7 +180,6 @@ export function detectConflicts(
   triangleCount: number,
 ): IntentConflict[] {
   const conflicts: IntentConflict[] = [];
-  const overhangSet = new Set(overhangTriangles);
 
   // 1. Cosmetic faces that need support
   const cosmeticOverhangs: number[] = [];
@@ -198,7 +196,8 @@ export function detectConflicts(
       type: 'cosmetic-needs-support',
       severity: 'warning',
       description: `${cosmeticOverhangs.length} cosmetic face(s) are overhang and may need supports.`,
-      suggestion: 'Consider reorienting the model, marking as hidden, or increasing the reliability slider.',
+      suggestion:
+        'Consider reorienting the model, marking as hidden, or increasing the reliability slider.',
     });
   }
 
@@ -216,7 +215,10 @@ export function detectConflicts(
   if (reliabilityTris.length > 0 && cosmeticTris.length > 0) {
     // Simple proximity check: find cosmetic & reliability triangles that share centroid proximity
     const overlapTris = _findProximateConflicts(
-      positions, cosmeticTris, reliabilityTris, triangleCount,
+      positions,
+      cosmeticTris,
+      reliabilityTris,
+      triangleCount,
     );
     if (overlapTris.length > 0) {
       conflicts.push({
@@ -224,9 +226,30 @@ export function detectConflicts(
         type: 'cosmetic-reliability-overlap',
         severity: 'warning',
         description: `${overlapTris.length} face(s) are near both cosmetic and reliability-critical zones.`,
-        suggestion: 'Review intent boundaries — adjacent cosmetic and reliability zones may conflict.',
+        suggestion:
+          'Review intent boundaries — adjacent cosmetic and reliability zones may conflict.',
       });
     }
+  }
+
+  // 3. Removal-sensitive faces that are islands (overhang but disconnected from plate)
+  const removalSensitiveIslands: number[] = [];
+  for (const tri of overhangTriangles) {
+    if (tri >= intentBuffer.length) continue;
+    const decoded = decodeIntent(intentBuffer[tri]);
+    if (decoded?.intent === 'removal-sensitive') {
+      removalSensitiveIslands.push(tri);
+    }
+  }
+  if (removalSensitiveIslands.length > 0) {
+    conflicts.push({
+      triangleIndices: removalSensitiveIslands,
+      type: 'removal-sensitive-island',
+      severity: 'error',
+      description: `${removalSensitiveIslands.length} removal-sensitive face(s) are overhang and will require supports that may damage the surface.`,
+      suggestion:
+        'Reorient the model so removal-sensitive faces are self-supporting, or reduce intent priority.',
+    });
   }
 
   return conflicts;

@@ -4,20 +4,22 @@
  */
 import type { AppContext, PrinterSpec, ProjectState } from '@core/types';
 import type { LegacyPlate, SlicedVolumes } from '@core/legacy-types';
-import {
-  slicedLayerCount, slicedVolumes, inspectorAreaData,
-} from '@core/state';
+import { slicedLayerCount, slicedVolumes, inspectorAreaData } from '@core/state';
 import { mountShell } from './shell';
 import { mountContextMenu } from './context-menu';
 import { mountFileHandling } from './file-handling';
 import { mountPreferences } from './preferences';
-import { mountMaterialPanel, mountPrinterPanel } from '@features/material-and-printer-profiles/panel';
+import {
+  mountMaterialPanel,
+  mountPrinterPanel,
+} from '@features/material-and-printer-profiles/panel';
 import { mountPlatePanel } from '@features/multi-plate-project/panel';
 import { mountTransformPanel } from '@features/model-transform/panel';
 import { mountSlicePanel } from '@features/gpu-slicing/panel';
 import { mountLayerPreview } from '@features/layer-preview/panel';
 import { mountHollowDrainPanel } from '@features/hollow-drain/panel';
 import { mountSupportPanel } from '@features/support-generation/panel';
+import { mountExplanationInspector } from '@features/support-generation/explanation-inspector';
 import { mountOrientationPanel } from '@features/auto-orientation/panel';
 import { mountExportPanel } from '@features/model-io/panel';
 import { mountHealthPanel } from '@features/mesh-health/panel';
@@ -26,17 +28,26 @@ import { mountIntentPanel } from '@features/surface-intent/panel';
 import { listen } from './utils';
 import { createPrinterManager } from './printer-manager';
 
-export function getSlicedLayerCount(): number { return slicedLayerCount.value; }
-export function setSlicedLayerCount(count: number): void { slicedLayerCount.value = count; }
-export function getSlicedVolumes(): SlicedVolumes | null { return slicedVolumes.value; }
-export function setSlicedVolumes(v: SlicedVolumes | null): void { slicedVolumes.value = v; }
-export function getInspectorAreaData(): Float64Array | null { return inspectorAreaData.value; }
-export function setInspectorAreaData(d: Float64Array | null): void { inspectorAreaData.value = d; }
+export function getSlicedLayerCount(): number {
+  return slicedLayerCount.value;
+}
+export function setSlicedLayerCount(count: number): void {
+  slicedLayerCount.value = count;
+}
+export function getSlicedVolumes(): SlicedVolumes | null {
+  return slicedVolumes.value;
+}
+export function setSlicedVolumes(v: SlicedVolumes | null): void {
+  slicedVolumes.value = v;
+}
+export function getInspectorAreaData(): Float64Array | null {
+  return inspectorAreaData.value;
+}
+export function setInspectorAreaData(d: Float64Array | null): void {
+  inspectorAreaData.value = d;
+}
 
-export function mountApp(
-  ctx: AppContext,
-  PRINTERS: Record<string, PrinterSpec>,
-): void {
+export function mountApp(ctx: AppContext, PRINTERS: Record<string, PrinterSpec>): void {
   const { viewer, slicer, project } = ctx;
 
   // ─── Helper: get/set active plate ────────────────────
@@ -91,8 +102,12 @@ export function mountApp(
 
   // ─── Material tracking ───────────────────────────────
   let _selectedMaterialId = 'siraya-fast-navy-grey';
-  function selectedMaterialId(): string { return _selectedMaterialId; }
-  function setSelectedMaterialId(id: string): void { _selectedMaterialId = id; }
+  function selectedMaterialId(): string {
+    return _selectedMaterialId;
+  }
+  function setSelectedMaterialId(id: string): void {
+    _selectedMaterialId = id;
+  }
 
   // ─── Mount all panels ────────────────────────────────
   const { showToolPanel, getActiveToolPanel } = mountShell(ctx);
@@ -104,20 +119,29 @@ export function mountApp(
   mountPrinterPanel(ctx, applyPrinter, PRINTERS);
   mountTransformPanel(ctx);
   const { renderPlateTabs } = mountPlatePanel(
-    ctx, project, getActivePlate, saveSliceRefsToActivePlate,
-    syncSliceRefsFromActivePlate, clearActivePlateSlice,
+    ctx,
+    project,
+    getActivePlate,
+    saveSliceRefsToActivePlate,
+    syncSliceRefsFromActivePlate,
+    clearActivePlateSlice,
     layoutPlateOrigins,
   );
   ctx.renderPlateTabs = renderPlateTabs;
 
   const { updateEstimate } = mountSlicePanel(
-    ctx, slicer, project, getActivePlate, saveSliceRefsToActivePlate,
+    ctx,
+    slicer,
+    project,
+    getActivePlate,
+    saveSliceRefsToActivePlate,
   );
   ctx.updateEstimate = updateEstimate;
 
   mountLayerPreview(ctx, slicer);
   mountHollowDrainPanel(ctx);
   mountSupportPanel(ctx);
+  mountExplanationInspector(document.body);
   mountOrientationPanel(ctx);
   mountExportPanel(ctx, slicer, project);
   mountHealthPanel(ctx);
@@ -126,21 +150,31 @@ export function mountApp(
 
   // ─── Preferences & autosave ──────────────────────────
   const { scheduleSavePreferences, scheduleProjectAutosave } = mountPreferences(
-    ctx, project, PRINTERS, applyPrinter,
-    selectedPrinterKey, setSelectedMaterialId,
-    getActivePlate, getActiveToolPanel, showToolPanel,
+    ctx,
+    project,
+    PRINTERS,
+    applyPrinter,
+    selectedPrinterKey,
+    setSelectedMaterialId,
+    getActivePlate,
+    getActiveToolPanel,
+    showToolPanel,
   );
   ctx.scheduleSavePreferences = scheduleSavePreferences;
   ctx.scheduleProjectAutosave = scheduleProjectAutosave;
 
   // ─── Clear autosave button ───────────────────────────
   listen(document.getElementById('clear-autosave-btn'), 'click', () => {
-    import('../../project-store').then(({ deleteAutosavedProject }) => {
-      deleteAutosavedProject().catch(() => {});
-    }).catch(() => {});
-    import('@features/model-io/autosave').then(({ discardSnapshot }) => {
-      discardSnapshot();
-    }).catch(() => {});
+    import('../../project-store')
+      .then(({ deleteAutosavedProject }) => {
+        deleteAutosavedProject().catch(() => {});
+      })
+      .catch(() => {});
+    import('@features/model-io/autosave')
+      .then(({ discardSnapshot }) => {
+        discardSnapshot();
+      })
+      .catch(() => {});
   });
 
   // ─── Canvas event wiring ─────────────────────────────
@@ -164,20 +198,10 @@ function mountCanvasEvents(
   const canvas = viewer.canvas;
 
   listen(canvas, 'selection-changed', () => {
+    // No hard lockouts — all toolbar panels always selectable.
+    // Only disable inline action buttons that need a selection target.
     const hasSel = viewer.selected.length > 0;
-    const hasObjs = viewer.objects.length > 0;
-
-    // Enable/disable tool buttons
     const btns: Record<string, boolean> = {
-      'transform-btn': !hasSel,
-      'orient-btn': !hasSel,
-      'hollow-tool-btn': !hasSel,
-      'support-tool-btn': !hasSel,
-      'edit-btn': !(hasSel || hasObjs),
-      'material-btn': !hasObjs,
-      'paint-btn': !hasObjs,
-      'health-btn': !hasObjs,
-      'slice-tool-btn': !hasObjs,
       'duplicate-btn': !hasSel,
       'delete-btn': !hasSel,
       'fill-btn': viewer.selected.length !== 1,
@@ -241,7 +265,9 @@ async function restoreOrLoadDefault(
       project.plates = restoredPlates;
       project.activePlateId = snapshot.activePlateId || restoredPlates[0].id;
       viewer.setPlates(project.plates);
-      viewer.setActivePlate(project.plates.find((p) => p.id === project.activePlateId) ?? project.plates[0]);
+      viewer.setActivePlate(
+        project.plates.find((p) => p.id === project.activePlateId) ?? project.plates[0],
+      );
       layoutPlateOrigins();
       renderPlateTabs();
       viewer.requestRender();
