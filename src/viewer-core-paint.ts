@@ -3,6 +3,7 @@
 
 import * as THREE from 'three';
 import type { ViewerCore, SceneObject } from './viewer-core';
+import type { PrimitiveParams, PrimitiveTransform } from '@core/primitives';
 
 const MAX_SHADER_PAINT_STROKES = 64;
 
@@ -62,9 +63,91 @@ export function clearPaint(core: ViewerCore): void {
   core.requestRender();
 }
 
+export function paintAll(core: ViewerCore, targets: 'all' | 'selected'): void {
+  const objects = targets === 'selected' && core.selected.length > 0 ? core.selected : core.objects;
+  for (const obj of objects) {
+    // Compute bounding sphere radius in local space to cover entire model
+    obj.mesh.geometry.computeBoundingSphere();
+    const bs = obj.mesh.geometry.boundingSphere;
+    const radius = bs ? bs.radius * 1.1 : 9999;
+    const center = bs ? ([bs.center.x, bs.center.y, bs.center.z] as const) : ([0, 0, 0] as const);
+
+    const strokes = obj.paintStrokes ?? [];
+    strokes.push({
+      localPoint: [center[0], center[1], center[2]],
+      radiusMM: radius,
+      color: core.paintBrush.color,
+      density: core.paintBrush.density,
+      depthMM: core.paintBrush.depthMM,
+      bumpStrength: core.paintBrush.bumpStrength,
+      pattern: core.paintBrush.pattern,
+      patternScaleMM: core.paintBrush.patternScaleMM,
+    });
+    obj.paintStrokes = strokes.slice(-MAX_SHADER_PAINT_STROKES);
+    syncPaintMaterial(core, obj);
+  }
+  core.canvas.dispatchEvent(new CustomEvent('paint-changed'));
+  core.requestRender();
+}
+
 export function getPaintStrokeCount(core: ViewerCore): number {
   const targets = core.selected.length > 0 ? core.selected : core.objects;
   return targets.reduce((count, target) => count + (target.paintStrokes?.length ?? 0), 0);
+}
+
+/**
+ * Stamp a paint stroke on selected objects within a primitive volume.
+ * Transforms the primitive center to model-local space and uses the primitive's
+ * bounding radius (approximate sphere) for coverage.
+ */
+export function paintVolume(
+  core: ViewerCore,
+  params: PrimitiveParams,
+  transform: PrimitiveTransform,
+): void {
+  const objects = core.selected.length > 0 ? core.selected : core.objects;
+  const worldCenter = new THREE.Vector3(
+    transform.position[0],
+    transform.position[1],
+    transform.position[2],
+  );
+
+  // Compute bounding radius of the primitive (rough sphere)
+  const s = transform.scale;
+  let radius = 10;
+  if (params.type === 'box') {
+    radius = Math.sqrt(params.width ** 2 + params.height ** 2 + params.depth ** 2) / 2;
+  } else if (params.type === 'sphere') {
+    radius = params.radius;
+  } else if (params.type === 'cylinder') {
+    const r = Math.max(params.radiusTop, params.radiusBottom);
+    radius = Math.sqrt(r ** 2 + (params.height / 2) ** 2);
+  } else if (params.type === 'cone') {
+    radius = Math.sqrt(params.radius ** 2 + (params.height / 2) ** 2);
+  }
+  radius *= Math.max(s[0], s[1], s[2]);
+
+  for (const obj of objects) {
+    // Transform world center to model-local space
+    obj.mesh.updateMatrixWorld(true);
+    const localCenter = worldCenter.clone().applyMatrix4(obj.mesh.matrixWorld.clone().invert());
+
+    const strokes = obj.paintStrokes ?? [];
+    strokes.push({
+      localPoint: [localCenter.x, localCenter.y, localCenter.z],
+      radiusMM: radius,
+      color: core.paintBrush.color,
+      density: core.paintBrush.density,
+      depthMM: core.paintBrush.depthMM,
+      bumpStrength: core.paintBrush.bumpStrength,
+      pattern: core.paintBrush.pattern,
+      patternScaleMM: core.paintBrush.patternScaleMM,
+    });
+    obj.paintStrokes = strokes.slice(-MAX_SHADER_PAINT_STROKES);
+    syncPaintMaterial(core, obj);
+  }
+  core.canvas.dispatchEvent(new CustomEvent('paint-changed'));
+  core.requestRender();
 }
 
 export function getPaintSliceMarks(

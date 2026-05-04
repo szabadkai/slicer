@@ -1,5 +1,5 @@
 import { signal, computed } from '@preact/signals-core';
-import type { Plate, SliceParams, Stage } from './types';
+import type { Plate, SliceParams, Stage, PrimitiveCutter } from './types';
 import type { SlicedVolumes } from './legacy-types';
 
 // ─── Workflow Stage ────────────────────────────────────────
@@ -39,3 +39,7 @@ export const sliceParams = signal<SliceParams>({
 export const slicedLayerCount = signal<number>(0);
 export const slicedVolumes = signal<SlicedVolumes | null>(null);
 export const inspectorAreaData = signal<Float64Array | null>(null);
+
+// ─── Primitive Boolean Cutting ─────────────────────────────
+
+export const activeCutter = signal<PrimitiveCutter | null>(null);

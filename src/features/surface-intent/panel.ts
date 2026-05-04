@@ -5,6 +5,9 @@
 import type { AppContext } from '@core/types';
 import type { LegacyObject } from '@core/legacy-types';
 import { listen } from '@features/app-shell/utils';
+import { createVolumeFill } from '@core/volume-fill';
+import { trianglesInsidePrimitive, filterExteriorTriangles } from '@core/primitives';
+import type { PrimitiveType } from '@core/primitives';
 import { type IntentPriority, ALL_INTENTS, hasAnyIntent } from './types';
 import {
   activeIntentBrush,
@@ -215,4 +218,61 @@ export function mountIntentPanel(ctx: AppContext): void {
   if (conflictContainer) {
     mountConflictInspector(conflictContainer);
   }
+
+  // ── Intent volume fill with primitives ────────────────────
+  const volFill = createVolumeFill(viewer);
+  const volControls = document.getElementById('intent-vol-controls');
+  const volPrimBtns = document.querySelectorAll<HTMLButtonElement>('.intent-vol-prim-btn');
+  const volApplyBtn = document.getElementById('intent-vol-apply-btn') as HTMLButtonElement | null;
+  const volCancelBtn = document.getElementById('intent-vol-cancel-btn') as HTMLButtonElement | null;
+  const volGizmoBtns = document.querySelectorAll<HTMLButtonElement>(
+    '#intent-vol-controls .mode-btn',
+  );
+
+  volPrimBtns.forEach((btn) => {
+    listen(btn, 'click', () => {
+      const type = btn.dataset.primitive as PrimitiveType;
+      volFill.start(type);
+      if (volControls) volControls.hidden = false;
+    });
+  });
+
+  volGizmoBtns.forEach((btn) => {
+    listen(btn, 'click', () => {
+      volGizmoBtns.forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      volFill.setGizmoMode((btn.dataset.gizmo as 'translate' | 'rotate' | 'scale') ?? 'translate');
+    });
+  });
+
+  listen(volApplyBtn, 'click', () => {
+    const state = volFill.state;
+    if (!state) return;
+    const targets = viewer.selected.length > 0 ? viewer.selected : [];
+    for (const obj of targets) {
+      const positions = viewer.getModelPositions?.(obj.id);
+      if (!positions) continue;
+      const triCount = viewer.getObjectTriangleCount(obj.id);
+      if (!triCount) continue;
+
+      const allInside = trianglesInsidePrimitive(positions, state.params, state.transform);
+      const indices = filterExteriorTriangles(positions, allInside);
+      if (indices.length === 0) continue;
+
+      ensureIntentBuffer(obj.id, triCount);
+      const { intent, priority } = activeIntentBrush.value;
+      setFaceIntents(obj.id, indices, intent, priority);
+      const buf = getIntentBuffer(obj.id);
+      if (buf) obj.intentBuffer = buf;
+    }
+    _refreshOverlay();
+    _updatePanelState();
+    volFill.cancel();
+    if (volControls) volControls.hidden = true;
+  });
+
+  listen(volCancelBtn, 'click', () => {
+    volFill.cancel();
+    if (volControls) volControls.hidden = true;
+  });
 }

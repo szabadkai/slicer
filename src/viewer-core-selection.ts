@@ -3,6 +3,7 @@
 
 import * as THREE from 'three';
 import type { ViewerCore, SceneObject, PlateState } from './viewer-core';
+import { isCutterGizmoActive } from './viewer-cutter-preview';
 
 export function saveActivePlateSelection(core: ViewerCore): void {
   if (core.activePlate) core.activePlate.selectedIds = core.selected.map((o) => o.id);
@@ -64,6 +65,7 @@ export function getObjectTriangleCount(core: ViewerCore, objectId: string): numb
 }
 
 export function handleClick(core: ViewerCore, e: PointerEvent): void {
+  if (isCutterGizmoActive()) return;
   const rect = core.canvas.getBoundingClientRect();
   core.raycaster.setFromCamera(
     new THREE.Vector2(
@@ -108,6 +110,7 @@ export function handleClick(core: ViewerCore, e: PointerEvent): void {
 }
 
 export function attachTransformControls(core: ViewerCore): void {
+  if (isCutterGizmoActive()) return;
   if (core.selected.length === 1) {
     core.transformControl.attach(core.selected[0].mesh);
     if (!core.transformControl.getMode()) core.transformControl.setMode('translate');

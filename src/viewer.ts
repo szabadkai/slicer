@@ -54,6 +54,15 @@ import {
   serializeObjects as serializeImpl,
   restoreSerializedObjects as restoreImpl,
 } from './viewer-serialize';
+import {
+  addCutterPreview as addCutterImpl,
+  updateCutterPreview as updateCutterImpl,
+  removeCutterPreview as removeCutterImpl,
+  setCutterGizmo as setCutterGizmoImpl,
+  clearCutterGizmo as clearCutterGizmoImpl,
+  onCutterGizmoChange as onCutterGizmoImpl,
+  getModelPositions as getModelPositionsImpl,
+} from './viewer-cutter-preview';
 
 export { createResinMaterial };
 export type { SceneObject, PlateState };
@@ -507,5 +516,39 @@ export class Viewer extends ViewerCore {
       if ((obj.paintStrokes?.length ?? 0) > 0) this._syncPaintMaterial(obj);
     });
     return objs;
+  }
+
+  // ---- cutter preview (delegated to viewer-cutter-preview.ts) -------------
+  addCutterPreview(positions: Float32Array): string {
+    return addCutterImpl(this, positions);
+  }
+  updateCutterPreview(
+    id: string,
+    position: { x: number; y: number; z: number },
+    rotation: { x: number; y: number; z: number },
+    scale: { x: number; y: number; z: number },
+  ): void {
+    updateCutterImpl(this, id, position, rotation, scale);
+  }
+  removeCutterPreview(id: string): void {
+    removeCutterImpl(this, id);
+  }
+  setCutterGizmo(id: string, mode: 'translate' | 'rotate' | 'scale'): void {
+    setCutterGizmoImpl(this, id, mode);
+  }
+  clearCutterGizmo(): void {
+    clearCutterGizmoImpl(this);
+  }
+  onCutterGizmoChange(
+    callback: (
+      position: { x: number; y: number; z: number },
+      rotation: { x: number; y: number; z: number },
+      scale: { x: number; y: number; z: number },
+    ) => void,
+  ): () => void {
+    return onCutterGizmoImpl(this, callback);
+  }
+  getModelPositions(id: string): Float32Array | null {
+    return getModelPositionsImpl(this, id);
   }
 }

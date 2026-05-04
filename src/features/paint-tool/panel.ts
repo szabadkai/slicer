@@ -1,5 +1,7 @@
 import type { AppContext } from '@core/types';
 import { listen } from '@features/app-shell/utils';
+import { createVolumeFill } from '@core/volume-fill';
+import type { PrimitiveType } from '@core/primitives';
 
 /** Physical area (mm) shown in each pattern preview tile. */
 const PREVIEW_VIEW_MM = 12;
@@ -225,6 +227,20 @@ export function mountPaintPanel(ctx: AppContext): void {
     viewer.clearPaint?.();
     syncStatus();
   });
+
+  const paintAllBtn = document.getElementById('paint-all-btn') as HTMLButtonElement | null;
+  const paintSelectedBtn = document.getElementById(
+    'paint-selected-btn',
+  ) as HTMLButtonElement | null;
+  listen(paintAllBtn, 'click', () => {
+    viewer.paintAll?.('all');
+    syncStatus();
+  });
+  listen(paintSelectedBtn, 'click', () => {
+    viewer.paintAll?.('selected');
+    syncStatus();
+  });
+
   listen(viewer.canvas, 'paint-changed', syncStatus);
   listen(viewer.canvas, 'selection-changed', syncStatus);
 
@@ -249,4 +265,44 @@ export function mountPaintPanel(ctx: AppContext): void {
   syncToggleBtn();
   // Defer first render so layout has resolved canvas sizes
   requestAnimationFrame(updatePreviews);
+
+  // ── Volume fill with primitives ───────────────────────────
+  const volFill = createVolumeFill(viewer);
+  const volControls = document.getElementById('paint-vol-controls');
+  const volPrimBtns = document.querySelectorAll<HTMLButtonElement>('.paint-vol-prim-btn');
+  const volApplyBtn = document.getElementById('paint-vol-apply-btn') as HTMLButtonElement | null;
+  const volCancelBtn = document.getElementById('paint-vol-cancel-btn') as HTMLButtonElement | null;
+  const volGizmoBtns = document.querySelectorAll<HTMLButtonElement>(
+    '#paint-vol-controls .mode-btn',
+  );
+
+  volPrimBtns.forEach((btn) => {
+    listen(btn, 'click', () => {
+      const type = btn.dataset.primitive as PrimitiveType;
+      volFill.start(type);
+      if (volControls) volControls.hidden = false;
+    });
+  });
+
+  volGizmoBtns.forEach((btn) => {
+    listen(btn, 'click', () => {
+      volGizmoBtns.forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      volFill.setGizmoMode((btn.dataset.gizmo as 'translate' | 'rotate' | 'scale') ?? 'translate');
+    });
+  });
+
+  listen(volApplyBtn, 'click', () => {
+    const state = volFill.state;
+    if (!state) return;
+    viewer.paintVolume?.(state.params, state.transform);
+    volFill.cancel();
+    if (volControls) volControls.hidden = true;
+    syncStatus();
+  });
+
+  listen(volCancelBtn, 'click', () => {
+    volFill.cancel();
+    if (volControls) volControls.hidden = true;
+  });
 }

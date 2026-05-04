@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
+import type { PrimitiveParams, PrimitiveTransform } from '@core/primitives';
 import { type BuildVolumeEdge, buildGridGroup, setupLights } from './viewer-scene';
 import {
   showIntentOverlay as showIntentOverlayImpl,
@@ -18,6 +19,8 @@ import {
   setPaintBrush as setPaintBrushImpl,
   undoPaintStroke as undoPaintStrokeImpl,
   clearPaint as clearPaintImpl,
+  paintAll as paintAllImpl,
+  paintVolume as paintVolumeImpl,
   getPaintStrokeCount as getPaintStrokeCountImpl,
   getPaintSliceMarks as getPaintSliceMarksImpl,
   getPaintTextureConfig as getPaintTextureConfigImpl,
@@ -458,6 +461,12 @@ export class ViewerCore {
   }
   clearPaint(): void {
     clearPaintImpl(this);
+  }
+  paintAll(targets: 'all' | 'selected'): void {
+    paintAllImpl(this, targets);
+  }
+  paintVolume(params: PrimitiveParams, transform: PrimitiveTransform): void {
+    paintVolumeImpl(this, params, transform);
   }
   getPaintStrokeCount(): number {
     return getPaintStrokeCountImpl(this);

@@ -5,6 +5,7 @@
  */
 
 import type { PrinterSpec, ResinMaterial } from './types';
+import type { PrimitiveParams, PrimitiveTransform } from './primitives';
 
 // ─── Geometry-like plain objects (avoids THREE.js imports) ──
 
@@ -81,6 +82,8 @@ export interface LegacyViewer {
   }): void;
   undoPaintStroke?(): void;
   clearPaint?(): void;
+  paintAll?(targets: 'all' | 'selected'): void;
+  paintVolume?(params: PrimitiveParams, transform: PrimitiveTransform): void;
   getPaintStrokeCount?(): number;
   getPaintSliceMarks?(): PaintSliceMark[];
   getPaintTextureConfig?(): PaintTextureConfig;
@@ -142,6 +145,15 @@ export interface LegacyViewer {
   // Printer
   setPrinter(spec: PrinterSpec): void;
   updateBoundsWarning(): void;
+
+  // Cutter preview
+  addCutterPreview?(positions: Float32Array): string;
+  updateCutterPreview?(id: string, position: Vec3, rotation: Vec3, scale: Vec3): void;
+  removeCutterPreview?(id: string): void;
+  setCutterGizmo?(id: string, mode: 'translate' | 'rotate' | 'scale'): void;
+  clearCutterGizmo?(): void;
+  onCutterGizmoChange?(callback: (position: Vec3, rotation: Vec3, scale: Vec3) => void): () => void;
+  getModelPositions?(id: string): Float32Array | null;
 
   // Geometry access
   getModelGeometry(): unknown | null;

@@ -66,6 +66,60 @@ export function createViewerService(canvas: HTMLCanvasElement): ViewerService {
       if (!viewer) throw new Error('ViewerService not initialized');
       return viewer;
     },
+
+    addCutterPreview(positions: Float32Array): string {
+      if (!viewer) throw new Error('ViewerService not initialized');
+      if (!viewer.addCutterPreview) throw new Error('Viewer does not support cutter preview');
+      return viewer.addCutterPreview(positions);
+    },
+
+    updateCutterPreview(
+      id: string,
+      position: [number, number, number],
+      rotation: [number, number, number],
+      scale: [number, number, number],
+    ): void {
+      if (!viewer?.updateCutterPreview) return;
+      viewer.updateCutterPreview(
+        id,
+        { x: position[0], y: position[1], z: position[2] },
+        { x: rotation[0], y: rotation[1], z: rotation[2] },
+        { x: scale[0], y: scale[1], z: scale[2] },
+      );
+    },
+
+    removeCutterPreview(id: string): void {
+      if (!viewer?.removeCutterPreview) return;
+      viewer.removeCutterPreview(id);
+    },
+
+    setCutterGizmo(id: string, mode: 'translate' | 'rotate' | 'scale'): void {
+      if (!viewer?.setCutterGizmo) return;
+      viewer.setCutterGizmo(id, mode);
+    },
+
+    clearCutterGizmo(): void {
+      if (!viewer?.clearCutterGizmo) return;
+      viewer.clearCutterGizmo();
+    },
+
+    onCutterGizmoChange(
+      callback: (
+        position: [number, number, number],
+        rotation: [number, number, number],
+        scale: [number, number, number],
+      ) => void,
+    ): () => void {
+      if (!viewer?.onCutterGizmoChange) return () => {};
+      return viewer.onCutterGizmoChange((pos, rot, scl) => {
+        callback([pos.x, pos.y, pos.z], [rot.x, rot.y, rot.z], [scl.x, scl.y, scl.z]);
+      });
+    },
+
+    getModelPositions(modelId: string): Float32Array | null {
+      if (!viewer?.getModelPositions) return null;
+      return viewer.getModelPositions(modelId);
+    },
   };
 
   return service;

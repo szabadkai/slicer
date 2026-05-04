@@ -21,6 +21,13 @@ function mockViewer(): ViewerService {
     render: vi.fn(),
     canvas: document.createElement('canvas'),
     legacy: null,
+    addCutterPreview: vi.fn(() => 'cutter-1'),
+    updateCutterPreview: vi.fn(),
+    removeCutterPreview: vi.fn(),
+    setCutterGizmo: vi.fn(),
+    clearCutterGizmo: vi.fn(),
+    onCutterGizmoChange: vi.fn(() => () => {}),
+    getModelPositions: vi.fn(() => null),
   };
 }
 

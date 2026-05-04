@@ -44,6 +44,17 @@ export interface SliceParams {
   liftSpeedMMs: number;
 }
 
+// ─── Primitives ────────────────────────────────────────────
+
+export type PrimitiveType = 'box' | 'sphere' | 'cylinder' | 'cone';
+
+export interface PrimitiveCutter {
+  id: string;
+  type: PrimitiveType;
+  params: import('./primitives').PrimitiveParams;
+  transform: import('./primitives').PrimitiveTransform;
+}
+
 // ─── Model ─────────────────────────────────────────────────
 
 export interface Model {
@@ -111,6 +122,26 @@ export interface ViewerService {
   readonly canvas: HTMLCanvasElement;
   /** Access the underlying legacy Viewer instance for features that need it */
   readonly legacy: unknown;
+
+  // Cutter preview
+  addCutterPreview(positions: Float32Array): string;
+  updateCutterPreview(
+    id: string,
+    position: [number, number, number],
+    rotation: [number, number, number],
+    scale: [number, number, number],
+  ): void;
+  removeCutterPreview(id: string): void;
+  setCutterGizmo(id: string, mode: 'translate' | 'rotate' | 'scale'): void;
+  clearCutterGizmo(): void;
+  onCutterGizmoChange(
+    callback: (
+      position: [number, number, number],
+      rotation: [number, number, number],
+      scale: [number, number, number],
+    ) => void,
+  ): () => void;
+  getModelPositions(modelId: string): Float32Array | null;
 }
 
 // ─── Command Bus ───────────────────────────────────────────
@@ -129,6 +160,8 @@ export type CommandMap = {
   };
   'clear-intent': { modelId: string };
   'generate-supports': { modelId: string };
+  'boolean-subtract': { modelId: string };
+  'boolean-split': { modelId: string };
 };
 
 export type CommandName = keyof CommandMap;
