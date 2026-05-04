@@ -296,6 +296,10 @@ body {
   cursor: crosshair;
 }
 
+#viewport.paint-mode {
+  cursor: crosshair;
+}
+
 #fps-counter {
   position: absolute;
   top: 12px;
@@ -665,6 +669,64 @@ body {
 .control-group select.val-box {
   width: 148px;
   text-align: left;
+}
+
+.paint-pattern-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.paint-pattern-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 2px solid var(--border, #e0e0e0);
+  border-radius: 6px;
+  cursor: pointer;
+  background: none;
+  color: var(--text-dim, #666);
+  font-size: 10px;
+  font-weight: 500;
+  text-align: center;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.paint-pattern-btn:hover {
+  border-color: var(--text-dim, #999);
+  color: var(--text, #333);
+}
+
+.paint-pattern-btn.active {
+  border-color: var(--accent, #0070f3);
+  color: var(--text, #333);
+}
+
+.paint-pattern-preview {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 3px;
+  display: block;
+}
+
+.paint-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.paint-status {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 12px;
 }
 
 .advanced-group {
@@ -1138,6 +1200,67 @@ button:disabled {
 
 .edit-action-btn svg {
   flex-shrink: 0;
+}
+
+.split-controls {
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+  padding-top: 4px;
+}
+
+.cut-range-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.cut-viewer-toolbar {
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid rgba(31, 42, 55, 0.16);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.18);
+  transform: translateX(-50%);
+}
+
+.cut-viewer-tool,
+.cut-viewer-apply {
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.cut-viewer-tool {
+  width: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cut-viewer-tool.active {
+  border-color: rgba(0, 112, 243, 0.35);
+  background: #e8f0fe;
+  color: var(--accent);
+}
+
+.cut-viewer-apply {
+  padding: 0 14px;
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .edit-action-danger {
@@ -2160,3 +2283,77 @@ button:disabled {
   display: inline-block;
   transition: transform 0.15s ease;
 }
+
+/* ─── Hollow & Drain panel ─────────────────────────────── */
+
+.hollow-step {
+  border-left: 3px solid var(--border);
+  margin: 0 0 8px 0;
+  padding: 0 0 0 10px;
+  transition: border-color 0.2s;
+}
+.hollow-step[open] {
+  border-left-color: var(--accent);
+}
+.hollow-step-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--text);
+  user-select: none;
+}
+.hollow-step-summary::-webkit-details-marker { display: none; }
+.step-number {
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent); color: #fff;
+  border-radius: 50%; font-size: 11px; font-weight: 700;
+  flex-shrink: 0;
+}
+.step-title { flex: 1; }
+.step-badge {
+  font-size: 11px; font-weight: 600;
+  padding: 1px 6px; border-radius: 10px;
+  min-width: 18px; text-align: center;
+}
+.step-badge-done { background: #e6f4ea; color: #137333; }
+.step-badge-count { background: #e8f0fe; color: var(--accent); }
+.step-badge-warn  { background: #fef7e0; color: #b45309; }
+
+.hollow-hint {
+  font-size: 11px; color: var(--text-dim);
+  margin: 4px 0 8px 0; line-height: 1.4;
+}
+.hollow-warning {
+  background: #fef3c7; color: #92400e;
+  border: 1px solid #fcd34d; border-radius: 6px;
+  padding: 6px 10px; font-size: 12px; margin: 6px 0;
+}
+
+.drain-hole-list { margin: 6px 0; }
+.drain-hole-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 6px; border-radius: 5px;
+  background: var(--surface-2); margin-bottom: 4px;
+  font-size: 12px;
+}
+.drain-hole-icon { color: #00bcd4; font-size: 10px; }
+.drain-hole-label { flex: 1; }
+.drain-hole-remove { color: var(--text-dim); font-size: 12px; padding: 2px 4px; }
+.drain-hole-remove:hover { color: #d32f2f; }
+
+.trap-stat { font-size: 12px; padding: 3px 0; }
+.trap-stat-ok { color: #137333; }
+.trap-stat-bad { color: #c62828; }
+.trap-pocket {
+  display: flex; align-items: center; justify-content: space-between;
+  border-left: 3px solid #ef5350; padding: 6px 8px;
+  background: #fff5f5; border-radius: 0 5px 5px 0;
+  margin: 6px 0; font-size: 12px;
+}
+.trap-ok { color: #137333; font-size: 12px; padding: 4px 0; }

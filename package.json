@@ -26,6 +26,7 @@
   "dependencies": {
     "@preact/signals-core": "^1.14.1",
     "jszip": "^3.10.1",
+    "manifold-3d": "^3.4.1",
     "three": "^0.170.0",
     "three-mesh-bvh": "^0.8.3"
   },

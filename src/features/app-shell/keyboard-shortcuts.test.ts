@@ -140,10 +140,16 @@ describe('keyboard-shortcuts', () => {
       expect(ctx.showToolPanel).toHaveBeenCalledWith('edit');
     });
 
-    it('7 shows slice panel', () => {
+    it('7 shows paint panel', () => {
       const ctx = makeCtx();
       handleKeydown(keyEvent('7'), ctx);
-      expect(ctx.showToolPanel).toHaveBeenCalledWith('slice');
+      expect(ctx.showToolPanel).toHaveBeenCalledWith('paint');
+    });
+
+    it('8 shows health panel', () => {
+      const ctx = makeCtx();
+      handleKeydown(keyEvent('8'), ctx);
+      expect(ctx.showToolPanel).toHaveBeenCalledWith('health');
     });
   });
 

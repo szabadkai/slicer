@@ -20,13 +20,63 @@ import {
   addSignificantFaceMarker as addMarker,
   clearSignificantFaceMarkers as clearMarkers,
 } from './viewer-scene';
+import {
+  cleanPlaneCutResult,
+  cutGeometryByPlane,
+  type CutAxis,
+} from './features/model-splitting/cut';
+import { cutGeometryByManifoldPlane } from './features/model-splitting/manifold-cut';
 import type { SerializedObject } from './project-store';
 
 export { createResinMaterial };
 export type { SceneObject, PlateState };
 
+function axisComponent(vector: THREE.Vector3, axis: CutAxis): number {
+  if (axis === 'x') return vector.x;
+  if (axis === 'y') return vector.y;
+  return vector.z;
+}
+
+function setAxisComponent(vector: THREE.Vector3, axis: CutAxis, value: number): void {
+  if (axis === 'x') vector.x = value;
+  else if (axis === 'y') vector.y = value;
+  else vector.z = value;
+}
+
+function geometryFromPositions(positions: Float32Array): THREE.BufferGeometry {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  return geometry;
+}
+
+function tupleFromVector(vector: THREE.Vector3): [number, number, number] {
+  return [vector.x, vector.y, vector.z];
+}
+
+function hasCompleteCutResult(
+  result: ReturnType<typeof cutGeometryByPlane>,
+): result is ReturnType<typeof cutGeometryByPlane> & { negative: Float32Array; positive: Float32Array } {
+  return !!result.negative && !!result.positive;
+}
+
+function cutRetryOffsets(geometry: THREE.BufferGeometry): number[] {
+  geometry.computeBoundingBox();
+  const box = geometry.boundingBox;
+  if (!box) return [0];
+  const size = box.getSize(new THREE.Vector3());
+  const diagonal = Math.max(size.length(), 1);
+  const epsilon = THREE.MathUtils.clamp(diagonal * 1e-5, 0.001, 0.05);
+  return [0, epsilon, -epsilon, epsilon * 4, -epsilon * 4];
+}
+
 export class Viewer extends ViewerCore {
   _significantFaceMarkers: THREE.Group[] = [];
+  private _cutPlanePreview: THREE.Mesh | null = null;
+  private _cutPlaneAxis: CutAxis = 'x';
+  private _cutPlaneInteractive = false;
+  private _cutPlaneBounds: { min: THREE.Vector3; max: THREE.Vector3; center: THREE.Vector3 } | null = null;
 
   // ---- multi-transform ----------------------------------------------------
   protected override _beginMultiTransform(): void {
@@ -44,6 +94,10 @@ export class Viewer extends ViewerCore {
     };
   }
   protected override _applyMultiTransformDelta(): void {
+    if (this._cutPlaneInteractive) {
+      this._syncInteractiveCutPlane();
+      return;
+    }
     if (!this.multiTransformState || this.selected.length <= 1 || !this.transformControl.dragging)
       return;
     this.selectionPivot.updateMatrixWorld(true);
@@ -106,6 +160,7 @@ export class Viewer extends ViewerCore {
     );
   }
   protected override _finishTransform(): void {
+    if (this._cutPlaneInteractive) return;
     const preserve = this._canPreserveSupportsDuringTranslation();
     this._bakeTransform({ preserveSupports: preserve });
     this.transformSupportState = null;
@@ -124,6 +179,11 @@ export class Viewer extends ViewerCore {
     const c = new THREE.Vector3();
     this._getSelectionBounds().getCenter(c);
     return c;
+  }
+  getSelectionWorldBounds(): { min: THREE.Vector3; max: THREE.Vector3 } | null {
+    if (this.selected.length === 0) return null;
+    const bounds = this._getSelectionBounds();
+    return { min: bounds.min.clone(), max: bounds.max.clone() };
   }
   translateSelectionTo(position: THREE.Vector3): void {
     if (this.selected.length === 0) return;
@@ -843,6 +903,247 @@ export class Viewer extends ViewerCore {
     this.canvas.dispatchEvent(new CustomEvent('mesh-changed'));
   }
 
+  async cutSelectedByAxisPlane(axis: CutAxis, worldOffset: number): Promise<boolean> {
+    if (this.selected.length === 0 || !Number.isFinite(worldOffset)) return false;
+    const normal = new THREE.Vector3();
+    setAxisComponent(normal, axis, 1);
+    return this.cutSelectedByPlane(normal, worldOffset);
+  }
+
+  async cutSelectedByPlane(worldNormal: THREE.Vector3, worldConstant: number): Promise<boolean> {
+    if (this.selected.length === 0 || !Number.isFinite(worldConstant)) return false;
+    const normal = worldNormal.clone().normalize();
+    if (normal.lengthSq() <= 1e-8) return false;
+    const targets = [...this.selected];
+    const originalObjects = [...this.objects];
+    this._saveUndoState();
+    this._bakeTransform();
+
+    const worldPoint = normal.clone().multiplyScalar(worldConstant);
+    const replacements: { source: SceneObject; parts: SceneObject[] }[] = [];
+
+    for (const target of targets) {
+      const parts = await this._cutObjectByPlane(target, normal, worldPoint);
+      if (parts.length === 2) replacements.push({ source: target, parts });
+    }
+
+    if (replacements.length === 0) return false;
+
+    this.transformControl.detach();
+    for (const { source } of replacements) this._disposeSceneObject(source);
+    const replaced = new Set(replacements.map(({ source }) => source));
+    const inserted = new Map(replacements.map(({ source, parts }) => [source, parts]));
+    const nextObjects: SceneObject[] = [];
+    for (const obj of originalObjects) {
+      const parts = inserted.get(obj);
+      if (parts) nextObjects.push(...parts);
+      else if (!replaced.has(obj)) nextObjects.push(obj);
+    }
+    this.objects = nextObjects;
+    this.activePlate.objects = this.objects;
+
+    this.clearCutPlanePreview();
+    this.selected = replacements.flatMap(({ parts }) => parts);
+    this._attachTransformControls();
+    this._updateSelectionVisuals();
+    this.canvas.dispatchEvent(new CustomEvent('selection-changed'));
+    this.canvas.dispatchEvent(new CustomEvent('mesh-changed'));
+    return true;
+  }
+
+  private async _cutObjectByPlane(
+    obj: SceneObject,
+    worldNormal: THREE.Vector3,
+    worldPoint: THREE.Vector3,
+  ): Promise<SceneObject[]> {
+    obj.mesh.geometry.computeBoundingBox();
+    obj.mesh.updateMatrixWorld(true);
+    const inverseWorld = obj.mesh.matrixWorld.clone().invert();
+    const localNormal = worldNormal.clone().transformDirection(inverseWorld);
+    const localPoint = obj.mesh.worldToLocal(worldPoint.clone());
+    const localConstant = localNormal.dot(localPoint);
+    const cutSource = obj.mesh.geometry.index ? obj.mesh.geometry.toNonIndexed() : obj.mesh.geometry;
+    const positionAttribute = cutSource.getAttribute('position') as THREE.BufferAttribute | undefined;
+    if (!positionAttribute) {
+      if (cutSource !== obj.mesh.geometry) cutSource.dispose();
+      return [];
+    }
+    const sourcePositions = new Float32Array(positionAttribute.array as ArrayLike<number>);
+    if (cutSource !== obj.mesh.geometry) cutSource.dispose();
+    const normalTuple = tupleFromVector(localNormal);
+    let result: ReturnType<typeof cutGeometryByPlane> | null = null;
+    for (const offset of cutRetryOffsets(obj.mesh.geometry)) {
+      const constant = localConstant + offset;
+      const manifoldResult = await cutGeometryByManifoldPlane(sourcePositions, normalTuple, constant);
+      result =
+        (manifoldResult ? cleanPlaneCutResult(manifoldResult) : null) ??
+        cleanPlaneCutResult(cutGeometryByPlane(sourcePositions, normalTuple, constant));
+      if (result) break;
+    }
+    if (!result) return [];
+
+    const partMaterial = obj.mesh.material as THREE.Material;
+    const partMaterials = [partMaterial.clone(), partMaterial.clone()];
+
+    if (!hasCompleteCutResult(result)) return [];
+
+    return [result.negative, result.positive].map((positions, index) => {
+      const geometry = geometryFromPositions(positions);
+      const part = this._addModelRaw(geometry, partMaterials[index], obj.elevation);
+      part.materialPreset = obj.materialPreset;
+      part.mesh.position.copy(obj.mesh.position);
+      this._moveMeshOriginToBoundsMin(part.mesh);
+      part.mesh.updateMatrixWorld(true);
+      return part;
+    });
+  }
+
+  private _disposeSceneObject(obj: SceneObject): void {
+    this.scene.remove(obj.mesh);
+    obj.mesh.geometry.dispose();
+    (obj.mesh.material as THREE.Material).dispose();
+    if (obj.supportsMesh) {
+      this.scene.remove(obj.supportsMesh);
+      obj.supportsMesh.geometry.dispose();
+      (obj.supportsMesh.material as THREE.Material).dispose();
+    }
+  }
+
+  previewCutPlane(axis: CutAxis, worldOffset: number): boolean {
+    if (this.selected.length === 0 || !Number.isFinite(worldOffset)) {
+      this.clearCutPlanePreview();
+      return false;
+    }
+    const bounds = this.getSelectionWorldBounds();
+    const center = this.getSelectionWorldCenter();
+    if (!bounds || !center) {
+      this.clearCutPlanePreview();
+      return false;
+    }
+    const min = axisComponent(bounds.min, axis);
+    const max = axisComponent(bounds.max, axis);
+    if (worldOffset <= min || worldOffset >= max) {
+      this.clearCutPlanePreview();
+      return false;
+    }
+
+    this._cutPlaneAxis = axis;
+    this._cutPlaneBounds = { min: bounds.min.clone(), max: bounds.max.clone(), center: center.clone() };
+    if (!this._cutPlanePreview) {
+      const geometry = new THREE.PlaneGeometry(1, 1);
+      const material = new THREE.MeshBasicMaterial({
+        color: 0x1f8fff,
+        transparent: true,
+        opacity: 0.28,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      this._cutPlanePreview = new THREE.Mesh(geometry, material);
+      this._cutPlanePreview.renderOrder = 900;
+      this.scene.add(this._cutPlanePreview);
+    }
+
+    this._placeCutPlanePreview(axis, worldOffset, bounds, center);
+    this.requestRender();
+    return true;
+  }
+
+  editCutPlane(axis: CutAxis, worldOffset: number, mode: 'translate' | 'rotate' = 'translate'): boolean {
+    if (!this.previewCutPlane(axis, worldOffset) || !this._cutPlanePreview) return false;
+    this._cutPlaneInteractive = true;
+    this.transformControl.detach();
+    this.transformControl.attach(this._cutPlanePreview);
+    this.transformControl.setMode(mode);
+    this.transformControl.space = 'world';
+    this.transformControl.showX = mode === 'rotate' || axis === 'x';
+    this.transformControl.showY = mode === 'rotate' || axis === 'y';
+    this.transformControl.showZ = mode === 'rotate' || axis === 'z';
+    this.transformControl.showXY = false;
+    this.transformControl.showYZ = false;
+    this.transformControl.showXZ = false;
+    this.requestRender();
+    return true;
+  }
+
+  clearCutPlanePreview(): void {
+    if (!this._cutPlanePreview) return;
+    this._cutPlaneInteractive = false;
+    this._restoreTransformControlAxes();
+    this.transformControl.detach();
+    this.scene.remove(this._cutPlanePreview);
+    this._cutPlanePreview.geometry.dispose();
+    (this._cutPlanePreview.material as THREE.Material).dispose();
+    this._cutPlanePreview = null;
+    this._cutPlaneBounds = null;
+    this.requestRender();
+  }
+
+  getCutPlaneState(): { axis: CutAxis; position: number; normal: THREE.Vector3; constant: number } | null {
+    if (!this._cutPlanePreview) return null;
+    this._syncInteractiveCutPlane();
+    this._cutPlanePreview.updateMatrixWorld(true);
+    const normal = new THREE.Vector3(0, 0, 1)
+      .applyQuaternion(this._cutPlanePreview.getWorldQuaternion(new THREE.Quaternion()))
+      .normalize();
+    const constant = normal.dot(this._cutPlanePreview.getWorldPosition(new THREE.Vector3()));
+    return {
+      axis: this._cutPlaneAxis,
+      position: axisComponent(this._cutPlanePreview.position, this._cutPlaneAxis),
+      normal,
+      constant,
+    };
+  }
+
+  private _placeCutPlanePreview(
+    axis: CutAxis,
+    worldOffset: number,
+    bounds: { min: THREE.Vector3; max: THREE.Vector3 },
+    center: THREE.Vector3,
+  ): void {
+    if (!this._cutPlanePreview) return;
+    const preview = this._cutPlanePreview;
+    const sizeX = Math.max(bounds.max.x - bounds.min.x, 1);
+    const sizeY = Math.max(bounds.max.y - bounds.min.y, 1);
+    const sizeZ = Math.max(bounds.max.z - bounds.min.z, 1);
+    preview.position.copy(center);
+    preview.rotation.set(0, 0, 0);
+    if (axis === 'x') {
+      preview.position.x = worldOffset;
+      preview.rotation.y = Math.PI / 2;
+      preview.scale.set(sizeZ * 1.12, sizeY * 1.12, 1);
+    } else if (axis === 'y') {
+      preview.position.y = worldOffset;
+      preview.rotation.x = Math.PI / 2;
+      preview.scale.set(sizeX * 1.12, sizeZ * 1.12, 1);
+    } else {
+      preview.position.z = worldOffset;
+      preview.scale.set(sizeX * 1.12, sizeY * 1.12, 1);
+    }
+  }
+
+  private _syncInteractiveCutPlane(): void {
+    if (!this._cutPlaneInteractive || !this._cutPlanePreview || !this._cutPlaneBounds) return;
+    const preview = this._cutPlanePreview;
+    const axis = this._cutPlaneAxis;
+    const min = axisComponent(this._cutPlaneBounds.min, axis);
+    const max = axisComponent(this._cutPlaneBounds.max, axis);
+    const position = THREE.MathUtils.clamp(axisComponent(preview.position, axis), min + 0.01, max - 0.01);
+    preview.position.copy(this._cutPlaneBounds.center);
+    setAxisComponent(preview.position, axis, position);
+    this.canvas.dispatchEvent(new CustomEvent('cut-plane-changed', {
+      detail: { axis, position, min, max },
+    }));
+  }
+
+  private _restoreTransformControlAxes(): void {
+    this.transformControl.showX = true;
+    this.transformControl.showY = true;
+    this.transformControl.showZ = true;
+    this.transformControl.showXY = true;
+    this.transformControl.showYZ = true;
+    this.transformControl.showXZ = true;
+  }
+
   // ---- arrangement (delegates to viewer-arrange.ts) -----------------------
   autoArrange(padding = 0.5, elevation = 10): boolean {
     if (!this.printer) return false;
@@ -1288,6 +1589,11 @@ export class Viewer extends ViewerCore {
         ...meshData,
         elevation: obj.elevation,
         materialPreset: obj.materialPreset,
+        paintStrokes: obj.paintStrokes?.map((stroke) => ({
+          ...stroke,
+          localPoint: [...stroke.localPoint],
+        })),
+        intentBuffer: obj.intentBuffer ? Array.from(obj.intentBuffer) : undefined,
         supports: obj.supportsMesh ? this._serializeMeshGeo(obj.supportsMesh) : null,
       };
     });
@@ -1357,7 +1663,18 @@ export class Viewer extends ViewerCore {
         supportsMesh,
         elevation: item.elevation,
         materialPreset: item.materialPreset,
+        paintStrokes: item.paintStrokes?.map((stroke) => ({
+          ...stroke,
+          localPoint: [...stroke.localPoint],
+          density: stroke.density ?? 0.8,
+          depthMM: stroke.depthMM ?? 0.5,
+          bumpStrength: stroke.bumpStrength ?? 0.6,
+          pattern: stroke.pattern ?? 0,
+          patternScaleMM: stroke.patternScaleMM ?? 2,
+        })),
+        intentBuffer: item.intentBuffer ? new Uint8Array(item.intentBuffer) : undefined,
       };
+      if ((obj.paintStrokes?.length ?? 0) > 0) this._syncPaintMaterial(obj);
       return obj;
     });
   }

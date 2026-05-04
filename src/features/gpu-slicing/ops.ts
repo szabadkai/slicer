@@ -71,6 +71,10 @@ export async function executeSlice(
 
   slicer.uploadGeometry(mergedModelGeo, mergedSupportGeo);
   slicer.setInstances(0, null);
+  slicer.setPaintSliceMarks?.(viewer.getPaintSliceMarks?.() ?? []);
+  slicer.setPaintTextureConfig?.(
+    viewer.getPaintTextureConfig?.() ?? { strength: 0.8, pattern: 0, patternScaleMM: 2 },
+  );
 
   progress.showProgress('Slicing...');
   await new Promise((r) => setTimeout(r, 50));

@@ -73,6 +73,38 @@ describe('executeSlice', () => {
     expect(slicer.uploadGeometry).toHaveBeenCalledWith({ fake: 'geometry' }, null);
   });
 
+  it('forwards paint marks to the slicer', async () => {
+    const marks = [{
+      x: 1,
+      y: 2,
+      z: 3,
+      radiusMM: 4,
+      depthMM: 0.5,
+    }];
+    const viewer = makeViewer({ getPaintSliceMarks: vi.fn(() => marks) });
+    const slicer = {
+      ...makeSlicer([new Uint8Array(4)]),
+      setPaintSliceMarks: vi.fn(),
+    };
+
+    await executeSlice(viewer, slicer, 0.05, makeProgress());
+
+    expect(slicer.setPaintSliceMarks).toHaveBeenCalledWith(marks);
+  });
+
+  it('forwards procedural texture config separately from paint presence', async () => {
+    const config = { strength: 0.7, pattern: 2, patternScaleMM: 1.5 };
+    const viewer = makeViewer({ getPaintTextureConfig: vi.fn(() => config) });
+    const slicer = {
+      ...makeSlicer([new Uint8Array(4)]),
+      setPaintTextureConfig: vi.fn(),
+    };
+
+    await executeSlice(viewer, slicer, 0.05, makeProgress());
+
+    expect(slicer.setPaintTextureConfig).toHaveBeenCalledWith(config);
+  });
+
   it('returns layerCount from slicer', async () => {
     const layer = makeWhiteLayer(10);
     const viewer = makeViewer();

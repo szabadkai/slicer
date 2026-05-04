@@ -23,13 +23,15 @@ const TOOL_PANEL_KEYS: Record<string, string> = {
   '1': 'edit',
   '2': 'transform',
   '3': 'orient',
-  '4': 'supports',
-  '5': 'materials',
-  '6': 'health',
-  '7': 'slice',
+  '4': 'hollow',
+  '5': 'supports',
+  '6': 'materials',
+  '7': 'paint',
+  '8': 'health',
+  '9': 'slice',
 };
 
-const TOOL_PANELS = ['edit', 'transform', 'orient', 'supports', 'materials', 'health', 'slice'] as const;
+const TOOL_PANELS = ['edit', 'transform', 'orient', 'hollow', 'supports', 'materials', 'paint', 'health', 'slice'] as const;
 
 const MOD_SHIFT_BINDINGS: ShortcutBinding[] = [
   { key: 'a', mod: true, shift: true, action: ({ viewer }) => viewer.autoArrange() },

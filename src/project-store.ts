@@ -68,6 +68,8 @@ export interface SerializedObject {
   scale: [number, number, number];
   elevation: number;
   materialPreset: Record<string, unknown>;
+  paintStrokes?: import('./viewer-core').PaintStroke[];
+  intentBuffer?: number[];
   supports: SerializedMesh | null;
 }
 

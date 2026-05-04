@@ -16,10 +16,13 @@ import { mountPlatePanel } from '@features/multi-plate-project/panel';
 import { mountTransformPanel } from '@features/model-transform/panel';
 import { mountSlicePanel } from '@features/gpu-slicing/panel';
 import { mountLayerPreview } from '@features/layer-preview/panel';
+import { mountHollowDrainPanel } from '@features/hollow-drain/panel';
 import { mountSupportPanel } from '@features/support-generation/panel';
 import { mountOrientationPanel } from '@features/auto-orientation/panel';
 import { mountExportPanel } from '@features/model-io/panel';
 import { mountHealthPanel } from '@features/mesh-health/panel';
+import { mountPaintPanel } from '@features/paint-tool/panel';
+import { mountIntentPanel } from '@features/surface-intent/panel';
 import { listen } from './utils';
 import { createPrinterManager } from './printer-manager';
 
@@ -113,10 +116,13 @@ export function mountApp(
   ctx.updateEstimate = updateEstimate;
 
   mountLayerPreview(ctx, slicer);
+  mountHollowDrainPanel(ctx);
   mountSupportPanel(ctx);
   mountOrientationPanel(ctx);
   mountExportPanel(ctx, slicer, project);
   mountHealthPanel(ctx);
+  mountPaintPanel(ctx);
+  mountIntentPanel(ctx);
 
   // ─── Preferences & autosave ──────────────────────────
   const { scheduleSavePreferences, scheduleProjectAutosave } = mountPreferences(
@@ -165,9 +171,11 @@ function mountCanvasEvents(
     const btns: Record<string, boolean> = {
       'transform-btn': !hasSel,
       'orient-btn': !hasSel,
+      'hollow-tool-btn': !hasSel,
       'support-tool-btn': !hasSel,
       'edit-btn': !(hasSel || hasObjs),
       'material-btn': !hasObjs,
+      'paint-btn': !hasObjs,
       'health-btn': !hasObjs,
       'slice-tool-btn': !hasObjs,
       'duplicate-btn': !hasSel,
@@ -190,6 +198,12 @@ function mountCanvasEvents(
     clearActivePlateSlice();
     ctx.updateEstimate();
     viewer.updateBoundsWarning();
+    renderPlateTabs();
+  });
+
+  listen(canvas, 'paint-changed', () => {
+    clearActivePlateSlice();
+    ctx.updateEstimate();
     renderPlateTabs();
   });
 

@@ -51,6 +51,106 @@ interface SliceOptions {
 
 type ProgressCallback = (current: number, total: number) => void;
 
+export interface PaintSliceMark {
+  x: number;
+  y: number;
+  z: number;
+  radiusMM: number;
+  depthMM: number;
+}
+
+export interface PaintTextureConfig {
+  strength: number;
+  pattern: number;
+  patternScaleMM: number;
+}
+
+function slHash(x: number, y: number): number {
+  let px = fract(x * 0.1031);
+  let py = fract(y * 0.1031);
+  const pz = fract(x * 0.1031);
+  const d = px * (py + 33.33) + py * (pz + 33.33) + pz * (px + 33.33);
+  px += d; py += d;
+  return fract((px + py) * (pz + d));
+}
+
+function slNoise(x: number, y: number): number {
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  let fx = x - ix;
+  let fy = y - iy;
+  fx = fx * fx * (3 - 2 * fx);
+  fy = fy * fy * (3 - 2 * fy);
+  const a = slHash(ix, iy);
+  const b = slHash(ix + 1, iy);
+  const c = slHash(ix, iy + 1);
+  const d = slHash(ix + 1, iy + 1);
+  return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
+}
+
+function slFbm(x: number, y: number): number {
+  let v = 0.5 * slNoise(x, y);
+  v += 0.25 * slNoise(x * 2 + 17, y * 2 + 31);
+  v += 0.125 * slNoise(x * 4 + 53, y * 4 + 97);
+  return v / 0.875;
+}
+
+function paintPatternHeightAt(x: number, z: number, pattern: number, scaleMM: number): number {
+  if (pattern <= 0) return 1;
+  const scale = Math.max(scaleMM, 0.001);
+  const u = x / scale;
+  const v = z / scale;
+  if (pattern === 1) {
+    const weaveA = Math.floor((u + v) * 0.5) & 1;
+    const weaveB = Math.floor((u - v) * 0.5) & 1;
+    return ((Math.floor(v * 0.25) & 1) === 0 ? weaveA : weaveB) ? 1 : -1;
+  }
+  if (pattern === 2) {
+    const diagA = Math.abs(fract(u + v) - 0.5);
+    const diagB = Math.abs(fract(u - v) - 0.5);
+    return diagA < 0.16 || diagB < 0.16 ? 1 : -1;
+  }
+  if (pattern === 3) {
+    return Math.abs(fract(u) - 0.5) < 0.22 ? 1 : -1;
+  }
+  if (pattern === 4) {
+    // noise — organic value noise, threshold at 0.5
+    return slFbm(u * 3, v * 3) > 0.5 ? 1 : -1;
+  }
+  if (pattern === 5) {
+    // bumps — soft hemispheres on a grid
+    const fx = fract(u) - 0.5;
+    const fz = fract(v) - 0.5;
+    return Math.sqrt(fx * fx + fz * fz) < 0.35 ? 1 : -1;
+  }
+  return 1;
+}
+
+function fract(value: number): number {
+  return value - Math.floor(value);
+}
+
+function isFilledMask(mask: Uint8Array, w: number, x: number, y: number): boolean {
+  return mask[y * w + x] > 128;
+}
+
+function hasFilledWithin(mask: Uint8Array, w: number, h: number, x: number, y: number, radiusPx: number): boolean {
+  const radiusSq = radiusPx * radiusPx;
+  const minX = Math.max(0, Math.floor(x - radiusPx));
+  const maxX = Math.min(w - 1, Math.ceil(x + radiusPx));
+  const minY = Math.max(0, Math.floor(y - radiusPx));
+  const maxY = Math.min(h - 1, Math.ceil(y + radiusPx));
+  for (let yy = minY; yy <= maxY; yy++) {
+    const dy = yy - y;
+    for (let xx = minX; xx <= maxX; xx++) {
+      const dx = xx - x;
+      if (dx * dx + dy * dy <= radiusSq && isFilledMask(mask, w, xx, yy)) return true;
+    }
+  }
+  return false;
+}
+
+
 // --- Column-major 4×4 matrix helpers (no THREE.js) ---
 
 function mat4Multiply(a: Float32Array, b: Float32Array, out: Float32Array): Float32Array {
@@ -80,6 +180,12 @@ export class Slicer {
   maxY = 0;
   instanceCount = 0;
   instanceMatrix: Float32Array | null = null;
+  paintSliceMarks: PaintSliceMark[] = [];
+  paintTextureConfig: PaintTextureConfig = {
+    strength: 0.8,
+    pattern: 0,
+    patternScaleMM: 2,
+  };
   private _mvScratch = new Float32Array(16);
 
   constructor() {
@@ -309,6 +415,14 @@ export class Slicer {
     this.instanceMatrix = buffer;
   }
 
+  setPaintSliceMarks(marks: PaintSliceMark[]): void {
+    this.paintSliceMarks = marks.map((mark) => ({ ...mark }));
+  }
+
+  setPaintTextureConfig(config: PaintTextureConfig): void {
+    this.paintTextureConfig = { ...config };
+  }
+
   async slice(
     layerHeightMM: number,
     onProgress?: ProgressCallback,
@@ -334,6 +448,7 @@ export class Slicer {
         0, 0, this.printer.resolutionX, this.printer.resolutionY,
         gl.RGBA, gl.UNSIGNED_BYTE, pixels,
       );
+      this._applyPaintSliceMarks(pixels, z, layerHeightMM);
       if (collect && layers) layers.push(pixels);
       if (onLayer) onLayer(pixels, i);
 
@@ -362,7 +477,67 @@ export class Slicer {
       0, 0, this.printer.resolutionX, this.printer.resolutionY,
       gl.RGBA, gl.UNSIGNED_BYTE, pixels,
     );
+    this._applyPaintSliceMarks(pixels, z, layerHeightMM);
     return pixels;
+  }
+
+  private _applyPaintSliceMarks(pixels: Uint8Array, sliceY: number, layerHeightMM: number): void {
+    if (this.paintSliceMarks.length === 0) return;
+
+    const w = this.printer.resolutionX;
+    const h = this.printer.resolutionY;
+    const buildW = this.printer.buildWidthMM;
+    const buildD = this.printer.buildDepthMM;
+    const pxW = buildW / w;
+    const pxD = buildD / h;
+    const halfW = buildW / 2;
+    const halfD = buildD / 2;
+    const sourceMask = new Uint8Array(w * h);
+    for (let i = 0; i < sourceMask.length; i++) {
+      sourceMask[i] = pixels[i * 4];
+    }
+
+    for (const mark of this.paintSliceMarks) {
+      const halfDepth = Math.max(mark.depthMM / 2, layerHeightMM / 2);
+      if (Math.abs(sliceY - mark.y) > halfDepth + layerHeightMM / 2) continue;
+
+      const strength = Math.min(1, Math.max(0, this.paintTextureConfig.strength));
+      const maxOffsetMM = Math.max(pxW, pxD) * (0.5 + strength * 3);
+      const maxOffsetPx = Math.max(1, Math.ceil(maxOffsetMM / Math.min(pxW, pxD)));
+      const minX = Math.max(0, Math.floor((mark.x - mark.radiusMM - maxOffsetMM + halfW) / pxW));
+      const maxX = Math.min(w - 1, Math.ceil((mark.x + mark.radiusMM + maxOffsetMM + halfW) / pxW));
+      const minY = Math.max(0, Math.floor((mark.z - mark.radiusMM - maxOffsetMM + halfD) / pxD));
+      const maxY = Math.min(h - 1, Math.ceil((mark.z + mark.radiusMM + maxOffsetMM + halfD) / pxD));
+      const brushRadiusSq = mark.radiusMM * mark.radiusMM;
+
+      for (let py = minY; py <= maxY; py++) {
+        const z = (py + 0.5) * pxD - halfD;
+        const dz = z - mark.z;
+        for (let px = minX; px <= maxX; px++) {
+          const x = (px + 0.5) * pxW - halfW;
+          const dx = x - mark.x;
+          if (dx * dx + dz * dz > brushRadiusSq) continue;
+
+          const offset = (py * w + px) * 4;
+          const patternHeight = paintPatternHeightAt(
+            x - mark.x,
+            z - mark.z,
+            this.paintTextureConfig.pattern,
+            this.paintTextureConfig.patternScaleMM,
+          );
+          const displacementPx = Math.max(1, Math.ceil(patternHeight * maxOffsetPx));
+          const filled = isFilledMask(sourceMask, w, px, py);
+          const shouldAdd = patternHeight > 0 && !filled && hasFilledWithin(sourceMask, w, h, px, py, displacementPx);
+          if (!shouldAdd) continue;
+
+          const value = 255;
+          pixels[offset] = value;
+          pixels[offset + 1] = value;
+          pixels[offset + 2] = value;
+          pixels[offset + 3] = 255;
+        }
+      }
+    }
   }
 
   private _renderSlice(sliceY: number): void {

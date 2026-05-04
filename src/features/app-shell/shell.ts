@@ -6,15 +6,18 @@ import { listen } from './utils';
 import { getSlicedLayerCount } from './mount';
 import { handleKeydown } from './keyboard-shortcuts';
 
-const TOOL_PANELS = ['edit', 'transform', 'orient', 'supports', 'materials', 'health', 'slice'] as const;
+const TOOL_PANELS = ['edit', 'transform', 'orient', 'hollow', 'supports', 'intent', 'materials', 'paint', 'health', 'slice'] as const;
 type ToolPanel = typeof TOOL_PANELS[number];
 
 const TOOL_BTN_IDS: Record<ToolPanel, string> = {
   edit: 'edit-btn',
   transform: 'transform-btn',
   orient: 'orient-btn',
+  hollow: 'hollow-tool-btn',
   supports: 'support-tool-btn',
+  intent: 'intent-tool-btn',
   materials: 'material-btn',
+  paint: 'paint-btn',
   health: 'health-btn',
   slice: 'slice-tool-btn',
 };
@@ -23,8 +26,11 @@ const PANEL_IDS: Record<ToolPanel, string> = {
   edit: 'edit-panel',
   transform: 'transform-panel',
   orient: 'orientation-panel',
+  hollow: 'hollow-panel',
   supports: 'supports-panel',
+  intent: 'intent-panel',
   materials: 'materials-panel',
+  paint: 'paint-panel',
   health: 'health-panel',
   slice: 'slice-panel',
 };
@@ -72,11 +78,13 @@ export function mountShell(ctx: AppContext): {
     } else {
       viewer.setTransformMode(null);
     }
+    viewer.setPaintToolEnabled?.(panel === 'paint');
 
     if (panel === 'slice' && getSlicedLayerCount() > 0) {
       if (layerPanel) layerPanel.hidden = false;
     }
 
+    document.dispatchEvent(new CustomEvent('tool-panel-changed', { detail: { panel } }));
     ctx.scheduleSavePreferences();
   }
 

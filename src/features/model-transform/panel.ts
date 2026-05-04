@@ -43,6 +43,16 @@ export function mountTransformPanel(ctx: AppContext): void {
   const rotateY = document.getElementById('rotate-y') as HTMLInputElement | null;
   const rotateZ = document.getElementById('rotate-z') as HTMLInputElement | null;
   const uniformScale = document.getElementById('uniform-scale') as HTMLInputElement | null;
+  const cutAxis = document.getElementById('cut-axis') as HTMLSelectElement | null;
+  const cutPosition = document.getElementById('cut-position') as HTMLInputElement | null;
+  const cutMinLabel = document.getElementById('cut-min-label');
+  const cutMaxLabel = document.getElementById('cut-max-label');
+  const cutCenterBtn = document.getElementById('cut-center-btn') as HTMLButtonElement | null;
+  const cutToolbar = document.getElementById('cut-viewer-toolbar');
+  const cutViewerMoveBtn = document.getElementById('cut-viewer-move-btn') as HTMLButtonElement | null;
+  const cutViewerRotateBtn = document.getElementById('cut-viewer-rotate-btn') as HTMLButtonElement | null;
+  const cutViewerApplyBtn = document.getElementById('cut-viewer-apply-btn') as HTMLButtonElement | null;
+  let activeCutMode: 'translate' | 'rotate' = 'translate';
 
   function updateTransformInputs(): void {
     if (viewer.selected.length === 0) return;
@@ -74,6 +84,107 @@ export function mountTransformPanel(ctx: AppContext): void {
       if (rotateY) rotateY.value = '0';
       if (rotateZ) rotateZ.value = '0';
     }
+    syncCutControls();
+  }
+
+  function syncCutControls(resetToCenter = false): void {
+    const axis = getCutAxis();
+    const center = viewer.getSelectionWorldCenter();
+    const bounds = viewer.getSelectionWorldBounds?.();
+    const enabled = viewer.selected.length > 0 && !!center && !!bounds;
+    [cutAxis, cutPosition, cutCenterBtn, cutViewerMoveBtn, cutViewerRotateBtn, cutViewerApplyBtn].forEach((el) => {
+      if (el) el.disabled = !enabled;
+    });
+    if (!enabled || !center || !bounds) {
+      if (cutMinLabel) cutMinLabel.textContent = '0';
+      if (cutMaxLabel) cutMaxLabel.textContent = '0';
+      setCutToolbarVisible(false);
+      viewer.clearCutPlanePreview?.();
+      return;
+    }
+
+    const min = axisValue(bounds.min, axis);
+    const max = axisValue(bounds.max, axis);
+    const centerValue = axisValue(center, axis);
+    const current = parseFloat(cutPosition?.value ?? String(centerValue));
+    const value = resetToCenter || !Number.isFinite(current) ? centerValue : clamp(current, min, max);
+    setCutPosition(value, min, max);
+    setCutToolbarVisible(isEditPanelVisible());
+    if (isEditPanelVisible()) activateCutPlane(activeCutMode);
+  }
+
+  function setCutPosition(value: number, min?: number, max?: number): void {
+    const axis = getCutAxis();
+    const bounds = viewer.getSelectionWorldBounds?.();
+    const resolvedMin = min ?? (bounds ? axisValue(bounds.min, axis) : value);
+    const resolvedMax = max ?? (bounds ? axisValue(bounds.max, axis) : value);
+    const roundedValue = Math.round(clampCutValue(value, resolvedMin, resolvedMax) * 100) / 100;
+    const roundedMin = Math.round(resolvedMin * 100) / 100;
+    const roundedMax = Math.round(resolvedMax * 100) / 100;
+    if (cutPosition) {
+      cutPosition.min = String(roundedMin);
+      cutPosition.max = String(roundedMax);
+      cutPosition.value = String(roundedValue);
+    }
+    if (cutMinLabel) cutMinLabel.textContent = String(roundedMin);
+    if (cutMaxLabel) cutMaxLabel.textContent = String(roundedMax);
+  }
+
+  function getCutAxis(): 'x' | 'y' | 'z' {
+    const value = cutAxis?.value;
+    return value === 'y' || value === 'z' ? value : 'x';
+  }
+
+  function axisValue(vector: { x: number; y: number; z: number }, axis: 'x' | 'y' | 'z'): number {
+    return axis === 'x' ? vector.x : axis === 'y' ? vector.y : vector.z;
+  }
+
+  function clamp(value: number, min: number, max: number): number {
+    return Math.min(Math.max(value, min), max);
+  }
+
+  function clampCutValue(value: number, min: number, max: number): number {
+    const inset = Math.min(0.01, Math.max((max - min) / 1000, 0));
+    return clamp(value, min + inset, max - inset);
+  }
+
+  function isEditPanelVisible(): boolean {
+    return document.getElementById('edit-panel')?.hidden === false;
+  }
+
+  function setCutToolbarVisible(visible: boolean): void {
+    if (cutToolbar) cutToolbar.hidden = !visible;
+  }
+
+  function setCutMode(mode: 'translate' | 'rotate'): void {
+    activeCutMode = mode;
+    cutViewerMoveBtn?.classList.toggle('active', mode === 'translate');
+    cutViewerRotateBtn?.classList.toggle('active', mode === 'rotate');
+  }
+
+  function activateCutPlane(mode = activeCutMode): void {
+    if (viewer.selected.length === 0) return;
+    setCutMode(mode);
+    const position = parseFloat(cutPosition?.value ?? '0');
+    viewer.editCutPlane?.(getCutAxis(), position, mode);
+  }
+
+  async function applyCut(): Promise<void> {
+    const plane = viewer.getCutPlaneState?.();
+    const axis = plane?.axis ?? getCutAxis();
+    const position = plane?.position ?? parseFloat(cutPosition?.value ?? '0');
+    const didCut = await (plane
+      ? viewer.cutSelectedByPlane?.(plane.normal, plane.constant)
+      : viewer.cutSelectedByAxisPlane?.(axis, position));
+    if (!didCut) {
+      alert('The cut could not produce closed manifold parts. Try repairing the model or moving the cut plane.');
+      return;
+    }
+    setCutToolbarVisible(false);
+    ctx.clearActivePlateSlice();
+    ctx.updateEstimate();
+    ctx.scheduleProjectAutosave();
+    updateTransformInputs();
   }
 
   // Move inputs
@@ -152,6 +263,7 @@ export function mountTransformPanel(ctx: AppContext): void {
   // Sync on selection change
   listen(viewer.canvas, 'selection-changed', () => {
     if (viewer.selected.length > 0) updateTransformInputs();
+    else syncCutControls();
   });
 
   // Edit actions
@@ -164,4 +276,33 @@ export function mountTransformPanel(ctx: AppContext): void {
     }
   });
   listen(document.getElementById('arrange-btn'), 'click', () => viewer.autoArrange());
+  listen(cutAxis, 'change', () => {
+    syncCutControls(true);
+    activateCutPlane('translate');
+  });
+  listen(cutPosition, 'input', () => {
+    setCutPosition(parseFloat(cutPosition?.value ?? '0'));
+    activateCutPlane('translate');
+  });
+  listen(cutCenterBtn, 'click', () => {
+    syncCutControls(true);
+    activateCutPlane('translate');
+  });
+  listen(cutViewerMoveBtn, 'click', () => activateCutPlane('translate'));
+  listen(cutViewerRotateBtn, 'click', () => activateCutPlane('rotate'));
+  listen(cutViewerApplyBtn, 'click', applyCut);
+  listen(viewer.canvas, 'cut-plane-changed', ((event: CustomEvent) => {
+    const detail = event.detail as { axis?: 'x' | 'y' | 'z'; position?: number; min?: number; max?: number };
+    if (detail.axis && cutAxis) cutAxis.value = detail.axis;
+    if (typeof detail.position === 'number') setCutPosition(detail.position, detail.min, detail.max);
+  }) as EventListener);
+  listen(document, 'tool-panel-changed', ((event: CustomEvent) => {
+    const detail = event.detail as { panel?: string };
+    if (detail.panel === 'edit') syncCutControls();
+    else {
+      setCutToolbarVisible(false);
+      viewer.clearCutPlanePreview?.();
+    }
+  }) as EventListener);
+  syncCutControls();
 }

@@ -35,6 +35,7 @@ export interface LegacyObject {
     parent?: { remove(child: unknown): void } | null;
   } | null;
   elevation: number;
+  intentBuffer?: Uint8Array;
   _cachedLocalVolume?: number;
   _cachedLocalSupportVolume?: number;
 }
@@ -67,14 +68,35 @@ export interface LegacyViewer {
 
   // Transform
   setTransformMode(mode: string | null): void;
+  setPaintToolEnabled?(enabled: boolean): void;
+  setPaintBrush?(brush: {
+    radiusMM?: number;
+    color?: number;
+    density?: number;
+    depthMM?: number;
+    bumpStrength?: number;
+    pattern?: number;
+    patternScaleMM?: number;
+  }): void;
+  undoPaintStroke?(): void;
+  clearPaint?(): void;
+  getPaintStrokeCount?(): number;
+  getPaintSliceMarks?(): PaintSliceMark[];
+  getPaintTextureConfig?(): PaintTextureConfig;
   translateSelectionTo(position: Vec3): void;
   scaleSelectionBy(scale: Vec3): void;
   rotateSelectionBy(rotation: Vec3): void;
   getSelectionWorldSize(): Vec3 | null;
   getSelectionWorldCenter(): Vec3 | null;
+  getSelectionWorldBounds?(): { min: Vec3; max: Vec3 } | null;
   setElevation(elevation: number): void;
   applyRotation(quaternion: unknown): void;
   setFacePickMode(enabled: boolean): void;
+
+  // Intent painting
+  intentPaintMode: boolean;
+  intentBrushRadiusMM: number;
+  setIntentPaintMode(enabled: boolean): void;
 
   // Edit operations
   duplicateSelected(): void;
@@ -87,6 +109,12 @@ export interface LegacyViewer {
   copySelected(): void;
   paste(): void;
   _saveUndoState?(): void;
+  cutSelectedByAxisPlane?(axis: 'x' | 'y' | 'z', worldOffset: number): boolean | Promise<boolean>;
+  cutSelectedByPlane?(worldNormal: Vec3, worldConstant: number): boolean | Promise<boolean>;
+  previewCutPlane?(axis: 'x' | 'y' | 'z', worldOffset: number): boolean;
+  editCutPlane?(axis: 'x' | 'y' | 'z', worldOffset: number, mode?: 'translate' | 'rotate'): boolean;
+  clearCutPlanePreview?(): void;
+  getCutPlaneState?(): { axis: 'x' | 'y' | 'z'; position: number; normal: Vec3; constant: number } | null;
 
   // Plate management
   setPlates(plates: LegacyPlate[]): void;
@@ -158,11 +186,27 @@ export interface SlicedVolumes {
   exactBreakdown: boolean;
 }
 
+export interface PaintSliceMark {
+  x: number;
+  y: number;
+  z: number;
+  radiusMM: number;
+  depthMM: number;
+}
+
+export interface PaintTextureConfig {
+  strength: number;
+  pattern: number;
+  patternScaleMM: number;
+}
+
 // ─── Legacy Slicer (src/slicer.js) ─────────────────────────
 
 export interface LegacySlicer {
   setPrinter(printerKey: string): void;
   uploadGeometry(geometry: unknown, supportsGeometry?: unknown | null): void;
+  setPaintSliceMarks?(marks: PaintSliceMark[]): void;
+  setPaintTextureConfig?(config: PaintTextureConfig): void;
   setInstances(count: number, buffer: unknown | null): void;
   slice(
     layerHeightMM: number,
