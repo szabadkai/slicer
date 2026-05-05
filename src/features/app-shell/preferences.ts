@@ -3,7 +3,7 @@
  */
 import type { AppContext, ProjectState, PrinterSpec } from '@core/types';
 import type { LegacyPlate } from '@core/legacy-types';
-import { RESIN_MATERIALS } from '@features/material-and-printer-profiles/materials';
+import { RESIN_MATERIALS } from '@features/material-selection/materials';
 import { setInputValue, setInputChecked, listen } from './utils';
 
 const PREFS_KEY = 'slicelab.preferences.v1';
@@ -58,8 +58,12 @@ export function mountPreferences(
       activeToolPanel: getActiveToolPanel(),
       sidebarCollapsed: !!sidebar?.classList.contains('collapsed'),
       sliceSettings: collectInputValues([
-        'layer-height', 'normal-exposure', 'bottom-layers',
-        'bottom-exposure', 'lift-height', 'lift-speed',
+        'layer-height',
+        'normal-exposure',
+        'bottom-layers',
+        'bottom-exposure',
+        'lift-height',
+        'lift-speed',
       ]),
       supportSettings: collectSupportSettings(),
     };
@@ -77,10 +81,19 @@ export function mountPreferences(
   function collectSupportSettings(): Record<string, string | boolean> {
     const result: Record<string, string | boolean> = {};
     const inputs = [
-      'overhang-angle', 'support-density', 'tip-diameter',
-      'support-thickness', 'support-scope', 'support-approach',
-      'support-max-angle', 'support-clearance', 'support-max-offset',
-      'base-pan-margin', 'base-pan-thickness', 'base-pan-lip-width', 'base-pan-lip-height',
+      'overhang-angle',
+      'support-density',
+      'tip-diameter',
+      'support-thickness',
+      'support-scope',
+      'support-approach',
+      'support-max-angle',
+      'support-clearance',
+      'support-max-offset',
+      'base-pan-margin',
+      'base-pan-thickness',
+      'base-pan-lip-width',
+      'base-pan-lip-height',
     ];
     for (const id of inputs) {
       const el = document.getElementById(id) as HTMLInputElement | null;
@@ -114,23 +127,25 @@ export function mountPreferences(
     if (!autosaveReady) return;
     if (autosaveTimer) clearTimeout(autosaveTimer);
     autosaveTimer = setTimeout(() => {
-      import('../../project-store').then((mod) => {
-        const { saveAutosavedProject } = mod;
-        const plates = project.plates.map((plate) => ({
-          id: plate.id,
-          name: plate.name,
-          objects: ctx.viewer.serializeObjects(plate.objects),
-          originX: plate.originX,
-          originZ: plate.originZ,
-        }));
-        saveAutosavedProject({
-          version: 2,
-          app: 'SliceLab',
-          selectedPrinterKey: selectedPrinterKey(),
-          activePlateId: project.activePlateId,
-          plates,
-        }).catch(() => {});
-      }).catch(() => {});
+      import('../../project-store')
+        .then((mod) => {
+          const { saveAutosavedProject } = mod;
+          const plates = project.plates.map((plate) => ({
+            id: plate.id,
+            name: plate.name,
+            objects: ctx.viewer.serializeObjects(plate.objects),
+            originX: plate.originX,
+            originZ: plate.originZ,
+          }));
+          saveAutosavedProject({
+            version: 2,
+            app: 'SliceLab',
+            selectedPrinterKey: selectedPrinterKey(),
+            activePlateId: project.activePlateId,
+            plates,
+          }).catch(() => {});
+        })
+        .catch(() => {});
     }, 900);
   }
 
@@ -170,10 +185,29 @@ export function mountPreferences(
 
   // Register input listeners for persistence
   const persistedIds = [
-    'layer-height', 'normal-exposure', 'bottom-layers', 'bottom-exposure', 'lift-height', 'lift-speed',
-    'overhang-angle', 'auto-density', 'support-density', 'tip-diameter', 'support-thickness', 'auto-thickness',
-    'support-scope', 'support-approach', 'support-max-angle', 'support-clearance', 'support-max-offset',
-    'cross-bracing', 'base-pan-enabled', 'base-pan-margin', 'base-pan-thickness', 'base-pan-lip-width', 'base-pan-lip-height',
+    'layer-height',
+    'normal-exposure',
+    'bottom-layers',
+    'bottom-exposure',
+    'lift-height',
+    'lift-speed',
+    'overhang-angle',
+    'auto-density',
+    'support-density',
+    'tip-diameter',
+    'support-thickness',
+    'auto-thickness',
+    'support-scope',
+    'support-approach',
+    'support-max-angle',
+    'support-clearance',
+    'support-max-offset',
+    'cross-bracing',
+    'base-pan-enabled',
+    'base-pan-margin',
+    'base-pan-thickness',
+    'base-pan-lip-width',
+    'base-pan-lip-height',
   ];
   for (const id of persistedIds) {
     const el = document.getElementById(id);

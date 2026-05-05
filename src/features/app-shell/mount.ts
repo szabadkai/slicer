@@ -9,10 +9,8 @@ import { mountShell } from './shell';
 import { mountContextMenu } from './context-menu';
 import { mountFileHandling } from './file-handling';
 import { mountPreferences } from './preferences';
-import {
-  mountMaterialPanel,
-  mountPrinterPanel,
-} from '@features/material-and-printer-profiles/panel';
+import { mountMaterialPanel } from '@features/material-selection/panel';
+import { mountPrinterPanel } from '@features/material-and-printer-profiles/panel';
 import { mountPlatePanel } from '@features/multi-plate-project/panel';
 import { mountTransformPanel } from '@features/model-transform/panel';
 import { mountSlicePanel } from '@features/gpu-slicing/panel';

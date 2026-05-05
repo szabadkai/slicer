@@ -2,11 +2,10 @@
  * Primitive Boolean panel — UI for adding primitives and applying boolean operations.
  */
 import type { AppContext, PrimitiveCutter } from '@core/types';
-import type { PrimitiveType, PrimitiveParams } from '@core/primitives';
+import type { PrimitiveType } from '@core/primitives';
 import { activeCutter } from '@core/state';
 import { commands } from '@core/commands';
 import { defaultParams, identityTransform, createPositions } from '@core/primitives';
-import { canUndo } from './history';
 import { effect } from '@preact/signals-core';
 
 let nextCutterId = 0;
@@ -28,31 +27,19 @@ export function mountPrimitiveBooleanPanel(ctx: AppContext): () => void {
   const panel = document.getElementById('primitive-boolean-panel');
   if (!panel) return () => {};
 
-  const paramsSection = document.getElementById('primitive-params');
-  const subtractBtn = document.getElementById('prim-subtract-btn') as HTMLButtonElement | null;
-  const splitBtn = document.getElementById('prim-split-btn') as HTMLButtonElement | null;
-  const undoBtn = document.getElementById('prim-undo-btn') as HTMLButtonElement | null;
-  const cancelBtn = document.getElementById('prim-cancel-btn') as HTMLButtonElement | null;
   const primBtns = panel.querySelectorAll<HTMLButtonElement>('.primitive-btn');
-  const gizmoBtns = panel.querySelectorAll<HTMLButtonElement>('.mode-btn');
 
-  const fieldSets: Record<string, HTMLElement | null> = {
-    box: document.getElementById('primitive-box-fields'),
-    sphere: document.getElementById('primitive-sphere-fields'),
-    cylinder: document.getElementById('primitive-cylinder-fields'),
-    cone: document.getElementById('primitive-cone-fields'),
-  };
-
-  // Input refs for dimensions
-  const boxW = document.getElementById('prim-box-w') as HTMLInputElement | null;
-  const boxH = document.getElementById('prim-box-h') as HTMLInputElement | null;
-  const boxD = document.getElementById('prim-box-d') as HTMLInputElement | null;
-  const sphereR = document.getElementById('prim-sphere-r') as HTMLInputElement | null;
-  const cylRt = document.getElementById('prim-cyl-rt') as HTMLInputElement | null;
-  const cylRb = document.getElementById('prim-cyl-rb') as HTMLInputElement | null;
-  const cylH = document.getElementById('prim-cyl-h') as HTMLInputElement | null;
-  const coneR = document.getElementById('prim-cone-r') as HTMLInputElement | null;
-  const coneH = document.getElementById('prim-cone-h') as HTMLInputElement | null;
+  // Viewport floating toolbar
+  const primToolbar = document.getElementById('prim-viewer-toolbar');
+  const primMoveBtn = document.getElementById('prim-viewer-move-btn') as HTMLButtonElement | null;
+  const primRotateBtn = document.getElementById(
+    'prim-viewer-rotate-btn',
+  ) as HTMLButtonElement | null;
+  const primScaleBtn = document.getElementById('prim-viewer-scale-btn') as HTMLButtonElement | null;
+  const subtractBtn = document.getElementById(
+    'prim-viewer-subtract-btn',
+  ) as HTMLButtonElement | null;
+  const splitBtn = document.getElementById('prim-viewer-split-btn') as HTMLButtonElement | null;
 
   const disposers: (() => void)[] = [];
   let previewId: string | null = null;
@@ -60,49 +47,24 @@ export function mountPrimitiveBooleanPanel(ctx: AppContext): () => void {
   let currentGizmoMode: 'translate' | 'rotate' | 'scale' = 'translate';
   let targetModelId: string | null = null;
 
+  function setPrimToolbarVisible(visible: boolean): void {
+    if (primToolbar) primToolbar.hidden = !visible;
+  }
+
+  function setPrimGizmoMode(mode: 'translate' | 'rotate' | 'scale'): void {
+    currentGizmoMode = mode;
+    primMoveBtn?.classList.toggle('active', mode === 'translate');
+    primRotateBtn?.classList.toggle('active', mode === 'rotate');
+    primScaleBtn?.classList.toggle('active', mode === 'scale');
+    if (previewId) {
+      ctx.viewer.setCutterGizmo?.(previewId, mode);
+    }
+  }
+
   function addListener(target: EventTarget | null, event: string, handler: EventListener): void {
     if (!target) return;
     target.addEventListener(event, handler);
     disposers.push(() => target.removeEventListener(event, handler));
-  }
-
-  function showFieldsForType(type: PrimitiveType): void {
-    Object.entries(fieldSets).forEach(([key, el]) => {
-      if (el) el.hidden = key !== type;
-    });
-  }
-
-  function readParamsFromUI(type: PrimitiveType): PrimitiveParams {
-    switch (type) {
-      case 'box':
-        return {
-          type: 'box',
-          width: parseFloat(boxW?.value ?? '10') || 10,
-          height: parseFloat(boxH?.value ?? '10') || 10,
-          depth: parseFloat(boxD?.value ?? '10') || 10,
-        };
-      case 'sphere':
-        return {
-          type: 'sphere',
-          radius: parseFloat(sphereR?.value ?? '5') || 5,
-          segments: 24,
-        };
-      case 'cylinder':
-        return {
-          type: 'cylinder',
-          radiusTop: parseFloat(cylRt?.value ?? '5') || 5,
-          radiusBottom: parseFloat(cylRb?.value ?? '5') || 5,
-          height: parseFloat(cylH?.value ?? '10') || 10,
-          segments: 24,
-        };
-      case 'cone':
-        return {
-          type: 'cone',
-          radius: parseFloat(coneR?.value ?? '5') || 5,
-          height: parseFloat(coneH?.value ?? '10') || 10,
-          segments: 24,
-        };
-    }
   }
 
   function syncPreview(): void {
@@ -177,6 +139,7 @@ export function mountPrimitiveBooleanPanel(ctx: AppContext): () => void {
     }
     activeCutter.value = null;
     targetModelId = null;
+    setPrimToolbarVisible(false);
   }
 
   // ── Primitive type buttons ───────────────────────────────
@@ -188,31 +151,8 @@ export function mountPrimitiveBooleanPanel(ctx: AppContext): () => void {
       const cutter = createCutter(type, ctx);
       activeCutter.value = cutter;
       syncPreview();
-    });
-  });
-
-  // ── Gizmo mode buttons ──────────────────────────────────
-  gizmoBtns.forEach((btn) => {
-    addListener(btn, 'click', () => {
-      gizmoBtns.forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentGizmoMode = (btn.dataset.gizmo as 'translate' | 'rotate' | 'scale') ?? 'translate';
-      if (previewId) {
-        ctx.viewer.setCutterGizmo?.(previewId, currentGizmoMode);
-      }
-    });
-  });
-
-  // ── Dimension input changes ──────────────────────────────
-  const dimInputs = [boxW, boxH, boxD, sphereR, cylRt, cylRb, cylH, coneR, coneH];
-  dimInputs.forEach((input) => {
-    if (!input) return;
-    addListener(input, 'change', () => {
-      const cutter = activeCutter.value;
-      if (!cutter) return;
-      const newParams = readParamsFromUI(cutter.type);
-      activeCutter.value = { ...cutter, params: newParams };
-      syncPreview();
+      setPrimToolbarVisible(true);
+      setPrimGizmoMode('translate');
     });
   });
 
@@ -227,43 +167,38 @@ export function mountPrimitiveBooleanPanel(ctx: AppContext): () => void {
     commands.dispatch('boolean-split', { modelId: targetModelId });
   });
 
-  addListener(cancelBtn, 'click', cancelCutter);
-
   // ── Reactive effects ─────────────────────────────────────
   disposers.push(
     effect(() => {
       const cutter = activeCutter.value;
-      if (paramsSection) paramsSection.hidden = !cutter;
-      if (cutter) {
-        showFieldsForType(cutter.type);
-        // NOTE: syncPreview is called explicitly by button/param handlers,
-        // NOT here. Calling it from the effect would destroy+recreate the
-        // mesh on every gizmo 'change' event, breaking translate dragging.
-      } else if (previewId) {
-        ctx.viewer.clearCutterGizmo?.();
-        ctx.viewer.removeCutterPreview?.(previewId);
-        previewId = null;
+      if (!cutter) {
+        if (previewId) {
+          ctx.viewer.clearCutterGizmo?.();
+          ctx.viewer.removeCutterPreview?.(previewId);
+          previewId = null;
+        }
+        if (gizmoDispose) {
+          gizmoDispose();
+          gizmoDispose = null;
+        }
+        targetModelId = null;
+        setPrimToolbarVisible(false);
       }
     }),
   );
 
-  // Undo button reactivity
-  disposers.push(
-    effect(() => {
-      if (undoBtn) {
-        undoBtn.disabled = !targetModelId || !canUndo(targetModelId);
-      }
-    }),
-  );
+  // ── Viewport toolbar buttons ─────────────────────────────
+  addListener(primMoveBtn, 'click', () => setPrimGizmoMode('translate'));
+  addListener(primRotateBtn, 'click', () => setPrimGizmoMode('rotate'));
+  addListener(primScaleBtn, 'click', () => setPrimGizmoMode('scale'));
 
-  if (undoBtn) {
-    addListener(undoBtn, 'click', () => {
-      if (!targetModelId) return;
-      undoBtn.dispatchEvent(
-        new CustomEvent('boolean-undo', { detail: { modelId: targetModelId }, bubbles: true }),
-      );
-    });
-  }
+  // Hide toolbar when leaving modify panel
+  addListener(document, 'tool-panel-changed', ((event: CustomEvent) => {
+    const detail = event.detail as { panel?: string };
+    if (detail.panel !== 'modify') {
+      cancelCutter();
+    }
+  }) as EventListener);
 
   return () => {
     cancelCutter();

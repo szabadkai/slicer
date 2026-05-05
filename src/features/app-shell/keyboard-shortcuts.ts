@@ -3,6 +3,7 @@
  * Each binding declares its key, modifiers, and action — no if-else cascade.
  */
 import type { LegacyViewer } from '@core/legacy-types';
+import { activeCutter } from '@core/state';
 
 interface ShortcutBinding {
   key: string;
@@ -25,8 +26,9 @@ const TOOL_PANEL_KEYS: Record<string, string> = {
   '3': 'modify',
   '4': 'supports',
   '5': 'surface',
-  '6': 'inspect',
-  '7': 'slice',
+  '6': 'material',
+  '7': 'inspect',
+  '8': 'slice',
 };
 
 const TOOL_PANELS = [
@@ -35,6 +37,7 @@ const TOOL_PANELS = [
   'modify',
   'supports',
   'surface',
+  'material',
   'inspect',
   'slice',
 ] as const;
@@ -119,9 +122,14 @@ function handleEscape(_e: KeyboardEvent, ctx: ShortcutContext): boolean {
     return true;
   }
   // Cancel primitive boolean cutter
-  const primCancel = document.getElementById('prim-cancel-btn') as HTMLButtonElement | null;
-  if (primCancel && !primCancel.hidden && !primCancel.closest('[hidden]')) {
-    primCancel.click();
+  if (activeCutter.value) {
+    activeCutter.value = null;
+    return true;
+  }
+  // Cancel active volume fill (paint or intent)
+  const volToolbar = document.getElementById('vol-viewer-toolbar');
+  if (volToolbar && !volToolbar.hidden) {
+    document.dispatchEvent(new CustomEvent('vol-fill-cancel'));
     return true;
   }
   // Cancel drain hole pick mode

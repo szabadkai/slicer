@@ -268,41 +268,63 @@ export function mountPaintPanel(ctx: AppContext): void {
 
   // ── Volume fill with primitives ───────────────────────────
   const volFill = createVolumeFill(viewer);
-  const volControls = document.getElementById('paint-vol-controls');
   const volPrimBtns = document.querySelectorAll<HTMLButtonElement>('.paint-vol-prim-btn');
-  const volApplyBtn = document.getElementById('paint-vol-apply-btn') as HTMLButtonElement | null;
-  const volCancelBtn = document.getElementById('paint-vol-cancel-btn') as HTMLButtonElement | null;
-  const volGizmoBtns = document.querySelectorAll<HTMLButtonElement>(
-    '#paint-vol-controls .mode-btn',
-  );
+
+  // Reuse viewport floating toolbar
+  const volToolbar = document.getElementById('vol-viewer-toolbar');
+  const volMoveBtn = document.getElementById('vol-viewer-move-btn') as HTMLButtonElement | null;
+  const volRotateBtn = document.getElementById('vol-viewer-rotate-btn') as HTMLButtonElement | null;
+  const volScaleBtn = document.getElementById('vol-viewer-scale-btn') as HTMLButtonElement | null;
+  const volApplyBtn = document.getElementById('vol-viewer-apply-btn') as HTMLButtonElement | null;
+
+  function setVolToolbarVisible(visible: boolean): void {
+    if (volToolbar) volToolbar.hidden = !visible;
+  }
+
+  function setVolGizmoMode(mode: 'translate' | 'rotate' | 'scale'): void {
+    volMoveBtn?.classList.toggle('active', mode === 'translate');
+    volRotateBtn?.classList.toggle('active', mode === 'rotate');
+    volScaleBtn?.classList.toggle('active', mode === 'scale');
+    volFill.setGizmoMode(mode);
+  }
+
+  function cancelVolFill(): void {
+    volFill.cancel();
+    setVolToolbarVisible(false);
+  }
 
   volPrimBtns.forEach((btn) => {
     listen(btn, 'click', () => {
       const type = btn.dataset.primitive as PrimitiveType;
       volFill.start(type);
-      if (volControls) volControls.hidden = false;
+      setVolToolbarVisible(true);
+      setVolGizmoMode('translate');
     });
   });
 
-  volGizmoBtns.forEach((btn) => {
-    listen(btn, 'click', () => {
-      volGizmoBtns.forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      volFill.setGizmoMode((btn.dataset.gizmo as 'translate' | 'rotate' | 'scale') ?? 'translate');
-    });
-  });
+  listen(volMoveBtn, 'click', () => setVolGizmoMode('translate'));
+  listen(volRotateBtn, 'click', () => setVolGizmoMode('rotate'));
+  listen(volScaleBtn, 'click', () => setVolGizmoMode('scale'));
 
   listen(volApplyBtn, 'click', () => {
+    if (!volFill.active) return;
     const state = volFill.state;
     if (!state) return;
     viewer.paintVolume?.(state.params, state.transform);
-    volFill.cancel();
-    if (volControls) volControls.hidden = true;
+    cancelVolFill();
     syncStatus();
   });
 
-  listen(volCancelBtn, 'click', () => {
-    volFill.cancel();
-    if (volControls) volControls.hidden = true;
+  // Hide toolbar when leaving surface panel
+  listen(document, 'tool-panel-changed', ((event: CustomEvent) => {
+    const detail = event.detail as { panel?: string };
+    if (detail.panel !== 'surface') {
+      cancelVolFill();
+    }
+  }) as EventListener);
+
+  // Escape cancels volume fill
+  listen(document, 'vol-fill-cancel', () => {
+    if (volFill.active) cancelVolFill();
   });
 }

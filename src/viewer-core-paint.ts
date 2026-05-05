@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import type { ViewerCore, SceneObject } from './viewer-core';
 import type { PrimitiveParams, PrimitiveTransform } from '@core/primitives';
+import { trianglesInsidePrimitive, filterExteriorTriangles } from '@core/primitives';
 
 const MAX_SHADER_PAINT_STROKES = 64;
 
@@ -96,9 +97,9 @@ export function getPaintStrokeCount(core: ViewerCore): number {
 }
 
 /**
- * Stamp a paint stroke on selected objects within a primitive volume.
- * Transforms the primitive center to model-local space and uses the primitive's
- * bounding radius (approximate sphere) for coverage.
+ * Stamp paint on selected objects within a primitive volume.
+ * Uses per-triangle containment testing and places tightly-fitted strokes
+ * at each affected face centroid so only surfaces inside the primitive get paint.
  */
 export function paintVolume(
   core: ViewerCore,
@@ -106,48 +107,149 @@ export function paintVolume(
   transform: PrimitiveTransform,
 ): void {
   const objects = core.selected.length > 0 ? core.selected : core.objects;
-  const worldCenter = new THREE.Vector3(
-    transform.position[0],
-    transform.position[1],
-    transform.position[2],
-  );
-
-  // Compute bounding radius of the primitive (rough sphere)
-  const s = transform.scale;
-  let radius = 10;
-  if (params.type === 'box') {
-    radius = Math.sqrt(params.width ** 2 + params.height ** 2 + params.depth ** 2) / 2;
-  } else if (params.type === 'sphere') {
-    radius = params.radius;
-  } else if (params.type === 'cylinder') {
-    const r = Math.max(params.radiusTop, params.radiusBottom);
-    radius = Math.sqrt(r ** 2 + (params.height / 2) ** 2);
-  } else if (params.type === 'cone') {
-    radius = Math.sqrt(params.radius ** 2 + (params.height / 2) ** 2);
-  }
-  radius *= Math.max(s[0], s[1], s[2]);
 
   for (const obj of objects) {
-    // Transform world center to model-local space
     obj.mesh.updateMatrixWorld(true);
-    const localCenter = worldCenter.clone().applyMatrix4(obj.mesh.matrixWorld.clone().invert());
+    const posAttr = obj.mesh.geometry.getAttribute('position');
+    if (!posAttr) continue;
+    const vertCount = posAttr.count;
 
+    // Get world-space positions for containment testing
+    const positions = new Float32Array(vertCount * 3);
+    const worldMatrix = obj.mesh.matrixWorld;
+    for (let i = 0; i < vertCount; i++) {
+      const v = new THREE.Vector3().fromBufferAttribute(posAttr, i);
+      v.applyMatrix4(worldMatrix);
+      positions[i * 3] = v.x;
+      positions[i * 3 + 1] = v.y;
+      positions[i * 3 + 2] = v.z;
+    }
+
+    // Find exterior triangles inside the primitive
+    const allInside = trianglesInsidePrimitive(positions, params, transform);
+    const exteriorInside = filterExteriorTriangles(positions, allInside);
+    if (exteriorInside.length === 0) continue;
+
+    // Compute local-space centroids for each affected face
+    const invWorld = worldMatrix.clone().invert();
+    const localPts: Array<[number, number, number]> = [];
+    for (const tri of exteriorInside) {
+      const b = tri * 9;
+      const wx = (positions[b] + positions[b + 3] + positions[b + 6]) / 3;
+      const wy = (positions[b + 1] + positions[b + 4] + positions[b + 7]) / 3;
+      const wz = (positions[b + 2] + positions[b + 5] + positions[b + 8]) / 3;
+      const local = new THREE.Vector3(wx, wy, wz).applyMatrix4(invWorld);
+      localPts.push([local.x, local.y, local.z]);
+    }
+
+    // Determine how many stroke slots we can use
     const strokes = obj.paintStrokes ?? [];
-    strokes.push({
-      localPoint: [localCenter.x, localCenter.y, localCenter.z],
-      radiusMM: radius,
-      color: core.paintBrush.color,
-      density: core.paintBrush.density,
-      depthMM: core.paintBrush.depthMM,
-      bumpStrength: core.paintBrush.bumpStrength,
-      pattern: core.paintBrush.pattern,
-      patternScaleMM: core.paintBrush.patternScaleMM,
-    });
+    const available = MAX_SHADER_PAINT_STROKES - strokes.length;
+    if (available <= 0) continue;
+
+    // Cluster face centroids into at most `available` groups via simple grid binning
+    const clusters = clusterPoints(localPts, Math.min(available, localPts.length));
+
+    for (const cluster of clusters) {
+      strokes.push({
+        localPoint: [cluster.cx, cluster.cy, cluster.cz],
+        radiusMM: cluster.radius,
+        color: core.paintBrush.color,
+        density: core.paintBrush.density,
+        depthMM: core.paintBrush.depthMM,
+        bumpStrength: core.paintBrush.bumpStrength,
+        pattern: core.paintBrush.pattern,
+        patternScaleMM: core.paintBrush.patternScaleMM,
+      });
+    }
     obj.paintStrokes = strokes.slice(-MAX_SHADER_PAINT_STROKES);
     syncPaintMaterial(core, obj);
   }
   core.canvas.dispatchEvent(new CustomEvent('paint-changed'));
   core.requestRender();
+}
+
+/** Cluster points into at most maxClusters groups, returning centroid + radius per cluster. */
+function clusterPoints(
+  points: Array<[number, number, number]>,
+  maxClusters: number,
+): Array<{ cx: number; cy: number; cz: number; radius: number }> {
+  if (points.length <= maxClusters) {
+    // One stroke per face — radius is the face's approximate extent
+    return points.map(([x, y, z]) => ({ cx: x, cy: y, cz: z, radius: 0.8 }));
+  }
+
+  // K-means-style clustering (simple iterative)
+  const k = maxClusters;
+  // Initialize centroids evenly spaced through the point list
+  const centroids: Array<[number, number, number]> = [];
+  for (let i = 0; i < k; i++) {
+    centroids.push(points[Math.floor((i * points.length) / k)]);
+  }
+
+  const assignments = new Int32Array(points.length);
+  for (let iter = 0; iter < 8; iter++) {
+    // Assign points to nearest centroid
+    for (let p = 0; p < points.length; p++) {
+      let bestDist = Infinity;
+      let bestC = 0;
+      for (let c = 0; c < k; c++) {
+        const dx = points[p][0] - centroids[c][0];
+        const dy = points[p][1] - centroids[c][1];
+        const dz = points[p][2] - centroids[c][2];
+        const d = dx * dx + dy * dy + dz * dz;
+        if (d < bestDist) {
+          bestDist = d;
+          bestC = c;
+        }
+      }
+      assignments[p] = bestC;
+    }
+    // Update centroids
+    for (let c = 0; c < k; c++) {
+      let sx = 0,
+        sy = 0,
+        sz = 0,
+        count = 0;
+      for (let p = 0; p < points.length; p++) {
+        if (assignments[p] === c) {
+          sx += points[p][0];
+          sy += points[p][1];
+          sz += points[p][2];
+          count++;
+        }
+      }
+      if (count > 0) {
+        centroids[c] = [sx / count, sy / count, sz / count];
+      }
+    }
+  }
+
+  // Compute radius for each cluster
+  const results: Array<{ cx: number; cy: number; cz: number; radius: number }> = [];
+  for (let c = 0; c < k; c++) {
+    let maxDist = 0;
+    let count = 0;
+    for (let p = 0; p < points.length; p++) {
+      if (assignments[p] === c) {
+        count++;
+        const dx = points[p][0] - centroids[c][0];
+        const dy = points[p][1] - centroids[c][1];
+        const dz = points[p][2] - centroids[c][2];
+        const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (d > maxDist) maxDist = d;
+      }
+    }
+    if (count > 0) {
+      results.push({
+        cx: centroids[c][0],
+        cy: centroids[c][1],
+        cz: centroids[c][2],
+        radius: maxDist + 0.5, // small margin for smoothstep edge
+      });
+    }
+  }
+  return results;
 }
 
 export function getPaintSliceMarks(

@@ -12,6 +12,7 @@ const TOOL_PANELS = [
   'modify',
   'supports',
   'surface',
+  'material',
   'inspect',
   'slice',
 ] as const;
@@ -23,6 +24,7 @@ const TOOL_BTN_IDS: Record<ToolPanel, string> = {
   modify: 'modify-btn',
   supports: 'support-tool-btn',
   surface: 'surface-btn',
+  material: 'material-btn',
   inspect: 'inspect-btn',
   slice: 'slice-tool-btn',
 };
@@ -32,7 +34,8 @@ const PANEL_IDS: Record<ToolPanel, string[]> = {
   orient: ['orientation-panel'],
   modify: ['cut-panel', 'hollow-panel', 'primitive-boolean-panel'],
   supports: ['supports-panel'],
-  surface: ['materials-panel', 'paint-panel'],
+  surface: ['paint-panel'],
+  material: ['materials-panel'],
   inspect: ['health-panel'],
   slice: ['slice-panel'],
 };
@@ -51,7 +54,7 @@ export function mountShell(ctx: AppContext): {
       transform: 'scene',
       hollow: 'modify',
       intent: 'orient',
-      materials: 'surface',
+      materials: 'material',
       paint: 'surface',
       health: 'inspect',
     };

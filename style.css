@@ -553,47 +553,46 @@ body {
 .preset-buttons {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .preset-btn {
   display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 12px;
-  padding: 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: border-color 0.15s, background 0.15s;
   user-select: none;
+  text-align: left;
+  width: 100%;
 }
 
-.preset-btn img {
-  width: 60px;
-  height: 60px;
-  border-radius: 4px;
-  object-fit: cover;
-  background: var(--surface-2);
-}
-
-.preset-btn span {
+.preset-name {
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
 }
 
+.preset-desc {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
 .preset-btn:hover {
   background: var(--tool-hover);
-  border-color: #adb5bd;
+  border-color: #cdd1d6;
 }
 
 .preset-btn:focus,
 .preset-btn:active {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(0, 112, 243, 0.2);
+  box-shadow: 0 0 0 2px rgba(0, 112, 243, 0.15);
 }
 
 .badge {
@@ -601,6 +600,54 @@ body {
   color: var(--accent);
   padding: 2px 6px;
   border-radius: 4px;
+  font-size: 11px;
+}
+
+/* Intent panel */
+.intent-type-buttons {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.intent-type-btn {
+  flex: 1;
+  min-width: 80px;
+  font-size: 11px;
+}
+
+.tradeoff-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tradeoff-row input[type="range"] {
+  flex: 1;
+}
+
+.tradeoff-label {
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+
+.intent-stats {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 6px;
+  margin-bottom: 12px;
+}
+
+.intent-secondary-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.intent-secondary-actions .btn {
+  flex: 1;
   font-size: 11px;
 }
 

@@ -146,9 +146,15 @@ describe('keyboard-shortcuts', () => {
       expect(ctx.showToolPanel).toHaveBeenCalledWith('surface');
     });
 
-    it('7 shows slice panel', () => {
+    it('7 shows inspect panel', () => {
       const ctx = makeCtx();
       handleKeydown(keyEvent('7'), ctx);
+      expect(ctx.showToolPanel).toHaveBeenCalledWith('inspect');
+    });
+
+    it('8 shows slice panel', () => {
+      const ctx = makeCtx();
+      handleKeydown(keyEvent('8'), ctx);
       expect(ctx.showToolPanel).toHaveBeenCalledWith('slice');
     });
   });

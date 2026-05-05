@@ -74,6 +74,12 @@
             </svg>
             <span>Surface</span>
           </button>
+          <button class="tool-btn" id="material-btn" title="Material">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+            </svg>
+            <span>Material</span>
+          </button>
           <button class="tool-btn" id="inspect-btn" title="Inspect">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
@@ -112,6 +118,49 @@
           </button>
           <button type="button" id="cut-viewer-apply-btn" class="cut-viewer-apply" title="Cut selected model" aria-label="Cut selected model">
             Cut
+          </button>
+        </div>
+        <div id="prim-viewer-toolbar" class="cut-viewer-toolbar" hidden>
+          <button type="button" id="prim-viewer-move-btn" class="cut-viewer-tool active" title="Move primitive" aria-label="Move primitive">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path d="M12 2 8 6h3v5H6V8l-4 4 4 4v-3h5v5H8l4 4 4-4h-3v-5h5v3l4-4-4-4v3h-5V6h3l-4-4z"/>
+            </svg>
+          </button>
+          <button type="button" id="prim-viewer-rotate-btn" class="cut-viewer-tool" title="Rotate primitive" aria-label="Rotate primitive">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.96-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm-6 6c0-1.01.25-1.96.7-2.8L5.24 5.74A7.93 7.93 0 0 0 4 10c0 4.42 3.58 8 8 8v3l4-4-4-4v3c-3.31 0-6-2.69-6-6z"/>
+            </svg>
+          </button>
+          <button type="button" id="prim-viewer-scale-btn" class="cut-viewer-tool" title="Scale primitive" aria-label="Scale primitive">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path d="M21 15h2v2h-2v-2zm0-4h2v2h-2v-2zm2 8h-2v2c1 0 2-1 2-2zM13 3h2v2h-2V3zm8 4h2v2h-2V7zm0-4v2h2c0-1-1-2-2-2zM1 7h2v2H1V7zm16-4h2v2h-2V3zm0 16h2v2h-2v-2zM3 3C2 3 1 4 1 5h2V3zm6 0h2v2H9V3zM5 3h2v2H5V3zm-4 8v8c0 1.1.9 2 2 2h12V11H1zm2 8l2.5-3.21 1.79 2.15 2.5-3.22L13 19H3z"/>
+            </svg>
+          </button>
+          <button type="button" id="prim-viewer-subtract-btn" class="cut-viewer-apply" title="Subtract primitive" aria-label="Subtract primitive">
+            Subtract
+          </button>
+          <button type="button" id="prim-viewer-split-btn" class="cut-viewer-apply" title="Split with primitive" aria-label="Split with primitive" style="background:transparent;color:var(--text);border-color:var(--border)">
+            Split
+          </button>
+        </div>
+        <div id="vol-viewer-toolbar" class="cut-viewer-toolbar" hidden>
+          <button type="button" id="vol-viewer-move-btn" class="cut-viewer-tool active" title="Move volume" aria-label="Move volume">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path d="M12 2 8 6h3v5H6V8l-4 4 4 4v-3h5v5H8l4 4 4-4h-3v-5h5v3l4-4-4-4v3h-5V6h3l-4-4z"/>
+            </svg>
+          </button>
+          <button type="button" id="vol-viewer-rotate-btn" class="cut-viewer-tool" title="Rotate volume" aria-label="Rotate volume">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.96-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm-6 6c0-1.01.25-1.96.7-2.8L5.24 5.74A7.93 7.93 0 0 0 4 10c0 4.42 3.58 8 8 8v3l4-4-4-4v3c-3.31 0-6-2.69-6-6z"/>
+            </svg>
+          </button>
+          <button type="button" id="vol-viewer-scale-btn" class="cut-viewer-tool" title="Scale volume" aria-label="Scale volume">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path d="M21 15h2v2h-2v-2zm0-4h2v2h-2v-2zm2 8h-2v2c1 0 2-1 2-2zM13 3h2v2h-2V3zm8 4h2v2h-2V7zm0-4v2h2c0-1-1-2-2-2zM1 7h2v2H1V7zm16-4h2v2h-2V3zm0 16h2v2h-2v-2zM3 3C2 3 1 4 1 5h2V3zm6 0h2v2H9V3zM5 3h2v2H5V3zm-4 8v8c0 1.1.9 2 2 2h12V11H1zm2 8l2.5-3.21 1.79 2.15 2.5-3.22L13 19H3z"/>
+            </svg>
+          </button>
+          <button type="button" id="vol-viewer-apply-btn" class="cut-viewer-apply" title="Apply volume fill" aria-label="Apply volume fill">
+            Apply
           </button>
         </div>
         <div id="plate-strip" aria-label="Build plates">
@@ -195,31 +244,29 @@
         <section id="orientation-panel" class="panel" hidden>
           <h2>Orientation</h2>
           <div class="preset-buttons">
-            <div tabindex="0" class="btn preset-btn" data-preset="fastest">
-              <img src="/fastest.png" alt="Fastest">
-              <span>Fastest</span>
-            </div>
-            <div tabindex="0" class="btn preset-btn" data-preset="least-support">
-              <img src="/least-support.png" alt="Least Support">
-              <span>Least Support</span>
-            </div>
-            <div tabindex="0" class="btn preset-btn" data-preset="best-quality">
-              <img src="/best-quality.png" alt="Best Quality">
-              <span>Best Quality</span>
-            </div>
+            <button class="btn preset-btn" data-preset="fastest">
+              <span class="preset-name">Fastest</span>
+              <span class="preset-desc">Minimize print time</span>
+            </button>
+            <button class="btn preset-btn" data-preset="least-support">
+              <span class="preset-name">Least Support</span>
+              <span class="preset-desc">Reduce material waste</span>
+            </button>
+            <button class="btn preset-btn" data-preset="best-quality">
+              <span class="preset-name">Best Quality</span>
+              <span class="preset-desc">Prioritize surface finish</span>
+            </button>
           </div>
 
-          <hr style="margin: 16px 0; border-color: var(--border);">
-
-          <details id="intent-panel" open>
-            <summary style="font-weight: 600; cursor: pointer; margin-bottom: 8px;">Surface Intent <span class="badge">Goals</span></summary>
+          <div id="intent-panel">
+            <div class="field-heading">Surface Intent</div>
             <div class="control-group">
               <label>Intent Type</label>
-              <div class="intent-buttons" style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;">
-                <button class="btn btn-secondary active" id="intent-btn-cosmetic" style="flex: 1; min-width: 80px; font-size: 11px; border-left: 3px solid #3b82f6;">Cosmetic</button>
-                <button class="btn btn-secondary" id="intent-btn-hidden" style="flex: 1; min-width: 80px; font-size: 11px; border-left: 3px solid #6b7280;">Hidden</button>
-                <button class="btn btn-secondary" id="intent-btn-reliability-critical" style="flex: 1; min-width: 80px; font-size: 11px; border-left: 3px solid #ef4444;">Reliability</button>
-                <button class="btn btn-secondary" id="intent-btn-removal-sensitive" style="flex: 1; min-width: 80px; font-size: 11px; border-left: 3px solid #f59e0b;">Removal</button>
+              <div class="intent-type-buttons">
+                <button class="btn btn-secondary active intent-type-btn" id="intent-btn-cosmetic" data-intent="cosmetic">Cosmetic</button>
+                <button class="btn btn-secondary intent-type-btn" id="intent-btn-hidden" data-intent="hidden">Hidden</button>
+                <button class="btn btn-secondary intent-type-btn" id="intent-btn-reliability-critical" data-intent="reliability-critical">Reliability</button>
+                <button class="btn btn-secondary intent-type-btn" id="intent-btn-removal-sensitive" data-intent="removal-sensitive">Removal</button>
               </div>
             </div>
             <div class="control-group">
@@ -242,50 +289,40 @@
               <button class="btn btn-secondary" id="intent-clear-btn">Clear</button>
               <button class="btn btn-primary" id="intent-paint-btn">Paint Intent</button>
             </div>
-            <div class="action-buttons" style="margin-top: 4px;">
-              <button class="btn btn-secondary" id="intent-select-all-btn" style="font-size: 11px;">Select All Faces</button>
-              <button class="btn btn-secondary" id="intent-clear-all-btn" style="font-size: 11px;">Clear All Models</button>
+            <div class="intent-secondary-actions">
+              <button class="btn btn-secondary" id="intent-select-all-btn">Select All Faces</button>
+              <button class="btn btn-secondary" id="intent-clear-all-btn">Clear All Models</button>
             </div>
-            <div id="intent-stats" style="font-size: 11px; color: #888; margin-top: 6px;">No intents assigned</div>
-            <hr style="margin: 12px 0; border-color: #333;">
+            <div id="intent-stats" class="intent-stats">No intents assigned</div>
+
             <div class="control-group">
-              <label style="font-size: 11px;">Appearance &harr; Reliability</label>
-              <div class="flex-row">
-                <span style="font-size: 10px; color: #3b82f6;">Look</span>
-                <input type="range" id="intent-appearance-reliability" min="0" max="1" step="0.05" value="0.5" style="flex: 1;">
-                <span style="font-size: 10px; color: #ef4444;">Safe</span>
+              <label>Appearance &harr; Reliability</label>
+              <div class="tradeoff-row">
+                <span class="tradeoff-label">Look</span>
+                <input type="range" id="intent-appearance-reliability" min="0" max="1" step="0.05" value="0.5">
+                <span class="tradeoff-label">Safe</span>
               </div>
             </div>
             <div class="control-group">
-              <label style="font-size: 11px;">Fast Cleanup &harr; Min Material</label>
-              <div class="flex-row">
-                <span style="font-size: 10px; color: #f59e0b;">Quick</span>
-                <input type="range" id="intent-cleanup-material" min="0" max="1" step="0.05" value="0.5" style="flex: 1;">
-                <span style="font-size: 10px; color: #6b7280;">Less</span>
+              <label>Fast Cleanup &harr; Min Material</label>
+              <div class="tradeoff-row">
+                <span class="tradeoff-label">Quick</span>
+                <input type="range" id="intent-cleanup-material" min="0" max="1" step="0.05" value="0.5">
+                <span class="tradeoff-label">Less</span>
               </div>
             </div>
-            <div id="intent-conflicts" style="margin-top: 8px;"></div>
-            <hr style="margin: 12px 0; border-color: #333;">
-            <details id="intent-volume-fill">
-              <summary style="font-weight: 600; cursor: pointer; font-size: 12px;">Volume Fill <span class="badge">Primitive</span></summary>
-              <div class="primitive-toolbar" role="group" aria-label="Intent volume primitives" style="margin-top: 6px;">
-                <button type="button" class="btn btn-secondary intent-vol-prim-btn" data-primitive="box" style="font-size: 11px;">Box</button>
-                <button type="button" class="btn btn-secondary intent-vol-prim-btn" data-primitive="sphere" style="font-size: 11px;">Sphere</button>
-                <button type="button" class="btn btn-secondary intent-vol-prim-btn" data-primitive="cylinder" style="font-size: 11px;">Cylinder</button>
+            <div id="intent-conflicts"></div>
+
+            <div class="field-heading">Volume Fill</div>
+            <div id="intent-volume-fill">
+              <div class="mode-toggles">
+                <button type="button" class="btn btn-secondary intent-vol-prim-btn" data-primitive="box">Box</button>
+                <button type="button" class="btn btn-secondary intent-vol-prim-btn" data-primitive="sphere">Sphere</button>
+                <button type="button" class="btn btn-secondary intent-vol-prim-btn" data-primitive="cylinder">Cylinder</button>
               </div>
-              <div id="intent-vol-controls" hidden>
-                <div class="mode-toggle" role="group" aria-label="Gizmo mode" style="margin-top: 6px;">
-                  <button type="button" class="mode-btn active" data-gizmo="translate" id="intent-vol-gizmo-translate">Move</button>
-                  <button type="button" class="mode-btn" data-gizmo="rotate" id="intent-vol-gizmo-rotate">Rotate</button>
-                  <button type="button" class="mode-btn" data-gizmo="scale" id="intent-vol-gizmo-scale">Scale</button>
-                </div>
-                <div class="action-buttons" style="margin-top: 6px;">
-                  <button class="btn btn-primary" id="intent-vol-apply-btn" style="font-size: 11px;">Apply Intent</button>
-                  <button class="btn btn-secondary" id="intent-vol-cancel-btn" style="font-size: 11px;">Cancel</button>
-                </div>
-              </div>
-            </details>
-          </details>
+              <div id="intent-vol-controls" hidden></div>
+            </div>
+          </div>
 
         </section>
 
@@ -303,6 +340,28 @@
           <input type="hidden" id="cut-position" value="0">
           <span id="cut-min-label" hidden>0</span>
           <span id="cut-max-label" hidden>0</span>
+        </section>
+
+        <section id="primitive-boolean-panel" class="panel" hidden>
+          <h2>Boolean Cut <span class="badge">Primitive</span></h2>
+          <div class="primitive-toolbar" role="group" aria-label="Primitives">
+            <button type="button" class="btn btn-secondary primitive-btn" data-primitive="box" title="Box">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M21 16.5c0 .38-.21.71-.53.88l-7.9 4.44c-.36.2-.8.2-1.14 0l-7.9-4.44A.991.991 0 0 1 3 16.5v-9c0-.38.21-.71.53-.88l7.9-4.44c.36-.2.8-.2 1.14 0l7.9 4.44c.32.17.53.5.53.88v9zM12 4.15 5 8.09v7.82l7 3.94 7-3.94V8.09l-7-3.94z"/></svg>
+              Box
+            </button>
+            <button type="button" class="btn btn-secondary primitive-btn" data-primitive="sphere" title="Sphere">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/></svg>
+              Sphere
+            </button>
+            <button type="button" class="btn btn-secondary primitive-btn" data-primitive="cylinder" title="Cylinder">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C8.13 2 5 3.34 5 5v14c0 1.66 3.13 3 7 3s7-1.34 7-3V5c0-1.66-3.13-3-7-3zm0 2c3.31 0 5 1.01 5 1s-1.69 1-5 1-5-1.01-5-1 1.69-1 5-1zm5 15c0 .01-1.69 1-5 1s-5-.99-5-1V7.73C8.55 8.5 10.18 9 12 9s3.45-.5 5-1.27V19z"/></svg>
+              Cylinder
+            </button>
+            <button type="button" class="btn btn-secondary primitive-btn" data-primitive="cone" title="Cone">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2 3 20h18L12 2zm0 4.36L17.53 18H6.47L12 6.36z"/></svg>
+              Cone
+            </button>
+          </div>
         </section>
 
         <section id="hollow-panel" class="panel" hidden>
@@ -572,61 +631,6 @@
           </div>
         </section>
 
-        <section id="primitive-boolean-panel" class="panel" hidden>
-          <h2>Boolean Cut <span class="badge">Primitive</span></h2>
-          <div class="primitive-toolbar" role="group" aria-label="Primitives">
-            <button type="button" class="btn btn-secondary primitive-btn" data-primitive="box" title="Box">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M21 16.5c0 .38-.21.71-.53.88l-7.9 4.44c-.36.2-.8.2-1.14 0l-7.9-4.44A.991.991 0 0 1 3 16.5v-9c0-.38.21-.71.53-.88l7.9-4.44c.36-.2.8-.2 1.14 0l7.9 4.44c.32.17.53.5.53.88v9zM12 4.15 5 8.09v7.82l7 3.94 7-3.94V8.09l-7-3.94z"/></svg>
-              Box
-            </button>
-            <button type="button" class="btn btn-secondary primitive-btn" data-primitive="sphere" title="Sphere">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/></svg>
-              Sphere
-            </button>
-            <button type="button" class="btn btn-secondary primitive-btn" data-primitive="cylinder" title="Cylinder">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C8.13 2 5 3.34 5 5v14c0 1.66 3.13 3 7 3s7-1.34 7-3V5c0-1.66-3.13-3-7-3zm0 2c3.31 0 5 1.01 5 1s-1.69 1-5 1-5-1.01-5-1 1.69-1 5-1zm5 15c0 .01-1.69 1-5 1s-5-.99-5-1V7.73C8.55 8.5 10.18 9 12 9s3.45-.5 5-1.27V19z"/></svg>
-              Cylinder
-            </button>
-            <button type="button" class="btn btn-secondary primitive-btn" data-primitive="cone" title="Cone">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2 3 20h18L12 2zm0 4.36L17.53 18H6.47L12 6.36z"/></svg>
-              Cone
-            </button>
-          </div>
-          <div id="primitive-params" hidden>
-            <h3 class="field-heading">Dimensions</h3>
-            <div id="primitive-box-fields" class="control-group" hidden>
-              <label>Width <input type="number" id="prim-box-w" value="10" step="1" min="0.1" class="val-box"></label>
-              <label>Height <input type="number" id="prim-box-h" value="10" step="1" min="0.1" class="val-box"></label>
-              <label>Depth <input type="number" id="prim-box-d" value="10" step="1" min="0.1" class="val-box"></label>
-            </div>
-            <div id="primitive-sphere-fields" class="control-group" hidden>
-              <label>Radius <input type="number" id="prim-sphere-r" value="5" step="0.5" min="0.1" class="val-box"></label>
-            </div>
-            <div id="primitive-cylinder-fields" class="control-group" hidden>
-              <label>Top Radius <input type="number" id="prim-cyl-rt" value="5" step="0.5" min="0" class="val-box"></label>
-              <label>Bottom Radius <input type="number" id="prim-cyl-rb" value="5" step="0.5" min="0" class="val-box"></label>
-              <label>Height <input type="number" id="prim-cyl-h" value="10" step="1" min="0.1" class="val-box"></label>
-            </div>
-            <div id="primitive-cone-fields" class="control-group" hidden>
-              <label>Radius <input type="number" id="prim-cone-r" value="5" step="0.5" min="0.1" class="val-box"></label>
-              <label>Height <input type="number" id="prim-cone-h" value="10" step="1" min="0.1" class="val-box"></label>
-            </div>
-            <h3 class="field-heading">Gizmo Mode</h3>
-            <div class="mode-toggle" role="group" aria-label="Transform mode">
-              <button type="button" class="mode-btn active" data-gizmo="translate">Move</button>
-              <button type="button" class="mode-btn" data-gizmo="rotate">Rotate</button>
-              <button type="button" class="mode-btn" data-gizmo="scale">Scale</button>
-            </div>
-            <h3 class="field-heading">Operation</h3>
-            <div class="action-buttons">
-              <button class="btn btn-primary" id="prim-subtract-btn">Subtract</button>
-              <button class="btn btn-secondary" id="prim-split-btn">Split</button>
-              <button class="btn btn-secondary" id="prim-undo-btn" disabled>Undo</button>
-              <button class="btn edit-action-btn edit-action-danger" id="prim-cancel-btn">Cancel</button>
-            </div>
-          </div>
-        </section>
-
         <section id="materials-panel" class="panel" hidden>
           <h2>Resin Material <span class="badge">Preview</span></h2>
           <div id="material-picker" class="material-grid"></div>
@@ -685,25 +689,14 @@
           </div>
           <div id="paint-status" class="paint-status">0 strokes</div>
           <hr style="margin: 12px 0; border-color: #333;">
-          <details id="paint-volume-fill">
-            <summary style="font-weight: 600; cursor: pointer; font-size: 12px;">Volume Fill <span class="badge">Primitive</span></summary>
-            <div class="primitive-toolbar" role="group" aria-label="Paint volume primitives" style="margin-top: 6px;">
+          <div id="paint-volume-fill">
+            <div style="font-weight: 600; font-size: 12px; margin-bottom: 6px;">Volume Fill <span class="badge">Primitive</span></div>
+            <div class="primitive-toolbar" role="group" aria-label="Paint volume primitives">
               <button type="button" class="btn btn-secondary paint-vol-prim-btn" data-primitive="box" style="font-size: 11px;">Box</button>
               <button type="button" class="btn btn-secondary paint-vol-prim-btn" data-primitive="sphere" style="font-size: 11px;">Sphere</button>
               <button type="button" class="btn btn-secondary paint-vol-prim-btn" data-primitive="cylinder" style="font-size: 11px;">Cylinder</button>
             </div>
-            <div id="paint-vol-controls" hidden>
-              <div class="mode-toggle" role="group" aria-label="Gizmo mode" style="margin-top: 6px;">
-                <button type="button" class="mode-btn active" data-gizmo="translate" id="paint-vol-gizmo-translate">Move</button>
-                <button type="button" class="mode-btn" data-gizmo="rotate" id="paint-vol-gizmo-rotate">Rotate</button>
-                <button type="button" class="mode-btn" data-gizmo="scale" id="paint-vol-gizmo-scale">Scale</button>
-              </div>
-              <div class="action-buttons" style="margin-top: 6px;">
-                <button class="btn btn-primary" id="paint-vol-apply-btn" style="font-size: 11px;">Apply Paint</button>
-                <button class="btn btn-secondary" id="paint-vol-cancel-btn" style="font-size: 11px;">Cancel</button>
-              </div>
-            </div>
-          </details>
+          </div>
         </section>
 
         <section id="health-panel" class="panel" hidden>
