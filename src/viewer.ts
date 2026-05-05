@@ -9,7 +9,7 @@ import {
   addSignificantFaceMarker as addMarker,
   clearSignificantFaceMarkers as clearMarkers,
 } from './viewer-scene';
-import type { CutAxis } from './features/model-splitting/cut';
+import type { CutAxis } from './features/model-transform/cut';
 import type { SerializedObject } from './project-store';
 import {
   saveUndoState,

@@ -113,11 +113,11 @@ export function attachTransformControls(core: ViewerCore): void {
   if (isCutterGizmoActive()) return;
   if (core.selected.length === 1) {
     core.transformControl.attach(core.selected[0].mesh);
-    if (!core.transformControl.getMode()) core.transformControl.setMode('translate');
+    core.transformControl.setMode('translate');
   } else if (core.selected.length > 1) {
     positionSelectionPivot(core);
     core.transformControl.attach(core.selectionPivot);
-    if (!core.transformControl.getMode()) core.transformControl.setMode('translate');
+    core.transformControl.setMode('translate');
   } else core.transformControl.detach();
 }
 

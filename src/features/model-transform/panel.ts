@@ -61,6 +61,7 @@ export function mountTransformPanel(ctx: AppContext): void {
     'cut-viewer-apply-btn',
   ) as HTMLButtonElement | null;
   let activeCutMode: 'translate' | 'rotate' = 'translate';
+  let cutPlaneActive = false;
 
   function updateTransformInputs(): void {
     if (viewer.selected.length === 0) return;
@@ -126,8 +127,8 @@ export function mountTransformPanel(ctx: AppContext): void {
     const value =
       resetToCenter || !Number.isFinite(current) ? centerValue : clamp(current, min, max);
     setCutPosition(value, min, max);
-    setCutToolbarVisible(isEditPanelVisible());
-    if (isEditPanelVisible()) activateCutPlane(activeCutMode);
+    setCutToolbarVisible(cutPlaneActive && isCutPanelVisible());
+    if (cutPlaneActive && isCutPanelVisible()) activateCutPlane(activeCutMode);
   }
 
   function setCutPosition(value: number, min?: number, max?: number): void {
@@ -165,8 +166,8 @@ export function mountTransformPanel(ctx: AppContext): void {
     return clamp(value, min + inset, max - inset);
   }
 
-  function isEditPanelVisible(): boolean {
-    return document.getElementById('edit-panel')?.hidden === false;
+  function isCutPanelVisible(): boolean {
+    return document.getElementById('cut-panel')?.hidden === false;
   }
 
   function setCutToolbarVisible(visible: boolean): void {
@@ -200,6 +201,7 @@ export function mountTransformPanel(ctx: AppContext): void {
       return;
     }
     setCutToolbarVisible(false);
+    cutPlaneActive = false;
     ctx.clearActivePlateSlice();
     ctx.updateEstimate();
     ctx.scheduleProjectAutosave();
@@ -281,8 +283,20 @@ export function mountTransformPanel(ctx: AppContext): void {
 
   // Sync on selection change
   listen(viewer.canvas, 'selection-changed', () => {
-    if (viewer.selected.length > 0) updateTransformInputs();
-    else syncCutControls();
+    if (viewer.selected.length > 0) {
+      cutPlaneActive = false;
+      setCutToolbarVisible(false);
+      viewer.clearCutPlanePreview?.();
+      modeBtns.forEach((b) => b.classList.toggle('active', b.dataset.mode === 'translate'));
+      Object.entries(fieldSets).forEach(([key, f]) => {
+        if (f) f.hidden = key !== 'translate';
+      });
+      updateTransformInputs();
+    } else {
+      cutPlaneActive = false;
+      setCutToolbarVisible(false);
+      viewer.clearCutPlanePreview?.();
+    }
   });
 
   // Edit actions
@@ -295,15 +309,8 @@ export function mountTransformPanel(ctx: AppContext): void {
     }
   });
   listen(document.getElementById('arrange-btn'), 'click', () => viewer.autoArrange());
-  listen(cutAxis, 'change', () => {
-    syncCutControls(true);
-    activateCutPlane('translate');
-  });
-  listen(cutPosition, 'input', () => {
-    setCutPosition(parseFloat(cutPosition?.value ?? '0'));
-    activateCutPlane('translate');
-  });
   listen(cutCenterBtn, 'click', () => {
+    cutPlaneActive = true;
     syncCutControls(true);
     activateCutPlane('translate');
   });
@@ -323,11 +330,10 @@ export function mountTransformPanel(ctx: AppContext): void {
   }) as EventListener);
   listen(document, 'tool-panel-changed', ((event: CustomEvent) => {
     const detail = event.detail as { panel?: string };
-    if (detail.panel === 'scene') syncCutControls();
-    else {
+    if (detail.panel !== 'modify') {
+      cutPlaneActive = false;
       setCutToolbarVisible(false);
       viewer.clearCutPlanePreview?.();
     }
   }) as EventListener);
-  syncCutControls();
 }

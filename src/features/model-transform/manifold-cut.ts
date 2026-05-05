@@ -80,7 +80,10 @@ function indexPositions(positions: Float32Array): IndexedMesh {
   };
 }
 
-function positionsFromManifoldMesh(mesh: { vertProperties: Float32Array; triVerts: Uint32Array }): Float32Array | null {
+function positionsFromManifoldMesh(mesh: {
+  vertProperties: Float32Array;
+  triVerts: Uint32Array;
+}): Float32Array | null {
   if (mesh.triVerts.length < 3 || mesh.vertProperties.length < 9) return null;
   const positions = new Float32Array(mesh.triVerts.length * 3);
   for (let i = 0; i < mesh.triVerts.length; i++) {

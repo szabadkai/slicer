@@ -30,7 +30,7 @@ const TOOL_BTN_IDS: Record<ToolPanel, string> = {
 const PANEL_IDS: Record<ToolPanel, string[]> = {
   scene: ['edit-panel', 'transform-panel'],
   orient: ['orientation-panel'],
-  modify: ['hollow-panel', 'primitive-boolean-panel'],
+  modify: ['cut-panel', 'hollow-panel', 'primitive-boolean-panel'],
   supports: ['supports-panel'],
   surface: ['materials-panel', 'paint-panel'],
   inspect: ['health-panel'],

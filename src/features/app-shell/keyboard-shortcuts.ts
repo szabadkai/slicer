@@ -118,6 +118,23 @@ function handleEscape(_e: KeyboardEvent, ctx: ShortcutContext): boolean {
     if (btn) btn.classList.remove('active');
     return true;
   }
+  // Cancel primitive boolean cutter
+  const primCancel = document.getElementById('prim-cancel-btn') as HTMLButtonElement | null;
+  if (primCancel && !primCancel.hidden && !primCancel.closest('[hidden]')) {
+    primCancel.click();
+    return true;
+  }
+  // Cancel drain hole pick mode
+  const drainPick = document.getElementById('drain-pick-btn') as HTMLButtonElement | null;
+  if (drainPick?.classList.contains('active')) {
+    drainPick.click();
+    return true;
+  }
+  // Clear selection (also dismisses cut plane via selection-changed)
+  if (ctx.viewer.selected.length > 0) {
+    ctx.viewer.clearSelection();
+    return true;
+  }
   return true; // consume ESC even if no tool active
 }
 

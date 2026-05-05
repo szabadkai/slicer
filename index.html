@@ -289,16 +289,28 @@
 
         </section>
 
-        <section id="hollow-panel" class="panel" hidden>
-          <h2>Hollow <span class="badge">Shell</span></h2>
+        <section id="cut-panel" class="panel" hidden>
+          <h2>Cut Model</h2>
+          <div class="edit-actions">
+            <button class="btn btn-secondary edit-action-btn" id="cut-center-btn">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M11 2h2v4h-2V2zm0 16h2v4h-2v-4zM2 11h4v2H2v-2zm16 0h4v2h-4v-2zm-6-3a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
+              </svg>
+              Place Cut Plane
+            </button>
+          </div>
+          <input type="hidden" id="cut-axis" value="x">
+          <input type="hidden" id="cut-position" value="0">
+          <span id="cut-min-label" hidden>0</span>
+          <span id="cut-max-label" hidden>0</span>
+        </section>
 
-          <!-- Step 1: Shell -->
-          <details class="hollow-step" id="hollow-step-shell" open>
-            <summary class="hollow-step-summary">
-              <span class="step-number">①</span>
-              <span class="step-title">Shell</span>
-              <span class="step-badge" id="hollow-shell-badge"></span>
-            </summary>
+        <section id="hollow-panel" class="panel" hidden>
+          <h2>Hollow</h2>
+
+          <!-- Shell -->
+          <details class="advanced-group" id="hollow-step-shell" open>
+            <summary>Shell <span class="step-badge" id="hollow-shell-badge"></span></summary>
             <div class="control-group">
               <label>Wall Thickness (mm)</label>
               <div class="flex-row">
@@ -320,13 +332,9 @@
             </div>
           </details>
 
-          <!-- Step 2: Drain Holes -->
-          <details class="hollow-step" id="hollow-step-drain" open>
-            <summary class="hollow-step-summary">
-              <span class="step-number">②</span>
-              <span class="step-title">Drain Holes</span>
-              <span class="step-badge" id="hollow-drain-badge"></span>
-            </summary>
+          <!-- Drain Holes -->
+          <details class="advanced-group" id="hollow-step-drain" open>
+            <summary>Drain Holes <span class="step-badge" id="hollow-drain-badge"></span></summary>
             <div class="control-group">
               <label>Hole Diameter (mm)</label>
               <div class="flex-row">
@@ -352,13 +360,9 @@
             </div>
           </details>
 
-          <!-- Step 3: Trap Analysis -->
-          <details class="hollow-step" id="hollow-step-trap">
-            <summary class="hollow-step-summary">
-              <span class="step-number">③</span>
-              <span class="step-title">Trap Analysis</span>
-              <span class="step-badge" id="hollow-trap-badge"></span>
-            </summary>
+          <!-- Trap Analysis -->
+          <details class="advanced-group" id="hollow-step-trap">
+            <summary>Trap Analysis <span class="step-badge" id="hollow-trap-badge"></span></summary>
             <div id="trap-results">
               <p class="hollow-hint">Apply hollow and add drain holes, then analyze for resin traps.</p>
             </div>
@@ -367,13 +371,9 @@
             </div>
           </details>
 
-          <!-- Step 4: Split Model -->
-          <details class="hollow-step" id="hollow-step-split">
-            <summary class="hollow-step-summary">
-              <span class="step-number">④</span>
-              <span class="step-title">Split Model</span>
-              <span class="step-badge" id="hollow-split-badge"></span>
-            </summary>
+          <!-- Split Model -->
+          <details class="advanced-group" id="hollow-step-split">
+            <summary>Split Model <span class="step-badge" id="hollow-split-badge"></span></summary>
             <div class="control-group">
               <label>Split Axis
                 <select id="split-axis" class="val-box">
@@ -556,33 +556,7 @@
               </svg>
               Auto Arrange
             </button>
-            <div class="split-controls">
-              <h3 class="field-heading">Cut Model</h3>
-              <div class="control-group">
-                <label>Axis
-                  <select id="cut-axis" class="val-box">
-                    <option value="x">X</option>
-                    <option value="y">Y</option>
-                    <option value="z">Z</option>
-                  </select>
-                </label>
-              </div>
-              <div class="control-group">
-                <label>Position (mm)
-                  <input type="number" id="cut-position" value="0" step="1" class="val-box">
-                </label>
-              </div>
-              <div class="cut-range-labels">
-                <span id="cut-min-label">0</span>
-                <span id="cut-max-label">0</span>
-              </div>
-              <button class="btn btn-secondary edit-action-btn" id="cut-center-btn">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                  <path d="M11 2h2v4h-2V2zm0 16h2v4h-2v-4zM2 11h4v2H2v-2zm16 0h4v2h-4v-2zm-6-3a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
-                </svg>
-                Center Cut
-              </button>
-            </div>
+
             <button class="btn edit-action-btn edit-action-danger" id="delete-btn">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                 <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />

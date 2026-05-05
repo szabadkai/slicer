@@ -5,8 +5,8 @@ import {
   cleanPlaneCutResult,
   cutGeometryByPlane,
   type CutAxis,
-} from './features/model-splitting/cut';
-import { cutGeometryByManifoldPlane } from './features/model-splitting/manifold-cut';
+} from './features/model-transform/cut';
+import { cutGeometryByManifoldPlane } from './features/model-transform/manifold-cut';
 
 function axisComponent(vector: THREE.Vector3, axis: CutAxis): number {
   if (axis === 'x') return vector.x;

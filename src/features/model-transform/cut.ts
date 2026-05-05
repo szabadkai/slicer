@@ -116,7 +116,8 @@ function clipPolygon(vertices: Vec[], distances: number[], side: Side): Vec[] {
     const previousInside = isInside(previousDistance, side);
 
     if (currentInside) {
-      if (!previousInside) output.push(interpolatePlanePoint(previous, current, previousDistance, currentDistance));
+      if (!previousInside)
+        output.push(interpolatePlanePoint(previous, current, previousDistance, currentDistance));
       output.push([...current]);
     } else if (previousInside) {
       output.push(interpolatePlanePoint(previous, current, previousDistance, currentDistance));
@@ -133,11 +134,7 @@ function isInside(distance: number, side: Side): boolean {
 function interpolatePlanePoint(a: Vec, b: Vec, da: number, db: number): Vec {
   const denom = da - db;
   const t = Math.abs(denom) <= EPSILON ? 0 : da / denom;
-  return [
-    a[0] + (b[0] - a[0]) * t,
-    a[1] + (b[1] - a[1]) * t,
-    a[2] + (b[2] - a[2]) * t,
-  ];
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 }
 
 function appendTriangulatedPolygon(poly: Vec[], output: number[]): void {
@@ -213,7 +210,8 @@ function buildSegmentLoops(segments: [Vec, Vec][]): Vec[][] {
         const candidates = [...(adjacency.get(cur) ?? [])].filter(
           (candidate) => candidate !== prev && !usedEdges.has(edgeKey(cur, candidate)),
         );
-        const candidate = candidates[0] ?? [...(adjacency.get(cur) ?? [])].find((key) => key !== prev);
+        const candidate =
+          candidates[0] ?? [...(adjacency.get(cur) ?? [])].find((key) => key !== prev);
         if (!candidate) break;
         usedEdges.add(edgeKey(cur, candidate));
         prev = cur;
@@ -345,11 +343,7 @@ function dot(a: Vec, b: Vec): number {
 }
 
 function cross(a: Vec, b: Vec): Vec {
-  return [
-    a[1] * b[2] - a[2] * b[1],
-    a[2] * b[0] - a[0] * b[2],
-    a[0] * b[1] - a[1] * b[0],
-  ];
+  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 }
 
 function length(a: Vec): number {
