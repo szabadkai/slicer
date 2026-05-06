@@ -15,6 +15,7 @@ const TOOL_PANELS = [
   'surface',
   'material',
   'inspect',
+  'measure',
   'slice',
 ] as const;
 type ToolPanel = (typeof TOOL_PANELS)[number];
@@ -28,6 +29,7 @@ const TOOL_BTN_IDS: Record<ToolPanel, string> = {
   surface: 'surface-btn',
   material: 'material-btn',
   inspect: 'inspect-btn',
+  measure: 'measure-btn',
   slice: 'slice-tool-btn',
 };
 
@@ -40,6 +42,7 @@ const PANEL_IDS: Record<ToolPanel, string[]> = {
   surface: ['paint-panel'],
   material: ['materials-panel'],
   inspect: ['health-panel'],
+  measure: ['measure-panel'],
   slice: ['slice-panel'],
 };
 

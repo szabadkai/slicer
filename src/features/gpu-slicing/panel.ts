@@ -75,6 +75,13 @@ export function mountSlicePanel(
     saveSliceRefsToActivePlate();
     updateEstimate();
 
+    // Emit per-layer data for peel force chart
+    viewer.canvas?.dispatchEvent(
+      new CustomEvent('slice-complete', {
+        detail: { perLayerWhitePixels: result.perLayerWhitePixels, layerCount: result.layerCount },
+      }),
+    );
+
     ctx.hideProgress();
 
     if (layerPreviewPanel) layerPreviewPanel.hidden = false;

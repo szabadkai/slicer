@@ -2505,3 +2505,71 @@ button:disabled {
   font-size: 11px;
   color: var(--text-dim);
 }
+
+/* ─── Phase 3: Measure tool ──────────────────────────── */
+.measure-hint {
+  color: var(--text-dim);
+  font-size: 12px;
+  padding: 4px 0 8px;
+}
+.measure-result {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.measure-value-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+.measure-value-row span:first-child {
+  color: var(--text-secondary);
+}
+.measure-value-row span:last-child {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Phase 3: Peel force chart ──────────────────────── */
+.peel-force-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.peel-force-header {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+.peel-force-peak {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+/* ─── Phase 3: Print time estimate ───────────────────── */
+.print-time-estimate {
+  margin-top: 8px;
+  padding: 6px 8px;
+  background: var(--bg-panel, #1e1e2e);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.print-time-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.print-time-value {
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}

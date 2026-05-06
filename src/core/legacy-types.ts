@@ -187,6 +187,10 @@ export interface LegacyViewer {
   }): void;
   clearThicknessHeatmap?(): void;
 
+  // Non-manifold edge highlighting
+  showEdgeHighlight?(locations: Float32Array): void;
+  clearEdgeHighlight?(): void;
+
   // Project serialization
   serializeObjects(objects?: LegacyObject[]): import('../project-store').SerializedObject[];
   restoreSerializedObjects(data: import('../project-store').SerializedObject[]): LegacyObject[];

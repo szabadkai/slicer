@@ -93,6 +93,12 @@
             </svg>
             <span>Inspect</span>
           </button>
+          <button class="tool-btn" id="measure-btn" title="Measure">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 10H3V8h2v4h2V8h2v4h2V8h2v4h2V8h2v4h2V8h2v8z"/>
+            </svg>
+            <span>Measure</span>
+          </button>
           <button class="tool-btn" id="slice-tool-btn" title="Slice">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
               <path d="M4 5h16v2H4V5zm2 4h12v2H6V9zm2 4h8v2H8v-2zm2 4h4v2h-4v-2z" />
@@ -817,6 +823,7 @@
           </div>
           <button class="btn btn-secondary health-heatmap-btn" id="health-support-heatmap-btn" disabled>Show Support Heatmap</button>
           <button class="btn btn-secondary health-heatmap-btn" id="health-thickness-heatmap-btn" disabled>Show Thickness Heatmap</button>
+          <button class="btn btn-secondary health-heatmap-btn" id="health-edge-highlight-btn" disabled>Highlight Non-Manifold</button>
           
           <div id="health-issues" class="health-issues">
             <div class="health-empty-state">Load a model and click Analyze to check for issues.</div>
@@ -825,6 +832,32 @@
           <div id="health-printer-context" class="health-printer-context" hidden>
             <h3>Printer Compatibility</h3>
             <div id="health-printer-specs"></div>
+          </div>
+        </section>
+
+        <section id="measure-panel" class="panel" hidden>
+          <h2>Measure</h2>
+          <p class="measure-hint">Click two points on a model to measure the distance between them.</p>
+          <div id="measure-result" class="measure-result" hidden>
+            <div class="measure-value-row">
+              <span>Distance</span>
+              <strong id="measure-distance">—</strong>
+            </div>
+            <div class="measure-value-row">
+              <span>ΔX</span>
+              <span id="measure-dx">—</span>
+            </div>
+            <div class="measure-value-row">
+              <span>ΔY</span>
+              <span id="measure-dy">—</span>
+            </div>
+            <div class="measure-value-row">
+              <span>ΔZ</span>
+              <span id="measure-dz">—</span>
+            </div>
+          </div>
+          <div class="action-buttons">
+            <button class="btn btn-secondary" id="measure-clear-btn">Clear</button>
           </div>
         </section>
 
@@ -868,6 +901,10 @@
             </div>
             <div id="preflight-results" class="preflight-results"></div>
           </div>
+          <div id="print-time-estimate" class="print-time-estimate" hidden>
+            <span class="print-time-label">Est. Print Time</span>
+            <span id="print-time-value" class="print-time-value">—</span>
+          </div>
         </section>
 
         <section id="layer-preview-panel" class="panel" hidden>
@@ -886,6 +923,13 @@
             <button class="btn btn-secondary" id="island-detect-btn" style="width: 100%;">Detect Islands</button>
           </div>
           <div id="island-results" class="island-results"></div>
+          <div id="peel-force-section" class="peel-force-section" hidden>
+            <div class="peel-force-header">
+              <span>Peel Force Profile</span>
+              <span id="peel-force-peak" class="peel-force-peak"></span>
+            </div>
+            <canvas id="peel-force-canvas" width="280" height="60"></canvas>
+          </div>
         </section>
 
         <div id="footer-actions" hidden>

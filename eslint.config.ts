@@ -80,6 +80,7 @@ export default tseslint.config(
       'src/supports-geometry.ts',
       'src/features/support-generation/manual-pillar.ts',
       'src/features/hollow-drain/trap-actions.ts',
+      'src/features/scene-viewer/measure.ts',
     ],
     rules: {
       'no-restricted-imports': 'off',

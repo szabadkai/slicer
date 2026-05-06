@@ -307,6 +307,9 @@ export function mountHealthPanel(ctx: AppContext): void {
   listen(viewer.canvas, 'mesh-changed', () => {
     lastReport = null;
     lastTarget = null;
+    edgeHighlightVisible = false;
+    if (edgeHighlightBtn) edgeHighlightBtn.textContent = 'Show Non-Manifold Edges';
+    viewer.clearEdgeHighlight?.();
     if (heatmapVisible) {
       viewer.clearSupportHeatmap?.();
       heatmapVisible = false;
@@ -317,5 +320,32 @@ export function mountHealthPanel(ctx: AppContext): void {
     }
     updateState();
   });
+
+  // ─── Non-manifold edge highlighting ─────────────────────────────
+  const edgeHighlightBtn = document.getElementById(
+    'health-edge-highlight-btn',
+  ) as HTMLButtonElement | null;
+  let edgeHighlightVisible = false;
+
+  listen(edgeHighlightBtn, 'click', () => {
+    if (edgeHighlightVisible) {
+      viewer.clearEdgeHighlight?.();
+      edgeHighlightVisible = false;
+      if (edgeHighlightBtn) edgeHighlightBtn.textContent = 'Show Non-Manifold Edges';
+      return;
+    }
+    if (!lastReport) return;
+    const nonManifold = lastReport.issues.find(
+      (i) => i.id === 'non-manifold-edges' || i.id === 'open-edges',
+    );
+    if (!nonManifold?.locations) {
+      alert('No non-manifold edges detected. Run analysis first.');
+      return;
+    }
+    viewer.showEdgeHighlight?.(nonManifold.locations);
+    edgeHighlightVisible = true;
+    if (edgeHighlightBtn) edgeHighlightBtn.textContent = 'Hide Non-Manifold Edges';
+  });
+
   updateState();
 }

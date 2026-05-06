@@ -25,6 +25,7 @@ import { mountHealthPanel } from '@features/mesh-health/panel';
 import { mountPaintPanel } from '@features/paint-tool/panel';
 import { mountIntentPanel } from '@features/surface-intent/panel';
 import { mountPrimitiveBoolean } from '@features/primitive-boolean/mount';
+import { mountMeasureTool } from '@features/scene-viewer/measure';
 import { listen } from './utils';
 import { createPrinterManager } from './printer-manager';
 
@@ -149,6 +150,7 @@ export function mountApp(ctx: AppContext, PRINTERS: Record<string, PrinterSpec>)
   mountPaintPanel(ctx);
   mountIntentPanel(ctx);
   mountPrimitiveBoolean(ctx);
+  mountMeasureTool(ctx);
 
   // ─── Preferences & autosave ──────────────────────────
   const { scheduleSavePreferences, scheduleProjectAutosave } = mountPreferences(

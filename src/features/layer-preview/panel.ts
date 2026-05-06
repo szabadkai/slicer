@@ -7,8 +7,10 @@ import { listen } from '@features/app-shell/utils';
 import { getSlicedLayerCount } from '@features/app-shell/mount';
 import { slicedLayers } from './ops';
 import { detectIslands, summarizeIslands } from './island-detector';
+import { computePeelForceProfile, renderPeelForceChart, type PeelForceProfile } from './peel-force';
 
-export function mountLayerPreview(_ctx: AppContext, slicer: LegacySlicer): void {
+export function mountLayerPreview(ctx: AppContext, slicer: LegacySlicer): void {
+  const { viewer } = ctx;
   const layerCanvas = document.getElementById('layer-canvas') as HTMLCanvasElement | null;
   const layerSlider = document.getElementById('layer-slider') as HTMLInputElement | null;
   const layerInfo = document.getElementById('layer-info');
@@ -196,4 +198,78 @@ export function mountLayerPreview(_ctx: AppContext, slicer: LegacySlicer): void 
       });
     }
   });
+
+  // ─── Peel force chart ────────────────────────────────────────────
+  const peelCanvas = document.getElementById('peel-force-canvas') as HTMLCanvasElement | null;
+  const peelSection = document.getElementById('peel-force-section');
+  const peelPeak = document.getElementById('peel-force-peak');
+  let currentPeelProfile: PeelForceProfile | null = null;
+
+  const viewerCanvas = document.getElementById('viewer-canvas') ?? viewer.canvas;
+  viewerCanvas?.addEventListener('slice-complete', ((
+    e: CustomEvent<{ perLayerWhitePixels: Float64Array; layerCount: number }>,
+  ) => {
+    const { perLayerWhitePixels } = e.detail;
+    const spec = slicer.getPrinterSpec();
+    const pixelAreaMM2 =
+      (spec.buildWidthMM / spec.resolutionX) * (spec.buildDepthMM / spec.resolutionY);
+
+    currentPeelProfile = computePeelForceProfile(perLayerWhitePixels, pixelAreaMM2);
+
+    if (peelSection) peelSection.hidden = false;
+    if (peelPeak) {
+      peelPeak.textContent = `Peak: ${currentPeelProfile.maxAreaMM2.toFixed(1)} mm² (L${currentPeelProfile.peakLayerIndex + 1})`;
+    }
+    if (peelCanvas) renderPeelForceChart(peelCanvas, currentPeelProfile);
+  }) as EventListener);
+
+  // Highlight current layer on slider change
+  listen(layerSlider, 'input', () => {
+    if (currentPeelProfile && peelCanvas) {
+      const idx = parseInt(layerSlider?.value ?? '0', 10);
+      renderPeelForceChart(peelCanvas, currentPeelProfile, idx);
+    }
+  });
+
+  // ─── Print time display ──────────────────────────────────────────
+  const printTimeSection = document.getElementById('print-time-estimate');
+  const printTimeValue = document.getElementById('print-time-value');
+
+  viewerCanvas?.addEventListener('slice-complete', ((e: CustomEvent<{ layerCount: number }>) => {
+    const { layerCount: count } = e.detail;
+    if (count <= 0 || !printTimeSection || !printTimeValue) return;
+
+    const layerHeightInput = document.getElementById('layer-height') as HTMLInputElement | null;
+    const normalExposure = parseFloat(
+      (document.getElementById('normal-exposure') as HTMLInputElement)?.value ?? '2',
+    );
+    const bottomLayers = parseInt(
+      (document.getElementById('bottom-layers') as HTMLInputElement)?.value ?? '6',
+      10,
+    );
+    const bottomExposure = parseFloat(
+      (document.getElementById('bottom-exposure') as HTMLInputElement)?.value ?? '30',
+    );
+    const liftHeight = parseFloat(
+      (document.getElementById('lift-height') as HTMLInputElement)?.value ?? '5',
+    );
+    const liftSpeed = parseFloat(
+      (document.getElementById('lift-speed') as HTMLInputElement)?.value ?? '1',
+    );
+
+    const bottomCount = Math.min(bottomLayers, count);
+    const normalCount = count - bottomCount;
+    const liftTimePerLayer = liftHeight / liftSpeed;
+    const totalS =
+      bottomCount * (bottomExposure + liftTimePerLayer) +
+      normalCount * (normalExposure + liftTimePerLayer);
+
+    const h = Math.floor(totalS / 3600);
+    const m = Math.floor((totalS % 3600) / 60);
+    printTimeValue.textContent = h > 0 ? `${h}h ${m}m` : `${m}m`;
+    printTimeSection.hidden = false;
+
+    // Also store on the layer height input for reference
+    if (layerHeightInput) layerHeightInput.dataset.layerCount = String(count);
+  }) as EventListener);
 }
