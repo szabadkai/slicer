@@ -23,7 +23,11 @@ describe('mountFileHandling', () => {
   beforeEach(() => {
     document.body.innerHTML = `
       <input id="stl-input" type="file" />
+      <button id="browse-stl-btn"></button>
       <div id="viewport-container"></div>
+      <div class="sample-model-grid">
+        <button class="sample-model-card" data-model="chess-rook"></button>
+      </div>
     `;
   });
 

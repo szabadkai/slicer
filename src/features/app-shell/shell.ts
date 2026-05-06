@@ -7,6 +7,7 @@ import { getSlicedLayerCount } from './mount';
 import { handleKeydown } from './keyboard-shortcuts';
 
 const TOOL_PANELS = [
+  'load',
   'scene',
   'orient',
   'modify',
@@ -19,6 +20,7 @@ const TOOL_PANELS = [
 type ToolPanel = (typeof TOOL_PANELS)[number];
 
 const TOOL_BTN_IDS: Record<ToolPanel, string> = {
+  load: 'load-btn',
   scene: 'scene-btn',
   orient: 'orient-btn',
   modify: 'modify-btn',
@@ -30,6 +32,7 @@ const TOOL_BTN_IDS: Record<ToolPanel, string> = {
 };
 
 const PANEL_IDS: Record<ToolPanel, string[]> = {
+  load: ['load-panel'],
   scene: ['edit-panel', 'transform-panel'],
   orient: ['orientation-panel'],
   modify: ['cut-panel', 'hollow-panel', 'primitive-boolean-panel'],
@@ -169,6 +172,29 @@ export function mountShell(ctx: AppContext): {
   });
 
   showToolPanel('scene');
+
+  // Dark mode toggle
+  const themeBtn = document.getElementById('theme-toggle-btn');
+  const sunIcon = document.getElementById('theme-icon-sun');
+  const moonIcon = document.getElementById('theme-icon-moon');
+
+  function applyTheme(dark: boolean): void {
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    if (sunIcon) sunIcon.hidden = dark;
+    if (moonIcon) moonIcon.hidden = !dark;
+  }
+
+  const savedTheme = localStorage.getItem('slicelab.theme');
+  const prefersDark =
+    savedTheme === 'dark' ||
+    (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  applyTheme(prefersDark);
+
+  listen(themeBtn, 'click', () => {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    applyTheme(!isDark);
+    localStorage.setItem('slicelab.theme', isDark ? 'light' : 'dark');
+  });
 
   return {
     showToolPanel,
