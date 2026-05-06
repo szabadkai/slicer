@@ -10,18 +10,25 @@ function serializeMeshGeo(mesh: THREE.Mesh): {
   rotation: [number, number, number, string];
   scale: [number, number, number];
 } {
-  const geo = mesh.geometry;
+  // Convert indexed geometry to non-indexed so that the index buffer
+  // doesn't need to be serialized separately.  Support geometry from
+  // buildSupportGeometry is indexed; dropping the index on save produced
+  // garbled triangles on reload.
+  const srcGeo = mesh.geometry;
+  const geo = srcGeo.index ? srcGeo.toNonIndexed() : srcGeo;
   const posAttr = geo.getAttribute('position') as THREE.BufferAttribute;
   const normAttr = geo.getAttribute('normal') as THREE.BufferAttribute | null;
   const posArr = posAttr.array as Float32Array;
   const normArr = normAttr ? (normAttr.array as Float32Array) : null;
-  return {
+  const result = {
     positions: new Float32Array(posArr).buffer as ArrayBuffer,
     normals: normArr ? (new Float32Array(normArr).buffer as ArrayBuffer) : null,
-    position: [mesh.position.x, mesh.position.y, mesh.position.z],
-    rotation: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z, mesh.rotation.order],
-    scale: [mesh.scale.x, mesh.scale.y, mesh.scale.z],
+    position: [mesh.position.x, mesh.position.y, mesh.position.z] as [number, number, number],
+    rotation: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z, mesh.rotation.order] as [number, number, number, string],
+    scale: [mesh.scale.x, mesh.scale.y, mesh.scale.z] as [number, number, number],
   };
+  if (geo !== srcGeo) geo.dispose();
+  return result;
 }
 
 function restoreMesh(
