@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { detectOverhangs } from './detect';
 import { sampleContactPoints, generatePillars } from './build';
-import { supportsByModel, setSupports, clearSupports, toggleSupportVisibility } from './store';
+import { supportsByModel, setSupports, clearSupports, toggleSupportVisibility, overhangOverlayVisible } from './store';
+import { buildOverhangOverlayData } from './overhang-overlay';
 
 // ─── Test geometry helpers ─────────────────────────────────
 
@@ -135,5 +136,66 @@ describe('support-generation store', () => {
     expect(supportsByModel.value.get('model-1')!.visible).toBe(false);
     toggleSupportVisibility('model-1');
     expect(supportsByModel.value.get('model-1')!.visible).toBe(true);
+  });
+
+  it('overhangOverlayVisible defaults to false', () => {
+    expect(overhangOverlayVisible.value).toBe(false);
+  });
+});
+
+// ─── Overhang overlay tests ────────────────────────────────
+
+describe('overhang-overlay', () => {
+  it('returns null when no overhangs exist', () => {
+    const positions = makeUpwardTriangle();
+    const result = buildOverhangOverlayData(positions, 1, []);
+    expect(result).toBeNull();
+  });
+
+  it('marks unsupported overhang triangles as red', () => {
+    const positions = makeDownwardTriangle();
+    const result = buildOverhangOverlayData(positions, 1, []);
+    expect(result).not.toBeNull();
+    expect(result!.unsupportedCount).toBe(1);
+    expect(result!.totalOverhangCount).toBe(1);
+    // Check red color on first vertex
+    expect(result!.colors[0]).toBeCloseTo(0.94, 1);
+    expect(result!.colors[1]).toBeCloseTo(0.27, 1);
+    expect(result!.colors[2]).toBeCloseTo(0.27, 1);
+  });
+
+  it('marks covered overhang triangles as green', () => {
+    const positions = makeDownwardTriangle();
+    // Place a support contact at the centroid of the triangle
+    const contacts = [{ x: 0.5, y: 5, z: 1 / 3 }];
+    const result = buildOverhangOverlayData(positions, 1, contacts, undefined, 5.0);
+    expect(result).not.toBeNull();
+    expect(result!.unsupportedCount).toBe(0);
+    expect(result!.totalOverhangCount).toBe(1);
+    // Check green color on first vertex
+    expect(result!.colors[0]).toBeCloseTo(0.2, 1);
+    expect(result!.colors[1]).toBeCloseTo(0.78, 1);
+    expect(result!.colors[2]).toBeCloseTo(0.35, 1);
+  });
+
+  it('respects coverage radius', () => {
+    const positions = makeDownwardTriangle();
+    // Contact far away from centroid
+    const contacts = [{ x: 100, y: 100, z: 100 }];
+    const result = buildOverhangOverlayData(positions, 1, contacts, undefined, 1.0);
+    expect(result).not.toBeNull();
+    expect(result!.unsupportedCount).toBe(1);
+  });
+
+  it('handles mixed geometry correctly', () => {
+    const positions = makeMixedTriangles();
+    const result = buildOverhangOverlayData(positions, 2, []);
+    expect(result).not.toBeNull();
+    // Only 1 overhang triangle (the downward-facing one)
+    expect(result!.totalOverhangCount).toBe(1);
+    expect(result!.unsupportedCount).toBe(1);
+    // Should have 9 position values (3 verts × 3 coords)
+    expect(result!.positions.length).toBe(9);
+    expect(result!.colors.length).toBe(9);
   });
 });

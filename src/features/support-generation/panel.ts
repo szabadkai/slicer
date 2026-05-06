@@ -15,6 +15,7 @@ import {
   clearInspection,
   clearStoredPillars,
 } from './explanation-inspector';
+import { overhangOverlayVisible } from './store';
 
 export function mountSupportPanel(ctx: AppContext): void {
   const { viewer } = ctx;
@@ -49,6 +50,33 @@ export function mountSupportPanel(ctx: AppContext): void {
   const clearBtn = document.getElementById('clear-supports-btn');
   const supportAllBtn = document.getElementById('support-all-btn');
   const zElevation = document.getElementById('z-elevation') as HTMLInputElement | null;
+  const showOverhangsCb = document.getElementById('show-overhangs-cb') as HTMLInputElement | null;
+
+  function refreshOverhangOverlay(): void {
+    if (!overhangOverlayVisible.value) {
+      viewer.clearOverhangOverlay();
+      return;
+    }
+    if (viewer.selected.length !== 1) {
+      viewer.clearOverhangOverlay();
+      return;
+    }
+    const obj = viewer.selected[0];
+
+    // Collect existing support contact points from supportsMesh
+    const contacts: Array<{ x: number; y: number; z: number }> = [];
+    const mesh = (obj as unknown as { supportsMesh: { geometry: { attributes: { position: { count: number; getX(i: number): number; getY(i: number): number; getZ(i: number): number } } } } | null }).supportsMesh;
+    if (mesh) {
+      const pos = mesh.geometry.attributes.position;
+      // Sample every 18th vertex (6 segments × 3 verts per pillar ring) as rough contacts
+      for (let i = 0; i < pos.count; i += 18) {
+        contacts.push({ x: pos.getX(i), y: pos.getY(i), z: pos.getZ(i) });
+      }
+    }
+
+    const angleDeg = parseFloat(overhangAngle?.value ?? '30');
+    viewer.showOverhangOverlay(obj.id, contacts, { angleDeg });
+  }
 
   function syncUi(): void {
     if (overhangAngleVal && overhangAngle) overhangAngleVal.textContent = overhangAngle.value + '°';
@@ -180,6 +208,7 @@ export function mountSupportPanel(ctx: AppContext): void {
       );
     }
     ctx.hideProgress();
+    refreshOverhangOverlay();
   }
 
   // Wire events
@@ -200,6 +229,7 @@ export function mountSupportPanel(ctx: AppContext): void {
     clearInspection();
     ctx.updateEstimate();
     ctx.scheduleProjectAutosave();
+    refreshOverhangOverlay();
   });
 
   // Wire support-click → explanation popup
@@ -219,6 +249,27 @@ export function mountSupportPanel(ctx: AppContext): void {
     viewer.setElevation(parseFloat(zElevation?.value ?? '0'));
     ctx.clearActivePlateSlice();
     ctx.updateEstimate();
+  });
+
+  // Wire overhang overlay toggle
+  listen(showOverhangsCb, 'change', () => {
+    overhangOverlayVisible.value = showOverhangsCb?.checked ?? false;
+    refreshOverhangOverlay();
+  });
+
+  // Refresh overlay after manual support placement
+  document.addEventListener('manual-support-placed', () => {
+    refreshOverhangOverlay();
+  });
+
+  // Refresh overlay on overhang angle change
+  listen(overhangAngle, 'input', () => {
+    refreshOverhangOverlay();
+  });
+
+  // Clear overlay on panel switch
+  document.addEventListener('tool-panel-changed', () => {
+    viewer.clearOverhangOverlay();
   });
 
   syncUi();

@@ -34,6 +34,8 @@ THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
 export type { RouteWaypoint, ContactPoint, RouteContext, RouteOptions };
 
+export { planSupportRoute };
+
 const UP = new THREE.Vector3(0, 1, 0);
 const DOWN = new THREE.Vector3(0, -1, 0);
 const EXTERIOR_RAY_DIRECTIONS = [

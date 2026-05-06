@@ -9,6 +9,7 @@ export interface ModelSupports {
 }
 
 export const supportsByModel = signal<Map<string, ModelSupports>>(new Map());
+export const overhangOverlayVisible = signal<boolean>(false);
 
 export function setSupports(modelId: string, result: GenerateResult): void {
   const next = new Map(supportsByModel.value);

@@ -139,6 +139,12 @@ function handleEscape(_e: KeyboardEvent, ctx: ShortcutContext): boolean {
     drainPick.click();
     return true;
   }
+  // Cancel manual support pick mode
+  const manualSupportBtn = document.getElementById('manual-support-btn') as HTMLButtonElement | null;
+  if (manualSupportBtn?.classList.contains('active')) {
+    manualSupportBtn.click();
+    return true;
+  }
   // Clear selection (also dismisses cut plane via selection-changed)
   if (ctx.viewer.selected.length > 0) {
     ctx.viewer.clearSelection();

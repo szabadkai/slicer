@@ -106,6 +106,15 @@ export interface LegacyViewer {
   clearIntentOverlay(): void;
   getObjectTriangleCount(objectId: string): number | null;
 
+  // Overhang overlay management
+  showOverhangOverlay(
+    objectId: string,
+    supportContacts: Array<{ x: number; y: number; z: number }>,
+    overhangParams?: { angleDeg?: number },
+    coverageRadius?: number,
+  ): void;
+  clearOverhangOverlay(): void;
+
   // Edit operations
   duplicateSelected(): void;
   removeSelected(): void;

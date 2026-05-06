@@ -15,6 +15,12 @@ import {
   handleIntentPaint,
 } from './viewer-core-intent';
 import {
+  showOverhangOverlay as showOverhangOverlayImpl,
+  clearOverhangOverlay as clearOverhangOverlayImpl,
+} from './viewer-core-overhang';
+import type { SupportContact } from './features/support-generation/overhang-overlay';
+import type { OverhangParams } from './features/support-generation/detect';
+import {
   setPaintToolEnabled as setPaintToolEnabledImpl,
   setPaintBrush as setPaintBrushImpl,
   undoPaintStroke as undoPaintStrokeImpl,
@@ -153,6 +159,8 @@ export class ViewerCore {
   intentBrushRadiusMM = 8;
   _intentOverlayMesh: THREE.Mesh | null = null;
   _intentOverlayMaterial: THREE.MeshBasicMaterial | null = null;
+  _overhangOverlayMesh: THREE.Mesh | null = null;
+  _overhangOverlayMaterial: THREE.MeshBasicMaterial | null = null;
   paintBrush = {
     radiusMM: 4,
     color: 0xef4444,
@@ -402,6 +410,20 @@ export class ViewerCore {
   clearIntentOverlay(): void {
     clearIntentOverlayImpl(this);
   }
+
+  // Overhang overlay (delegated to viewer-core-overhang.ts)
+  showOverhangOverlay(
+    objectId: string,
+    supportContacts: SupportContact[],
+    overhangParams?: Partial<OverhangParams>,
+    coverageRadius?: number,
+  ): void {
+    showOverhangOverlayImpl(this, objectId, supportContacts, overhangParams, coverageRadius);
+  }
+  clearOverhangOverlay(): void {
+    clearOverhangOverlayImpl(this);
+  }
+
   setIntentPaintMode(enabled: boolean): void {
     setIntentPaintModeImpl(this, enabled);
   }
