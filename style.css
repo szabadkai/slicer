@@ -2573,3 +2573,67 @@ button:disabled {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+
+/* ─── Phase 4: Group/ungroup ─────────────────────────── */
+.edit-actions-row {
+  display: flex;
+  gap: 6px;
+}
+.edit-actions-row .edit-action-btn {
+  flex: 1;
+  min-width: 0;
+}
+.group-info {
+  font-size: 11px;
+  color: var(--text-dim);
+  min-height: 16px;
+  display: block;
+}
+
+/* ─── Phase 4: Slice profile selector ────────────────── */
+.profile-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.profile-selector select {
+  width: 100%;
+}
+.profile-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+/* ─── Phase 4: Adaptive layers ───────────────────────── */
+.adaptive-layers-group {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent, #4f8cff);
+}
+.adaptive-config {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 8px;
+  background: var(--bg-panel, #1e1e2e);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.adaptive-summary {
+  font-size: 11px;
+  color: var(--text-dim);
+  min-height: 14px;
+}

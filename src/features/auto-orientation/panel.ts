@@ -121,7 +121,13 @@ export function mountOrientationPanel(ctx: AppContext): void {
     });
   });
 
-  listen(orientAllBtn, 'click', () => handleOrientation('fastest'));
+  listen(orientAllBtn, 'click', () => {
+    // Select all objects on the plate before orienting
+    if (viewer.objects.length > 0) {
+      viewer.selectAll();
+    }
+    handleOrientation('fastest');
+  });
 
   listen(customBtn, 'click', () => {
     const weights: CustomOrientWeights = {

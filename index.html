@@ -710,6 +710,21 @@
               </svg>
               Auto Arrange
             </button>
+            <div class="edit-actions-row">
+              <button class="btn btn-secondary edit-action-btn" id="group-btn">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                  <path d="M2 4h8v2H4v4H2V4zm12 0h8v6h-2V6h-6V4zM2 14h2v4h6v2H2v-6zm18 0h2v6h-8v-2h6v-4z" />
+                </svg>
+                Group
+              </button>
+              <button class="btn btn-secondary edit-action-btn" id="ungroup-btn">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                  <path d="M2 4h4v2H4v2H2V4zm6 0h4v2H8V4zm6 0h4v2h-4V4zm4 0h2v4h-2V6zM2 10h2v4H2v-4zm18 0h2v4h-2v-4zM2 16h2v2h2v2H2v-4zm6 4v-2h4v2H8zm6 0v-2h4v2h-4zm4-4h2v4h-4v-2h2v-2z" />
+                </svg>
+                Ungroup
+              </button>
+            </div>
+            <span id="group-info" class="group-info"></span>
 
             <button class="btn edit-action-btn edit-action-danger" id="delete-btn">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
@@ -863,6 +878,19 @@
 
         <section id="slice-panel" class="panel" hidden>
           <h2>Slice</h2>
+          <div class="control-group profile-selector">
+            <label>Profile
+              <select id="slice-profile-select" class="val-box">
+                <option value="fast">Fast</option>
+                <option value="standard" selected>Standard</option>
+                <option value="high-detail">High Detail</option>
+              </select>
+            </label>
+            <div class="profile-actions">
+              <button class="btn btn-small" id="profile-save-btn" title="Save current settings as profile">Save</button>
+              <button class="btn btn-small" id="profile-delete-btn" title="Delete custom profile" hidden>Delete</button>
+            </div>
+          </div>
           <div class="control-group">
             <label>Layer Height (mm)
               <input type="number" id="layer-height" value="0.05" min="0.01" max="0.15" step="0.01" class="val-box">
@@ -892,6 +920,25 @@
             <label>Lift Speed (mm/s)
               <input type="number" id="lift-speed" value="1" min="0.5" max="5" step="0.5" class="val-box">
             </label>
+          </div>
+
+          <div class="control-group adaptive-layers-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="adaptive-layers-toggle">
+              Adaptive Layers
+            </label>
+            <div id="adaptive-layers-config" class="adaptive-config" hidden>
+              <label>Min Height (mm)
+                <input type="number" id="adaptive-min-height" value="0.025" min="0.01" max="0.1" step="0.005" class="val-box">
+              </label>
+              <label>Max Height (mm)
+                <input type="number" id="adaptive-max-height" value="0.1" min="0.03" max="0.15" step="0.01" class="val-box">
+              </label>
+              <label>Steep Angle (°)
+                <input type="number" id="adaptive-steep-angle" value="45" min="15" max="75" step="5" class="val-box">
+              </label>
+              <div id="adaptive-summary" class="adaptive-summary"></div>
+            </div>
           </div>
 
           <div id="preflight-section" class="preflight-section" hidden>

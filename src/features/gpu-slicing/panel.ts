@@ -12,6 +12,15 @@ import {
 } from '@features/app-shell/mount';
 import { executeSlice } from './ops';
 import { setConflicts } from '@features/surface-intent/conflict-inspector';
+import {
+  allProfiles,
+  activeProfileId,
+  applyProfileToInputs,
+  saveProfile,
+  deleteProfile,
+  readInputsAsParams,
+} from './profiles';
+import { computeAdaptiveLayers, formatAdaptiveSummary } from './adaptive-layers';
 
 export function mountSlicePanel(
   ctx: AppContext,
@@ -177,6 +186,103 @@ export function mountSlicePanel(
     liftHeightInput,
     liftSpeedInput,
   ].forEach((el) => listen(el, 'change', updateEstimate));
+
+  // ─── Profile selector ────────────────────────────────────────────
+  const profileSelect = document.getElementById('slice-profile-select') as HTMLSelectElement | null;
+  const profileSaveBtn = document.getElementById('profile-save-btn');
+  const profileDeleteBtn = document.getElementById('profile-delete-btn') as HTMLElement | null;
+
+  function refreshProfileDropdown(): void {
+    if (!profileSelect) return;
+    const profiles = allProfiles.value;
+    profileSelect.innerHTML = profiles
+      .map((p) => `<option value="${p.id}">${p.name}${p.isBuiltIn ? '' : ' ★'}</option>`)
+      .join('');
+    profileSelect.value = activeProfileId.value;
+    if (profileDeleteBtn) {
+      const active = profiles.find((p) => p.id === activeProfileId.value);
+      profileDeleteBtn.hidden = !active || active.isBuiltIn;
+    }
+  }
+
+  listen(profileSelect, 'change', () => {
+    if (!profileSelect) return;
+    activeProfileId.value = profileSelect.value;
+    const profile = allProfiles.value.find((p) => p.id === profileSelect.value);
+    if (profile) applyProfileToInputs(profile);
+    updateEstimate();
+    refreshProfileDropdown();
+  });
+
+  listen(profileSaveBtn, 'click', () => {
+    const name = prompt('Profile name:');
+    if (!name) return;
+    const params = readInputsAsParams();
+    saveProfile(name, params);
+    refreshProfileDropdown();
+  });
+
+  listen(profileDeleteBtn, 'click', () => {
+    const id = activeProfileId.value;
+    const profile = allProfiles.value.find((p) => p.id === id);
+    if (!profile || profile.isBuiltIn) return;
+    if (!confirm(`Delete profile "${profile.name}"?`)) return;
+    deleteProfile(id);
+    const std = allProfiles.value.find((p) => p.id === 'standard');
+    if (std) applyProfileToInputs(std);
+    refreshProfileDropdown();
+    updateEstimate();
+  });
+
+  refreshProfileDropdown();
+
+  // ─── Adaptive layers ─────────────────────────────────────────────
+  const adaptiveToggle = document.getElementById(
+    'adaptive-layers-toggle',
+  ) as HTMLInputElement | null;
+  const adaptiveConfig = document.getElementById('adaptive-layers-config');
+  const adaptiveMinInput = document.getElementById(
+    'adaptive-min-height',
+  ) as HTMLInputElement | null;
+  const adaptiveMaxInput = document.getElementById(
+    'adaptive-max-height',
+  ) as HTMLInputElement | null;
+  const adaptiveAngleInput = document.getElementById(
+    'adaptive-steep-angle',
+  ) as HTMLInputElement | null;
+  const adaptiveSummary = document.getElementById('adaptive-summary');
+
+  listen(adaptiveToggle, 'change', () => {
+    if (adaptiveConfig) adaptiveConfig.hidden = !adaptiveToggle?.checked;
+    if (!adaptiveToggle?.checked && adaptiveSummary) adaptiveSummary.textContent = '';
+  });
+
+  function previewAdaptive(): void {
+    if (!adaptiveToggle?.checked) return;
+    const info = viewer.getOverallInfo();
+    if (!info || info.count === 0) return;
+
+    const geometry = viewer.getModelGeometry?.() ?? viewer.getMergedModelGeometry?.();
+    if (!geometry) return;
+
+    const positions = (geometry as { attributes?: { position?: { array: Float32Array } } })
+      .attributes?.position?.array;
+    const normals = (geometry as { attributes?: { normal?: { array: Float32Array } } }).attributes
+      ?.normal?.array;
+    if (!positions || !normals) return;
+
+    const result = computeAdaptiveLayers(positions, normals, info.height, {
+      minHeightMM: parseFloat(adaptiveMinInput?.value ?? '0.025'),
+      maxHeightMM: parseFloat(adaptiveMaxInput?.value ?? '0.1'),
+      steepAngleDeg: parseFloat(adaptiveAngleInput?.value ?? '45'),
+    });
+
+    if (adaptiveSummary) adaptiveSummary.textContent = formatAdaptiveSummary(result);
+  }
+
+  [adaptiveMinInput, adaptiveMaxInput, adaptiveAngleInput].forEach((el) =>
+    listen(el, 'change', previewAdaptive),
+  );
 
   return { updateEstimate };
 }
