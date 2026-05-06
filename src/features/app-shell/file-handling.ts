@@ -1,9 +1,7 @@
 /**
- * File handling — model loading via browse button, drag-drop, and sample models.
- * Supports STL (native) and CAD formats (STEP/IGES/BREP via occt-import-js).
+ * File handling — STL loading via browse button, drag-drop, and sample models.
  */
 import type { AppContext } from '@core/types';
-import { isCadFile, isSupportedModelFile, parseCadFile } from '@features/model-io/cad-loader';
 import { listen } from './utils';
 
 function loadStlBuffer(ctx: AppContext, buffer: ArrayBuffer): void {
@@ -14,29 +12,6 @@ function loadStlBuffer(ctx: AppContext, buffer: ArrayBuffer): void {
     ctx.updateEstimate();
     ctx.hideProgress();
   }, 50);
-}
-
-async function loadModelFile(ctx: AppContext, file: File): Promise<void> {
-  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-  const buffer = await file.arrayBuffer();
-
-  if (isCadFile(file.name)) {
-    ctx.showProgress(`Importing ${ext.toUpperCase()}...`);
-    try {
-      const parsed = await parseCadFile(buffer, file.name);
-      ctx.viewer.loadParsedGeometry(parsed);
-      ctx.clearActivePlateSlice();
-      ctx.updateEstimate();
-    } catch (err) {
-      console.error('CAD import failed:', err);
-      alert(err instanceof Error ? err.message : 'Failed to import CAD file.');
-    } finally {
-      ctx.hideProgress();
-    }
-    return;
-  }
-
-  loadStlBuffer(ctx, buffer);
 }
 
 export function mountFileHandling(ctx: AppContext): void {
@@ -54,8 +29,10 @@ export function mountFileHandling(ctx: AppContext): void {
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
-    ctx.showProgress('Reading file...');
-    loadModelFile(ctx, file);
+    ctx.showProgress('Reading STL...');
+    file.arrayBuffer().then((buffer) => {
+      loadStlBuffer(ctx, buffer);
+    });
   });
 
   // Drag and drop
@@ -72,9 +49,12 @@ export function mountFileHandling(ctx: AppContext): void {
     const dt = (e as DragEvent).dataTransfer;
     const file = dt?.files[0];
     if (!file) return;
-    if (!isSupportedModelFile(file.name)) return;
-    ctx.showProgress('Reading file...');
-    loadModelFile(ctx, file);
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext !== 'stl') return;
+    ctx.showProgress('Reading STL...');
+    file.arrayBuffer().then((buffer) => {
+      loadStlBuffer(ctx, buffer);
+    });
   });
 
   // Sample model cards
