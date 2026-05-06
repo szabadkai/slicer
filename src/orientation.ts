@@ -152,9 +152,28 @@ function analyzeOrientation(geometry: GeometryLike, upDir: Vec3): OrientationMet
   return { overhangArea, totalHeight, staircaseMetric, flatBottomArea };
 }
 
-function scoreOrientation(metrics: OrientationMetrics, preset: OrientPreset): number {
-  const { overhangArea, totalHeight, staircaseMetric, flatBottomArea } = metrics;
+export interface CustomOrientWeights {
+  height: number;
+  overhang: number;
+  staircase: number;
+  flatBottom: number;
+}
 
+function scoreOrientation(
+  metrics: OrientationMetrics,
+  preset: OrientPreset,
+  customWeights?: CustomOrientWeights,
+): number {
+  if (customWeights) {
+    return (
+      customWeights.height * -metrics.totalHeight +
+      customWeights.overhang * -metrics.overhangArea +
+      customWeights.staircase * -metrics.staircaseMetric +
+      customWeights.flatBottom * metrics.flatBottomArea
+    );
+  }
+
+  const { overhangArea, totalHeight, staircaseMetric, flatBottomArea } = metrics;
   switch (preset) {
     case 'fastest':
       return -totalHeight;
@@ -194,10 +213,9 @@ export function optimizeOrientationAsync(
   onProgress?: (progress: number, message: string) => void,
 ): Promise<Quat> {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(
-      new URL('./orientation.worker.ts', import.meta.url),
-      { type: 'module' },
-    );
+    const worker = new Worker(new URL('./orientation.worker.ts', import.meta.url), {
+      type: 'module',
+    });
 
     worker.onmessage = (e: MessageEvent): void => {
       const { type, progress, message, quaternion } = e.data as {
@@ -251,13 +269,17 @@ export function optimizeOrientationAsync(
  * Find optimal orientation using brute-force over 26 candidates.
  * Returns a plain quaternion {x,y,z,w}.
  */
-export function findOptimalOrientation(geometry: GeometryLike, preset: OrientPreset): Quat {
+export function findOptimalOrientation(
+  geometry: GeometryLike,
+  preset: OrientPreset,
+  customWeights?: CustomOrientWeights,
+): Quat {
   let bestScore = -Infinity;
   let bestDir: Vec3 = { ...UP };
 
   for (const candidate of CANDIDATES) {
     const metrics = analyzeOrientation(geometry, candidate);
-    const score = scoreOrientation(metrics, preset);
+    const score = scoreOrientation(metrics, preset, customWeights);
     if (score > bestScore) {
       bestScore = score;
       bestDir = { ...candidate };
@@ -275,15 +297,15 @@ export function analyzeCurrentOrientation(geometry: GeometryLike): OrientationMe
 /**
  * Find significant (large flat) faces on the model.
  */
-export function findSignificantFaces(
-  geometry: GeometryLike,
-  minArea = 10,
-): SignificantFace[] {
+export function findSignificantFaces(geometry: GeometryLike, minArea = 10): SignificantFace[] {
   const pos = geometry.attributes.position;
   const normal = geometry.attributes.normal;
   const triCount = pos.count / 3;
 
-  const faceGroups = new Map<string, { normal: Vec3; triangles: { area: number; centroid: Vec3 }[] }>();
+  const faceGroups = new Map<
+    string,
+    { normal: Vec3; triangles: { area: number; centroid: Vec3 }[] }
+  >();
 
   for (let i = 0; i < triCount; i++) {
     const idx = i * 3;

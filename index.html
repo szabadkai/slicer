@@ -301,6 +301,41 @@
             </button>
           </div>
 
+          <details class="advanced-group">
+            <summary>Custom Weights</summary>
+            <div class="control-group">
+              <label>Height</label>
+              <div class="flex-row">
+                <input type="range" id="orient-w-height" min="0" max="1" step="0.05" value="0.1">
+                <span id="orient-w-height-val" class="val-box">0.1</span>
+              </div>
+            </div>
+            <div class="control-group">
+              <label>Overhang</label>
+              <div class="flex-row">
+                <input type="range" id="orient-w-overhang" min="0" max="1" step="0.05" value="0.6">
+                <span id="orient-w-overhang-val" class="val-box">0.6</span>
+              </div>
+            </div>
+            <div class="control-group">
+              <label>Surface Quality</label>
+              <div class="flex-row">
+                <input type="range" id="orient-w-staircase" min="0" max="1" step="0.05" value="0.1">
+                <span id="orient-w-staircase-val" class="val-box">0.1</span>
+              </div>
+            </div>
+            <div class="control-group">
+              <label>Flat Base</label>
+              <div class="flex-row">
+                <input type="range" id="orient-w-flat" min="0" max="1" step="0.05" value="0.2">
+                <span id="orient-w-flat-val" class="val-box">0.2</span>
+              </div>
+            </div>
+            <div class="action-buttons">
+              <button class="btn btn-primary" id="orient-custom-btn">Orient with Weights</button>
+            </div>
+          </details>
+
           <div id="intent-panel">
             <div class="field-heading">Surface Intent</div>
             <div class="control-group">
@@ -469,6 +504,7 @@
               <p class="hollow-hint">Apply hollow and add drain holes, then analyze for resin traps.</p>
             </div>
             <div class="action-buttons">
+              <button class="btn btn-secondary" id="trap-auto-suggest-btn">Auto-Suggest</button>
               <button class="btn btn-primary" id="trap-analyze-btn">Analyze</button>
             </div>
           </details>
@@ -633,6 +669,16 @@
           </div>
           <div class="action-buttons" style="margin-top: 4px;">
             <button class="btn btn-primary" id="support-all-btn" style="width: 100%;">Support All</button>
+          </div>
+          <div class="panel-divider"></div>
+          <h3>Manual Placement</h3>
+          <div class="control-group">
+            <label>Tip Diameter (mm)
+              <input type="number" id="manual-support-tip" value="0.4" min="0.1" max="3" step="0.1" class="val-box">
+            </label>
+          </div>
+          <div class="action-buttons">
+            <button class="btn btn-secondary" id="manual-support-btn">Click to Place</button>
           </div>
         </section>
 
@@ -836,6 +882,10 @@
             <input type="range" id="layer-slider" min="0" max="0" value="0">
             <span id="layer-info" class="val-box">0 / 0</span>
           </div>
+          <div class="action-buttons" style="margin-top: 4px;">
+            <button class="btn btn-secondary" id="island-detect-btn" style="width: 100%;">Detect Islands</button>
+          </div>
+          <div id="island-results" class="island-results"></div>
         </section>
 
         <div id="footer-actions" hidden>

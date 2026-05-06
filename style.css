@@ -691,6 +691,12 @@ body {
   letter-spacing: 0;
 }
 
+.panel-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 12px 0;
+}
+
 .flex-row {
   display: flex;
   align-items: center;
@@ -2435,6 +2441,13 @@ button:disabled {
   margin: 6px 0; font-size: 12px;
 }
 .trap-ok { color: #137333; font-size: 12px; padding: 4px 0; }
+
+/* Island detection results */
+.island-results { margin-top: 6px; }
+.island-ok { color: #137333; font-size: 12px; padding: 4px 0; }
+.island-warn { color: #d93025; font-size: 12px; font-weight: 600; padding: 4px 0; }
+.island-detail { color: var(--text-secondary); font-size: 11px; padding: 2px 0; }
+.island-goto-btn { margin-top: 4px; }
 
 /* Load panel — sample model cards */
 .load-browse-btn {

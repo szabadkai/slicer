@@ -9,8 +9,12 @@ import { listen } from '@features/app-shell/utils';
 import { hollowMesh, estimateWallThickness, checkThinWalls } from './hollower';
 import { addDrainHole, removeDrainHole, autoPlaceHoles } from './drain';
 import { createDrainPlugFromGeometry, cutDrainHoleFromGeometry } from './drain-cut';
-import { detectTraps } from './trap-detector';
 import type { DrainHole, DrainPlug } from './drain';
+import {
+  runTrapAnalysis as runTrapAnalysisAction,
+  autoSuggestDrains as autoSuggestDrainsAction,
+  type TrapActionDeps,
+} from './trap-actions';
 import {
   getScene,
   getMesh,
@@ -360,77 +364,42 @@ export function mountHollowDrainPanel(ctx: AppContext): void {
     });
   }
 
+  const trapAutoSuggestBtn = document.getElementById('trap-auto-suggest-btn');
+
   // ─── Trap analysis ───────────────────────────────────────────────
   listen(trapAnalyzeBtn, 'click', () => {
     runTrapAnalysis();
   });
 
+  listen(trapAutoSuggestBtn, 'click', () => {
+    autoSuggestDrains();
+  });
+
+  const trapDeps: TrapActionDeps = {
+    getGeometry: () => getGeometry(viewer),
+    getMesh: () => getMesh(viewer),
+    getScene: () => getScene(viewer),
+    getDrainHoles: () => drainHoles,
+    pushDrainHole: (h) => drainHoles.push(h),
+    popDrainHole: () => drainHoles.pop(),
+    getDiameter: () => parseFloat(drainDiamSlider?.value ?? '3'),
+    getWallThickness: () => wallThickness,
+    showProgress: (m) => ctx.showProgress(m),
+    updateProgress: (f, m) => ctx.updateProgress(f, m),
+    hideProgress: () => ctx.hideProgress(),
+    rebuildDrainCuts: () => rebuildDrainCuts(),
+    renderDrainList,
+    requestRender: () => viewer.requestRender(),
+  };
+
   async function runTrapAnalysis(): Promise<void> {
+    if (!viewer.selected[0] || !trapResults) return;
+    await runTrapAnalysisAction(trapDeps, trapResults, trapBadge);
+  }
+
+  async function autoSuggestDrains(): Promise<void> {
     if (!viewer.selected[0]) return;
-    const geo = getGeometry(viewer);
-    if (!geo) return;
-    const mesh = getMesh(viewer);
-    if (!mesh) return;
-    if (!trapResults) return;
-
-    ctx.showProgress('Analyzing resin traps…');
-    await yieldThread();
-
-    try {
-      const result = detectTraps(geo, mesh, drainHoles, {
-        voxelSizeMM: 2.0,
-        onProgress: (f) => ctx.updateProgress(f, 'Flood filling…'),
-      });
-
-      const drainableML = (result.drainableVolumeMM3 / 1000).toFixed(1);
-      const trappedML = (result.trappedVolumeMM3 / 1000).toFixed(1);
-      const hasTraps = result.pockets.length > 0;
-
-      if (trapBadge) {
-        trapBadge.textContent = hasTraps ? `⚠ ${result.pockets.length}` : '✓';
-        trapBadge.className = hasTraps
-          ? 'step-badge step-badge-warn'
-          : 'step-badge step-badge-done';
-      }
-
-      trapResults.innerHTML = `
-        <div class="trap-stat trap-stat-ok">🟢 Drainable: ${drainableML} mL</div>
-        <div class="trap-stat trap-stat-bad">🔴 Trapped: ${trappedML} mL</div>
-        ${result.pockets
-          .map(
-            (p, i) => `
-          <div class="trap-pocket">
-            <span>Pocket ${i + 1} — ${(p.volumeMM3 / 1000).toFixed(2)} mL</span>
-            <button class="btn btn-small trap-add-hole-btn" data-pocket="${i}">+ Add hole here</button>
-          </div>
-        `,
-          )
-          .join('')}
-        ${!hasTraps ? '<div class="trap-ok">✅ All interior volume is drainable.</div>' : ''}
-      `;
-
-      // Wire "Add hole here" buttons
-      trapResults.querySelectorAll('.trap-add-hole-btn').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const i = parseInt((btn as HTMLElement).dataset.pocket ?? '0', 10);
-          const pocket = result.pockets[i];
-          if (!pocket) return;
-          const hole = addDrainHole(
-            getScene(viewer),
-            pocket.suggestedHolePos,
-            pocket.suggestedHoleNormal,
-            parseFloat(drainDiamSlider?.value ?? '3'),
-            wallThickness,
-          );
-          drainHoles.push(hole);
-          void rebuildDrainCuts();
-          renderDrainList();
-          viewer.requestRender();
-        });
-      });
-    } finally {
-      ctx.hideProgress();
-    }
+    await autoSuggestDrainsAction(trapDeps, trapResults);
   }
 
   // ─── Selection change: populate smart defaults ───────────────────
@@ -444,6 +413,7 @@ export function mountHollowDrainPanel(ctx: AppContext): void {
       drainAutoBtn,
       drainClearBtn,
       trapAnalyzeBtn,
+      trapAutoSuggestBtn,
       document.getElementById('split-apply-btn'),
     ];
     for (const btn of controlBtns) {

@@ -5,6 +5,8 @@ import type { AppContext } from '@core/types';
 import type { LegacySlicer } from '@core/legacy-types';
 import { listen } from '@features/app-shell/utils';
 import { getSlicedLayerCount } from '@features/app-shell/mount';
+import { slicedLayers } from './ops';
+import { detectIslands, summarizeIslands } from './island-detector';
 
 export function mountLayerPreview(_ctx: AppContext, slicer: LegacySlicer): void {
   const layerCanvas = document.getElementById('layer-canvas') as HTMLCanvasElement | null;
@@ -137,7 +139,11 @@ export function mountLayerPreview(_ctx: AppContext, slicer: LegacySlicer): void 
   // Inspector keyboard nav
   document.addEventListener('keydown', (e) => {
     if (!inspectorModal || inspectorModal.hidden) return;
-    if (e.key === 'Escape') { closeInspector(); e.preventDefault(); return; }
+    if (e.key === 'Escape') {
+      closeInspector();
+      e.preventDefault();
+      return;
+    }
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault();
       const cur = parseInt(inspectorSlider?.value ?? '0', 10);
@@ -150,11 +156,44 @@ export function mountLayerPreview(_ctx: AppContext, slicer: LegacySlicer): void 
       inspectorGoToLayer(e.key === 'PageDown' ? cur + 10 : cur - 10);
       return;
     }
-    if (e.key === 'Home') { e.preventDefault(); inspectorGoToLayer(0); }
+    if (e.key === 'Home') {
+      e.preventDefault();
+      inspectorGoToLayer(0);
+    }
     if (e.key === 'End') {
       e.preventDefault();
       const count = getSlicedLayerCount();
       if (count > 0) inspectorGoToLayer(count - 1);
+    }
+  });
+
+  // ─── Island detection ────────────────────────────────────────────
+  const islandDetectBtn = document.getElementById('island-detect-btn');
+  const islandResults = document.getElementById('island-results');
+
+  listen(islandDetectBtn, 'click', () => {
+    const layers = slicedLayers.value;
+    if (layers.length === 0 || !islandResults) return;
+
+    const spec = slicer.getPrinterSpec();
+    const results = detectIslands(layers, spec.resolutionX);
+    const summary = summarizeIslands(results);
+
+    if (results.length === 0) {
+      islandResults.innerHTML = `<div class="island-ok">✅ ${summary}</div>`;
+    } else {
+      const worst = results.reduce((a, b) => (b.islandCount > a.islandCount ? b : a));
+      islandResults.innerHTML = `
+        <div class="island-warn">⚠ ${summary}</div>
+        <div class="island-detail">Worst: layer ${worst.layerIndex + 1} (${worst.islandCount} island${worst.islandCount > 1 ? 's' : ''})</div>
+        <button class="btn btn-small island-goto-btn" data-layer="${worst.layerIndex}">Go to layer</button>
+      `;
+      islandResults.querySelector('.island-goto-btn')?.addEventListener('click', () => {
+        if (layerSlider) {
+          layerSlider.value = String(worst.layerIndex);
+          showLayer();
+        }
+      });
     }
   });
 }

@@ -17,6 +17,7 @@ import { mountSlicePanel } from '@features/gpu-slicing/panel';
 import { mountLayerPreview } from '@features/layer-preview/panel';
 import { mountHollowDrainPanel } from '@features/hollow-drain/panel';
 import { mountSupportPanel } from '@features/support-generation/panel';
+import { mountManualSupport } from '@features/support-generation/manual-support';
 import { mountExplanationInspector } from '@features/support-generation/explanation-inspector';
 import { mountOrientationPanel } from '@features/auto-orientation/panel';
 import { mountExportPanel } from '@features/model-io/panel';
@@ -140,6 +141,7 @@ export function mountApp(ctx: AppContext, PRINTERS: Record<string, PrinterSpec>)
   mountLayerPreview(ctx, slicer);
   mountHollowDrainPanel(ctx);
   mountSupportPanel(ctx);
+  mountManualSupport(ctx);
   mountExplanationInspector(document.body);
   mountOrientationPanel(ctx);
   mountExportPanel(ctx, slicer, project);

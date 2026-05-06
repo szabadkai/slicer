@@ -78,6 +78,8 @@ export default tseslint.config(
       'src/repairer.ts',
       'src/supports.ts',
       'src/supports-geometry.ts',
+      'src/features/support-generation/manual-pillar.ts',
+      'src/features/hollow-drain/trap-actions.ts',
     ],
     rules: {
       'no-restricted-imports': 'off',
