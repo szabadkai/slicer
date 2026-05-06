@@ -412,17 +412,10 @@ export class ViewerCore {
   }
 
   // Overhang overlay (delegated to viewer-core-overhang.ts)
-  showOverhangOverlay(
-    objectId: string,
-    supportContacts: SupportContact[],
-    overhangParams?: Partial<OverhangParams>,
-    coverageRadius?: number,
-  ): void {
-    showOverhangOverlayImpl(this, objectId, supportContacts, overhangParams, coverageRadius);
+  showOverhangOverlay(id: string, contacts: SupportContact[], params?: Partial<OverhangParams>, radius?: number): void {
+    showOverhangOverlayImpl(this, id, contacts, params, radius);
   }
-  clearOverhangOverlay(): void {
-    clearOverhangOverlayImpl(this);
-  }
+  clearOverhangOverlay(): void { clearOverhangOverlayImpl(this); }
 
   setIntentPaintMode(enabled: boolean): void {
     setIntentPaintModeImpl(this, enabled);
