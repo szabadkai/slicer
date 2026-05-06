@@ -94,12 +94,12 @@ export function restoreSerializedObjects(viewer: Viewer, data: SerializedObject[
 
     let supportsMesh: THREE.Mesh | null = null;
     if (item.supports) {
-      const supMat = new THREE.MeshPhysicalMaterial({
-        color: 0x88aacc,
-        roughness: 0.6,
-        metalness: 0,
+      const supMat = new THREE.MeshPhongMaterial({
+        color: 0x9b59b6,
+        specular: 0x222222,
+        shininess: 30,
         transparent: true,
-        opacity: 0.85,
+        opacity: 0.55,
       });
       supportsMesh = restoreMesh(item.supports, supMat);
       viewer.scene.add(supportsMesh);
