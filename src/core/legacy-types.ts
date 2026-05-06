@@ -60,6 +60,13 @@ export interface LegacyViewer {
   // STL loading
   loadSTL(buffer: ArrayBuffer, scale?: number): void;
 
+  // Parsed geometry loading (CAD imports)
+  loadParsedGeometry(parsed: {
+    positions: Float32Array;
+    normals: Float32Array;
+    triangleCount: number;
+  }): void;
+
   // Selection
   clearSelection(): void;
   selectObject(id: string): void;

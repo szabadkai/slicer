@@ -2637,3 +2637,84 @@ button:disabled {
   color: var(--text-dim);
   min-height: 14px;
 }
+
+/* ─── Phase 5: Dimensional compensation ──────────────── */
+.compensation-group {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.compensation-config {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 8px;
+  background: var(--bg-panel, #1e1e2e);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.compensation-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.compensation-row input[type="range"] {
+  flex: 1;
+}
+.compensation-row .val-box {
+  min-width: 60px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Phase 5: Per-region exposure ───────────────────── */
+.exposure-region-group {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.exposure-region-config {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 8px;
+  background: var(--bg-panel, #1e1e2e);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.exposure-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 2px 0;
+}
+.exposure-row span:last-child {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.exposure-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin: 4px 0 0;
+}
+
+/* ─── Phase 5: Gyroid infill ─────────────────────────── */
+.gyroid-group {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.gyroid-config {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 8px;
+  background: var(--bg-panel, #1e1e2e);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.gyroid-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin: 2px 0 0;
+}

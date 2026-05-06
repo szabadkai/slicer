@@ -189,14 +189,14 @@
       <aside id="sidebar">
         <section id="load-panel" class="panel" hidden>
           <h2>Load Model</h2>
-          <input type="file" id="stl-input" accept=".stl" hidden>
+          <input type="file" id="stl-input" accept=".stl,.step,.stp,.iges,.igs,.brep" hidden>
           <button class="btn btn-primary load-browse-btn" id="browse-stl-btn">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
               <path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/>
             </svg>
-            Browse STL file&hellip;
+            Browse Model File&hellip;
           </button>
-          <p class="load-hint">or drag &amp; drop onto the viewport</p>
+          <p class="load-hint">STL, STEP, IGES &mdash; or drag &amp; drop onto the viewport</p>
           <h3>Sample Models</h3>
           <div class="sample-model-grid">
             <button class="sample-model-card" data-model="chess-rook">
@@ -722,6 +722,12 @@
               </svg>
               Auto Arrange
             </button>
+            <button class="btn btn-secondary edit-action-btn" id="drop-bed-btn">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M12 2l-5.5 5.5 1.41 1.41L11 5.83V16h2V5.83l3.09 3.09 1.41-1.42L12 2zM4 20h16v2H4v-2z" />
+              </svg>
+              Drop to Bed
+            </button>
             <div class="edit-actions-row">
               <button class="btn btn-secondary edit-action-btn" id="group-btn">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
@@ -950,6 +956,57 @@
                 <input type="number" id="adaptive-steep-angle" value="45" min="15" max="75" step="5" class="val-box">
               </label>
               <div id="adaptive-summary" class="adaptive-summary"></div>
+            </div>
+          </div>
+
+          <div class="control-group compensation-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="compensation-toggle">
+              Dimensional Compensation
+            </label>
+            <div id="compensation-config" class="compensation-config" hidden>
+              <label>XY Compensation
+                <div class="compensation-row">
+                  <input type="range" id="compensation-xy" min="0.99" max="1.03" step="0.001" value="1.0">
+                  <span id="compensation-xy-val" class="val-box">+0.00%</span>
+                </div>
+              </label>
+              <label>Z Compensation
+                <div class="compensation-row">
+                  <input type="range" id="compensation-z" min="0.99" max="1.03" step="0.001" value="1.0">
+                  <span id="compensation-z-val" class="val-box">+0.00%</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div class="control-group exposure-region-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="exposure-region-toggle">
+              Per-Region Exposure
+            </label>
+            <div id="exposure-region-config" class="exposure-region-config" hidden>
+              <div class="exposure-row"><span>Cosmetic</span><span id="exposure-cosmetic">+15%</span></div>
+              <div class="exposure-row"><span>Hidden</span><span id="exposure-hidden">-15%</span></div>
+              <div class="exposure-row"><span>Reliability</span><span id="exposure-reliability">+25%</span></div>
+              <div class="exposure-row"><span>Removal</span><span id="exposure-removal">-25%</span></div>
+              <p class="exposure-hint">Paint surface intents to vary exposure per region.</p>
+            </div>
+          </div>
+
+          <div class="control-group gyroid-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="gyroid-toggle">
+              Gyroid Infill
+            </label>
+            <div id="gyroid-config" class="gyroid-config" hidden>
+              <label>Cell Size (mm)
+                <input type="number" id="gyroid-cell-size" value="4" min="1" max="12" step="0.5" class="val-box">
+              </label>
+              <label>Wall Thickness (mm)
+                <input type="number" id="gyroid-wall-thickness" value="0.6" min="0.2" max="2" step="0.1" class="val-box">
+              </label>
+              <p class="gyroid-hint">Adds internal lattice to hollow models for strength.</p>
             </div>
           </div>
 

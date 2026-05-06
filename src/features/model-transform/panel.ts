@@ -309,6 +309,18 @@ export function mountTransformPanel(ctx: AppContext): void {
     }
   });
   listen(document.getElementById('arrange-btn'), 'click', () => viewer.autoArrange());
+  listen(document.getElementById('drop-bed-btn'), 'click', () => {
+    if (viewer.selected.length === 0) return;
+    const bounds = viewer.getSelectionWorldBounds?.();
+    const center = viewer.getSelectionWorldCenter();
+    if (!bounds || !center) return;
+    viewer.translateSelectionTo({
+      x: center.x,
+      y: center.y - bounds.min.y,
+      z: center.z,
+    });
+    updateTransformInputs();
+  });
   listen(cutCenterBtn, 'click', () => {
     cutPlaneActive = true;
     syncCutControls(true);

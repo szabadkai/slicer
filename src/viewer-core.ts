@@ -38,6 +38,7 @@ import {
 } from './viewer-core-paint';
 import {
   loadSTL as loadSTLImpl,
+  loadParsedGeometry as loadParsedGeometryImpl,
   addModelRaw,
   addModel as addModelImpl,
   moveMeshOriginToBoundsMin,
@@ -380,7 +381,7 @@ export class ViewerCore {
       });
   }
 
-  // ---- selection (delegated to viewer-core-selection.ts) --------------------
+  // ---- selection (delegated) --------------------
   _saveActivePlateSelection(): void {
     saveActivePlateSelection(this);
   }
@@ -403,7 +404,6 @@ export class ViewerCore {
     return getObjectTriangleCountImpl(this, objectId);
   }
 
-  // Intent overlay (delegated to viewer-core-intent.ts)
   showIntentOverlay(objectId: string, intentBuffer: Uint8Array): void {
     showIntentOverlayImpl(this, objectId, intentBuffer);
   }
@@ -412,10 +412,17 @@ export class ViewerCore {
   }
 
   // Overhang overlay (delegated to viewer-core-overhang.ts)
-  showOverhangOverlay(id: string, contacts: SupportContact[], params?: Partial<OverhangParams>, radius?: number): void {
+  showOverhangOverlay(
+    id: string,
+    contacts: SupportContact[],
+    params?: Partial<OverhangParams>,
+    radius?: number,
+  ): void {
     showOverhangOverlayImpl(this, id, contacts, params, radius);
   }
-  clearOverhangOverlay(): void { clearOverhangOverlayImpl(this); }
+  clearOverhangOverlay(): void {
+    clearOverhangOverlayImpl(this);
+  }
 
   setIntentPaintMode(enabled: boolean): void {
     setIntentPaintModeImpl(this, enabled);
@@ -441,23 +448,17 @@ export class ViewerCore {
   }
 
   // ---- transform stubs (overridden in Viewer) ----------------------------
-  protected _applyMultiTransformDelta(): void {
-    /* overridden */
-  }
-  protected _syncSupportsDuringTranslation(): void {
-    /* overridden */
-  }
-  protected _beginMultiTransform(): void {
-    /* overridden */
-  }
-  protected _beginTransformSupportSync(): void {
-    /* overridden */
-  }
-  protected _finishTransform(): void {
-    /* overridden */
-  }
+  // prettier-ignore
+  protected _applyMultiTransformDelta(): void { /* overridden */ }
+  // prettier-ignore
+  protected _syncSupportsDuringTranslation(): void { /* overridden */ }
+  // prettier-ignore
+  protected _beginMultiTransform(): void { /* overridden */ }
+  // prettier-ignore
+  protected _beginTransformSupportSync(): void { /* overridden */ }
+  // prettier-ignore
+  protected _finishTransform(): void { /* overridden */ }
 
-  // ---- paint (delegated to viewer-core-paint.ts) --------------------------
   setPaintToolEnabled(enabled: boolean): void {
     setPaintToolEnabledImpl(this, enabled);
   }
@@ -538,7 +539,6 @@ export class ViewerCore {
     this.canvas.dispatchEvent(new CustomEvent('material-changed', { detail: { preset, target } }));
   }
 
-  // ---- printer ------------------------------------------------------------
   setPrinter(spec: unknown): void {
     this.printer = spec;
     this._setupGrid();
@@ -559,6 +559,13 @@ export class ViewerCore {
   loadSTL(buffer: ArrayBuffer, scale = 1): void {
     loadSTLImpl(this, buffer, scale);
   }
+  loadParsedGeometry(parsed: {
+    positions: Float32Array;
+    normals: Float32Array;
+    triangleCount: number;
+  }): void {
+    loadParsedGeometryImpl(this, parsed);
+  }
   _addModelRaw(
     geometry: THREE.BufferGeometry,
     material: THREE.Material | null,
@@ -572,29 +579,23 @@ export class ViewerCore {
   _moveMeshOriginToBoundsMin(mesh: THREE.Mesh): void {
     moveMeshOriginToBoundsMin(mesh);
   }
-  removeSelected(): void {
-    removeSelectedImpl(this);
-  }
-  clearPlate(): void {
-    clearPlateImpl(this);
-  }
-  duplicateSelected(): void {
-    duplicateSelectedImpl(this);
-  }
+  // prettier-ignore
+  removeSelected(): void { removeSelectedImpl(this); }
+  // prettier-ignore
+  clearPlate(): void { clearPlateImpl(this); }
+  // prettier-ignore
+  duplicateSelected(): void { duplicateSelectedImpl(this); }
 
   getActivePlateOrigin(): THREE.Vector3 {
     return new THREE.Vector3(this.activePlate?.originX || 0, 0, this.activePlate?.originZ || 0);
   }
-  getAllObjects(): SceneObject[] {
-    return this.plates.flatMap((p) => p.objects);
-  }
+  // prettier-ignore
+  getAllObjects(): SceneObject[] { return this.plates.flatMap((p) => p.objects); }
   getPlateForObject(objectId: string): PlateState | null {
     return this.plates.find((p) => p.objects.some((o) => o.id === objectId)) || null;
   }
-  _saveUndoState(): void {
-    /* overridden in Viewer */
-  }
-  _bakeTransform(_opts?: { preserveSupports?: boolean }): void {
-    void _opts; /* overridden */
-  }
+  // prettier-ignore
+  _saveUndoState(): void { /* overridden in Viewer */ }
+  // prettier-ignore
+  _bakeTransform(_opts?: { preserveSupports?: boolean }): void { void _opts; }
 }

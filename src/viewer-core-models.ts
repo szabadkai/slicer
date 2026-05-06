@@ -16,7 +16,35 @@ export function loadSTL(core: ViewerCore, buffer: ArrayBuffer, scale = 1): void 
   if (!bb) throw new Error('Failed to compute bounding box for STL');
   const center = new THREE.Vector3();
   bb.getCenter(center);
-  const elevation = 5;
+  const elevation = 0;
+  geo.translate(-center.x, -bb.min.y + elevation, -center.z);
+  geo.computeBoundingBox();
+  addModel(core, geo, elevation);
+  if (core.objects.length === 1) {
+    const size = new THREE.Vector3();
+    const gbb = geo.boundingBox;
+    if (gbb) gbb.getSize(size);
+    const m = Math.max(size.x, size.y, size.z);
+    const origin = core.getActivePlateOrigin();
+    core.camera.position.set(origin.x + m, m * 0.8, origin.z + m);
+    core.controls.target.set(origin.x, size.y / 2, origin.z);
+    core.controls.update();
+  }
+}
+
+export function loadParsedGeometry(
+  core: ViewerCore,
+  parsed: { positions: Float32Array; normals: Float32Array; triangleCount: number },
+): void {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(parsed.positions, 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(parsed.normals, 3));
+  geo.computeBoundingBox();
+  const bb = geo.boundingBox;
+  if (!bb) throw new Error('Failed to compute bounding box for imported geometry');
+  const center = new THREE.Vector3();
+  bb.getCenter(center);
+  const elevation = 0;
   geo.translate(-center.x, -bb.min.y + elevation, -center.z);
   geo.computeBoundingBox();
   addModel(core, geo, elevation);

@@ -56,6 +56,12 @@ export function addManualPillar(
   const originX = viewer.activePlate.originX || 0;
   const originZ = viewer.activePlate.originZ || 0;
 
+  // Convert world-space contact to plate-local coordinates to match
+  // the geometry returned by getModelGeometry() (which is plate-local).
+  const localPosition = worldPosition.clone();
+  localPosition.x -= originX;
+  localPosition.z -= originZ;
+
   const tipHeight = Math.max(opts.tipDiameterMM * 1.2, 0.5);
   const pillarRadius = Math.max(opts.shaftDiameterMM / 2, 0.15);
   const baseRadius = pillarRadius * 2;
@@ -65,8 +71,16 @@ export function addManualPillar(
 
   // Try auto-routing around geometry if we have the model mesh
   if (modelGeometry) {
+    // Ensure BVH is available for accelerated raycasting
+    if (
+      !(modelGeometry as unknown as { boundsTree: unknown }).boundsTree &&
+      typeof modelGeometry.computeBoundsTree === 'function'
+    ) {
+      modelGeometry.computeBoundsTree();
+    }
+
     const contactPoint: ContactPoint = {
-      position: worldPosition.clone(),
+      position: localPosition.clone(),
       normal: worldNormal.clone(),
     };
     const routeOpts: RouteOptions = {
@@ -99,16 +113,12 @@ export function addManualPillar(
   // Fall back to straight vertical if routing failed or no geometry provided
   if (!route) {
     route = [
-      { x: worldPosition.x, y: worldPosition.y, z: worldPosition.z },
-      { x: worldPosition.x, y: 0, z: worldPosition.z },
+      { x: localPosition.x, y: localPosition.y, z: localPosition.z },
+      { x: localPosition.x, y: 0, z: localPosition.z },
     ];
   }
 
-  // Offset by plate origin
-  for (const wp of route) {
-    wp.x -= originX;
-    wp.z -= originZ;
-  }
+  // Route is already in plate-local coordinates — no further offset needed
 
   const geometries: THREE.BufferGeometry[] = [];
   buildSupportGeometry(

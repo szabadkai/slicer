@@ -21,6 +21,8 @@ import {
   readInputsAsParams,
 } from './profiles';
 import { computeAdaptiveLayers, formatAdaptiveSummary } from './adaptive-layers';
+import { compensationFactors, setCompensation, formatCompensation } from './compensation';
+import { exposureProfile, setExposureProfile, formatExposureMultiplier } from './exposure-regions';
 
 export function mountSlicePanel(
   ctx: AppContext,
@@ -283,6 +285,67 @@ export function mountSlicePanel(
   [adaptiveMinInput, adaptiveMaxInput, adaptiveAngleInput].forEach((el) =>
     listen(el, 'change', previewAdaptive),
   );
+
+  // ─── Dimensional compensation ────────────────────────────────────
+  const compToggle = document.getElementById('compensation-toggle') as HTMLInputElement | null;
+  const compConfig = document.getElementById('compensation-config');
+  const compXY = document.getElementById('compensation-xy') as HTMLInputElement | null;
+  const compZ = document.getElementById('compensation-z') as HTMLInputElement | null;
+  const compXYVal = document.getElementById('compensation-xy-val');
+  const compZVal = document.getElementById('compensation-z-val');
+
+  function syncCompensation(): void {
+    const xy = parseFloat(compXY?.value ?? '1');
+    const z = parseFloat(compZ?.value ?? '1');
+    if (compXYVal) compXYVal.textContent = formatCompensation(xy);
+    if (compZVal) compZVal.textContent = formatCompensation(z);
+    if (compToggle?.checked) setCompensation({ xyFactor: xy, zFactor: z });
+  }
+
+  listen(compToggle, 'change', () => {
+    if (compConfig) compConfig.hidden = !compToggle?.checked;
+    if (compToggle?.checked) syncCompensation();
+    else setCompensation({ xyFactor: 1.0, zFactor: 1.0 });
+  });
+  listen(compXY, 'input', syncCompensation);
+  listen(compZ, 'input', syncCompensation);
+
+  // Init from stored values
+  const initComp = compensationFactors.value;
+  if (compXY) compXY.value = String(initComp.xyFactor);
+  if (compZ) compZ.value = String(initComp.zFactor);
+  syncCompensation();
+
+  // ─── Per-region exposure ─────────────────────────────────────────
+  const expToggle = document.getElementById('exposure-region-toggle') as HTMLInputElement | null;
+  const expConfig = document.getElementById('exposure-region-config');
+
+  listen(expToggle, 'change', () => {
+    if (expConfig) expConfig.hidden = !expToggle?.checked;
+    const profile = exposureProfile.value;
+    setExposureProfile({ ...profile, enabled: !!expToggle?.checked });
+  });
+
+  // Display current multiplier labels
+  const cosmeticEl = document.getElementById('exposure-cosmetic');
+  const hiddenEl = document.getElementById('exposure-hidden');
+  const reliabilityEl = document.getElementById('exposure-reliability');
+  const removalEl = document.getElementById('exposure-removal');
+  const ep = exposureProfile.value;
+  if (cosmeticEl) cosmeticEl.textContent = formatExposureMultiplier(ep.multipliers.cosmetic);
+  if (hiddenEl) hiddenEl.textContent = formatExposureMultiplier(ep.multipliers.hidden);
+  if (reliabilityEl)
+    reliabilityEl.textContent = formatExposureMultiplier(ep.multipliers['reliability-critical']);
+  if (removalEl)
+    removalEl.textContent = formatExposureMultiplier(ep.multipliers['removal-sensitive']);
+
+  // ─── Gyroid infill ───────────────────────────────────────────────
+  const gyroidToggle = document.getElementById('gyroid-toggle') as HTMLInputElement | null;
+  const gyroidConfig = document.getElementById('gyroid-config');
+
+  listen(gyroidToggle, 'change', () => {
+    if (gyroidConfig) gyroidConfig.hidden = !gyroidToggle?.checked;
+  });
 
   return { updateEstimate };
 }

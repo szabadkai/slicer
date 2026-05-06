@@ -65,7 +65,7 @@ describe('mountFileHandling', () => {
     Object.defineProperty(input, 'files', { value: [file], writable: false });
     input.dispatchEvent(new Event('change', { bubbles: true }));
 
-    expect(ctx.showProgress).toHaveBeenCalledWith('Reading STL...');
+    expect(ctx.showProgress).toHaveBeenCalledWith('Reading file...');
   });
 
   it('ignores file input with no file', () => {

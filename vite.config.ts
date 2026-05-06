@@ -24,5 +24,10 @@ export default defineConfig({
     globals: true,
     environment: 'happy-dom',
     include: ['src/**/*.test.ts'],
+    server: {
+      deps: {
+        external: ['occt-import-js'],
+      },
+    },
   },
 });

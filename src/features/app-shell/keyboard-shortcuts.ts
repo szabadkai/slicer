@@ -72,6 +72,20 @@ const MOD_BINDINGS: ShortcutBinding[] = [
 const SIMPLE_BINDINGS: ShortcutBinding[] = [
   { key: 'g', action: ({ viewer }) => viewer.autoArrange() },
   { key: 'f', action: ({ viewer }) => viewer.fillPlatform() },
+  {
+    key: 'd',
+    action: ({ viewer }) => {
+      if (viewer.selected.length === 0) return;
+      const bounds = viewer.getSelectionWorldBounds?.();
+      const center = viewer.getSelectionWorldCenter();
+      if (!bounds || !center) return;
+      viewer.translateSelectionTo({
+        x: center.x,
+        y: center.y - bounds.min.y,
+        z: center.z,
+      });
+    },
+  },
 ];
 
 function handleLayerNavigation(e: KeyboardEvent, hasSlicedLayers: boolean): boolean {
@@ -140,7 +154,9 @@ function handleEscape(_e: KeyboardEvent, ctx: ShortcutContext): boolean {
     return true;
   }
   // Cancel manual support pick mode
-  const manualSupportBtn = document.getElementById('manual-support-btn') as HTMLButtonElement | null;
+  const manualSupportBtn = document.getElementById(
+    'manual-support-btn',
+  ) as HTMLButtonElement | null;
   if (manualSupportBtn?.classList.contains('active')) {
     manualSupportBtn.click();
     return true;
