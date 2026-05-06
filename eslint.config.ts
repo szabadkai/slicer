@@ -67,6 +67,7 @@ export default tseslint.config(
       'src/viewer-core.ts',
       'src/viewer-core-paint.ts',
       'src/viewer-core-intent.ts',
+      'src/viewer-core-overhang.ts',
       'src/viewer-core-models.ts',
       'src/viewer-core-selection.ts',
       'src/viewer-undo.ts',
