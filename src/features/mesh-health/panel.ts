@@ -6,7 +6,10 @@ import { listen, escapeHtml } from '@features/app-shell/utils';
 
 // Lazy-load legacy modules
 type InspectorModule = {
-  ModelInspector: new (geo: unknown, opts: Record<string, unknown>) => {
+  ModelInspector: new (
+    geo: unknown,
+    opts: Record<string, unknown>,
+  ) => {
     runFullInspection(): HealthReport;
   };
   IssueTypes: Record<string, { id: string }>;
@@ -30,23 +33,25 @@ interface HealthReport {
   getHealthScore(): number;
 }
 
-const AUTOFIX_IDS = new Set([
-  'inverted-normals',
-  'duplicate-vertices',
-  'degenerate-triangles',
-]);
+const AUTOFIX_IDS = new Set(['inverted-normals', 'duplicate-vertices', 'degenerate-triangles']);
 
 export function mountHealthPanel(ctx: AppContext): void {
   const { viewer } = ctx;
   const analyzeBtn = document.getElementById('health-analyze-btn') as HTMLButtonElement | null;
   const repairBtn = document.getElementById('health-autorepair-btn') as HTMLButtonElement | null;
-  const heatmapBtn = document.getElementById('health-support-heatmap-btn') as HTMLButtonElement | null;
+  const heatmapBtn = document.getElementById(
+    'health-support-heatmap-btn',
+  ) as HTMLButtonElement | null;
+  const thicknessBtn = document.getElementById(
+    'health-thickness-heatmap-btn',
+  ) as HTMLButtonElement | null;
   const scoreValue = document.getElementById('health-score-value');
   const scoreLabel = document.getElementById('health-score-label');
   const scoreArc = document.getElementById('health-score-arc');
   const scoreSvg = document.querySelector('.health-score-svg') as HTMLElement | null;
   const issuesEl = document.getElementById('health-issues');
   let heatmapVisible = false;
+  let thicknessHeatmapVisible = false;
 
   let lastReport: HealthReport | null = null;
   let lastTarget: { type: string; objectId: string | null } | null = null;
@@ -59,11 +64,20 @@ export function mountHealthPanel(ctx: AppContext): void {
       analyzeBtn.textContent = hasSingle ? 'Analyze Selected' : 'Analyze Plate';
     }
     const fixable = lastReport?.issues.filter((i) => AUTOFIX_IDS.has(i.id)) ?? [];
-    const matchesSel = hasSingle && lastTarget?.type === 'selection' && lastTarget.objectId === viewer.selected[0].id;
+    const matchesSel =
+      hasSingle &&
+      lastTarget?.type === 'selection' &&
+      lastTarget.objectId === viewer.selected[0].id;
     if (repairBtn) repairBtn.disabled = !matchesSel || fixable.length === 0;
     if (heatmapBtn) {
       heatmapBtn.disabled = !hasObjs;
       heatmapBtn.textContent = heatmapVisible ? 'Hide Support Heatmap' : 'Show Support Heatmap';
+    }
+    if (thicknessBtn) {
+      thicknessBtn.disabled = !hasObjs;
+      thicknessBtn.textContent = thicknessHeatmapVisible
+        ? 'Hide Thickness Heatmap'
+        : 'Show Thickness Heatmap';
     }
   }
 
@@ -71,7 +85,10 @@ export function mountHealthPanel(ctx: AppContext): void {
     if (viewer.objects.length === 0) return;
     const hasSingle = viewer.selected.length === 1;
 
-    if (analyzeBtn) { analyzeBtn.disabled = true; analyzeBtn.textContent = 'Analyzing...'; }
+    if (analyzeBtn) {
+      analyzeBtn.disabled = true;
+      analyzeBtn.textContent = 'Analyzing...';
+    }
     if (scoreValue) scoreValue.textContent = '...';
     if (scoreLabel) scoreLabel.textContent = 'Analyzing model...';
     scoreSvg?.classList.add('health-analyzing');
@@ -82,7 +99,7 @@ export function mountHealthPanel(ctx: AppContext): void {
       const geometry = hasSingle ? viewer.getModelGeometry() : viewer.getMergedModelGeometry();
       if (!geometry) throw new Error('No geometry available');
 
-      const { ModelInspector } = await import('../../inspector') as InspectorModule;
+      const { ModelInspector } = (await import('../../inspector')) as InspectorModule;
       const inspector = new ModelInspector(geometry, {
         printerSpec: viewer.printer,
         thinFeatureThreshold: 0.3,
@@ -101,7 +118,9 @@ export function mountHealthPanel(ctx: AppContext): void {
       lastTarget = null;
       if (scoreValue) scoreValue.textContent = 'Err';
       if (scoreLabel) scoreLabel.textContent = 'Analysis failed';
-      if (issuesEl) issuesEl.innerHTML = '<div class="health-empty-state">Analysis failed. Please try again.</div>';
+      if (issuesEl)
+        issuesEl.innerHTML =
+          '<div class="health-empty-state">Analysis failed. Please try again.</div>';
     } finally {
       scoreSvg?.classList.remove('health-analyzing');
       updateState();
@@ -111,7 +130,9 @@ export function mountHealthPanel(ctx: AppContext): void {
   function displayReport(report: HealthReport): void {
     const score = report.getHealthScore();
     if (scoreValue) scoreValue.textContent = `${score}%`;
-    if (scoreLabel) scoreLabel.textContent = report.overallHealth.charAt(0).toUpperCase() + report.overallHealth.slice(1);
+    if (scoreLabel)
+      scoreLabel.textContent =
+        report.overallHealth.charAt(0).toUpperCase() + report.overallHealth.slice(1);
     if (scoreArc) scoreArc.setAttribute('stroke-dasharray', `${score}, 100`);
     if (scoreSvg) {
       scoreSvg.setAttribute('class', 'health-score-svg health-' + report.overallHealth);
@@ -120,7 +141,8 @@ export function mountHealthPanel(ctx: AppContext): void {
 
     if (!issuesEl) return;
     if (report.issues.length === 0) {
-      issuesEl.innerHTML = '<div class="health-empty-state" style="background: #dcfce7; color: #166534;">✓ No issues found. Model is ready to print.</div>';
+      issuesEl.innerHTML =
+        '<div class="health-empty-state" style="background: #dcfce7; color: #166534;">✓ No issues found. Model is ready to print.</div>';
       return;
     }
 
@@ -129,7 +151,8 @@ export function mountHealthPanel(ctx: AppContext): void {
     const infos = report.issues.filter((i) => i.severity === 'info');
     let html = '';
     if (errors.length > 0) html += renderGroup('Errors', errors, 'error', true);
-    if (warnings.length > 0) html += renderGroup('Warnings', warnings, 'warning', errors.length === 0);
+    if (warnings.length > 0)
+      html += renderGroup('Warnings', warnings, 'warning', errors.length === 0);
     if (infos.length > 0) html += renderGroup('Info', infos, 'info', false);
     issuesEl.innerHTML = html;
 
@@ -141,7 +164,12 @@ export function mountHealthPanel(ctx: AppContext): void {
     });
   }
 
-  function renderGroup(title: string, issues: HealthReport['issues'], cls: string, expanded: boolean): string {
+  function renderGroup(
+    title: string,
+    issues: HealthReport['issues'],
+    cls: string,
+    expanded: boolean,
+  ): string {
     const expandedCls = expanded ? ' expanded' : '';
     return `
       <div class="health-issue-group ${cls}${expandedCls}">
@@ -151,32 +179,54 @@ export function mountHealthPanel(ctx: AppContext): void {
           <span class="health-issue-group-count">${issues.length}</span>
         </div>
         <div class="health-issue-list">
-          ${issues.map((iss) => {
-            const autofix = AUTOFIX_IDS.has(iss.id) ? '<span class="autofix-badge">Auto-fix</span>' : '';
-            return `<div class="health-issue-item"><div class="health-issue-item-title">${escapeHtml(iss.description)}${autofix}</div><div class="health-issue-item-desc">${escapeHtml(iss.impact)}</div></div>`;
-          }).join('')}
+          ${issues
+            .map((iss) => {
+              const autofix = AUTOFIX_IDS.has(iss.id)
+                ? '<span class="autofix-badge">Auto-fix</span>'
+                : '';
+              return `<div class="health-issue-item"><div class="health-issue-item-title">${escapeHtml(iss.description)}${autofix}</div><div class="health-issue-item-desc">${escapeHtml(iss.impact)}</div></div>`;
+            })
+            .join('')}
         </div>
       </div>`;
   }
 
   async function runRepair(): Promise<void> {
-    if (viewer.selected.length !== 1) { alert('Please select one model to repair.'); return; }
-    if (!lastReport || lastTarget?.type !== 'selection' || lastTarget.objectId !== viewer.selected[0].id) {
+    if (viewer.selected.length !== 1) {
+      alert('Please select one model to repair.');
+      return;
+    }
+    if (
+      !lastReport ||
+      lastTarget?.type !== 'selection' ||
+      lastTarget.objectId !== viewer.selected[0].id
+    ) {
       alert('Please analyze the selected model first.');
       return;
     }
     const fixable = lastReport.issues.filter((i) => AUTOFIX_IDS.has(i.id));
-    if (fixable.length === 0) { alert('No auto-fixable issues found.'); return; }
-    if (!confirm(`Auto-repair will fix:\n${fixable.map((i) => '• ' + i.description).join('\n')}\n\nContinue?`)) return;
+    if (fixable.length === 0) {
+      alert('No auto-fixable issues found.');
+      return;
+    }
+    if (
+      !confirm(
+        `Auto-repair will fix:\n${fixable.map((i) => '• ' + i.description).join('\n')}\n\nContinue?`,
+      )
+    )
+      return;
 
-    if (repairBtn) { repairBtn.disabled = true; repairBtn.textContent = 'Repairing...'; }
+    if (repairBtn) {
+      repairBtn.disabled = true;
+      repairBtn.textContent = 'Repairing...';
+    }
 
     try {
       const sel = viewer.selected[0];
       const geo = (sel.mesh.geometry as { clone(): unknown }).clone();
       if (!geo) throw new Error('No geometry');
 
-      const { ModelRepairer } = await import('../../repairer') as RepairerModule;
+      const { ModelRepairer } = (await import('../../repairer')) as RepairerModule;
       const repairer = new ModelRepairer(geo);
       const result = repairer.autoRepair();
 
@@ -223,9 +273,36 @@ export function mountHealthPanel(ctx: AppContext): void {
     updateState();
   }
 
-  listen(analyzeBtn, 'click', () => { runAnalysis(); });
-  listen(repairBtn, 'click', () => { runRepair(); });
-  listen(heatmapBtn, 'click', () => { toggleHeatmap(); });
+  function toggleThicknessHeatmap(): void {
+    if (thicknessHeatmapVisible) {
+      viewer.clearThicknessHeatmap?.();
+      thicknessHeatmapVisible = false;
+    } else {
+      const targets = viewer.selected.length > 0 ? viewer.selected : viewer.objects;
+      if (targets.length === 0) return;
+      const result = viewer.buildThicknessHeatmapGeometry?.(targets, 0.5, 4);
+      if (!result || !result.geometry) {
+        alert('Could not compute wall thickness for this model.');
+        return;
+      }
+      viewer.showThicknessHeatmap?.(result);
+      thicknessHeatmapVisible = true;
+    }
+    updateState();
+  }
+
+  listen(analyzeBtn, 'click', () => {
+    runAnalysis();
+  });
+  listen(repairBtn, 'click', () => {
+    runRepair();
+  });
+  listen(heatmapBtn, 'click', () => {
+    toggleHeatmap();
+  });
+  listen(thicknessBtn, 'click', () => {
+    toggleThicknessHeatmap();
+  });
   listen(viewer.canvas, 'selection-changed', updateState);
   listen(viewer.canvas, 'mesh-changed', () => {
     lastReport = null;
@@ -233,6 +310,10 @@ export function mountHealthPanel(ctx: AppContext): void {
     if (heatmapVisible) {
       viewer.clearSupportHeatmap?.();
       heatmapVisible = false;
+    }
+    if (thicknessHeatmapVisible) {
+      viewer.clearThicknessHeatmap?.();
+      thicknessHeatmapVisible = false;
     }
     updateState();
   });

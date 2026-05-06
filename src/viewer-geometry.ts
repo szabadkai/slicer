@@ -304,3 +304,149 @@ function supportDemandColor(demand: number): THREE.Color {
   if (demand < 0.68) return mid.lerp(hot, (demand - 0.35) / 0.33);
   return hot.lerp(high, (demand - 0.68) / 0.32);
 }
+
+// ---- wall thickness heatmap -----------------------------------------------
+
+function thicknessColor(
+  thicknessMM: number,
+  minThreshold: number,
+  maxThreshold: number,
+): THREE.Color {
+  const thin = new THREE.Color(0xff1744);
+  const mid = new THREE.Color(0xffea00);
+  const thick = new THREE.Color(0x00e676);
+  const t = THREE.MathUtils.clamp(
+    (thicknessMM - minThreshold) / (maxThreshold - minThreshold),
+    0,
+    1,
+  );
+  if (t < 0.5) return thin.clone().lerp(mid, t / 0.5);
+  return mid.clone().lerp(thick, (t - 0.5) / 0.5);
+}
+
+export function buildThicknessHeatmapGeometry(
+  targets: SceneObject[],
+  minThresholdMM: number,
+  maxThresholdMM: number,
+): { geometry: THREE.BufferGeometry | null; minThickness: number; maxThickness: number } | null {
+  const geos: THREE.BufferGeometry[] = [];
+  for (const obj of targets) {
+    if (!obj?.mesh?.geometry) continue;
+    const geometry = obj.mesh.geometry.clone();
+    obj.mesh.updateMatrixWorld(true);
+    geometry.applyMatrix4(obj.mesh.matrixWorld);
+    geos.push(geometry);
+  }
+  if (geos.length === 0) return null;
+  const merged = geos.length === 1 ? geos[0] : BufferGeometryUtils.mergeGeometries(geos, false);
+  geos.forEach((g) => {
+    if (g !== merged) g.dispose();
+  });
+  if (!merged) return null;
+
+  const source = merged.index ? merged.toNonIndexed() : merged;
+  if (source !== merged) merged.dispose();
+
+  const pos = source.attributes.position;
+  const raycaster = new THREE.Raycaster();
+  raycaster.firstHitOnly = true;
+
+  // Build a temporary mesh for raycasting
+  const tempMesh = new THREE.Mesh(source, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+
+  const heatPositions: number[] = [];
+  const heatColors: number[] = [];
+  const a = new THREE.Vector3(),
+    b = new THREE.Vector3(),
+    c = new THREE.Vector3();
+  const center = new THREE.Vector3();
+  const edge1 = new THREE.Vector3(),
+    edge2 = new THREE.Vector3(),
+    normal = new THREE.Vector3();
+  let globalMin = Infinity,
+    globalMax = 0;
+
+  // Sample every triangle: cast ray from centroid inward (opposite to normal)
+  for (let i = 0; i < pos.count; i += 3) {
+    a.fromBufferAttribute(pos, i);
+    b.fromBufferAttribute(pos, i + 1);
+    c.fromBufferAttribute(pos, i + 2);
+    edge1.subVectors(b, a);
+    edge2.subVectors(c, a);
+    normal.crossVectors(edge1, edge2);
+    const area = normal.length() * 0.5;
+    if (area <= 1e-8) continue;
+    normal.normalize();
+
+    center.copy(a).add(b).add(c).divideScalar(3);
+    // Offset origin slightly along the normal to avoid self-intersection
+    const origin = center.clone().add(normal.clone().multiplyScalar(-0.01));
+    const direction = normal.clone().negate();
+
+    raycaster.set(origin, direction);
+    raycaster.far = maxThresholdMM * 3;
+    const hits = raycaster.intersectObject(tempMesh, false);
+
+    // Find the first hit that isn't essentially the same triangle
+    let thickness = maxThresholdMM * 3;
+    for (const hit of hits) {
+      if (hit.distance > 0.02) {
+        thickness = hit.distance;
+        break;
+      }
+    }
+
+    if (thickness < globalMin) globalMin = thickness;
+    if (thickness > globalMax) globalMax = thickness;
+
+    const color = thicknessColor(thickness, minThresholdMM, maxThresholdMM);
+    const offset = normal.clone().multiplyScalar(0.04);
+    for (const v of [a, b, c]) {
+      heatPositions.push(v.x + offset.x, v.y + offset.y, v.z + offset.z);
+      heatColors.push(color.r, color.g, color.b);
+    }
+  }
+
+  tempMesh.geometry = undefined as unknown as THREE.BufferGeometry;
+  source.dispose();
+
+  if (heatPositions.length === 0) return { geometry: null, minThickness: 0, maxThickness: 0 };
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(heatPositions, 3));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(heatColors, 3));
+  geometry.computeBoundingSphere();
+  return { geometry, minThickness: globalMin, maxThickness: globalMax };
+}
+
+export function showThicknessHeatmap(
+  viewer: Viewer,
+  result: { geometry: THREE.BufferGeometry | null; minThickness: number; maxThickness: number },
+): void {
+  clearThicknessHeatmap(viewer);
+  if (!result.geometry) return;
+  const material = new THREE.MeshBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.92,
+    depthTest: false,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
+  });
+  viewer._thicknessHeatmapMesh = new THREE.Mesh(result.geometry, material);
+  viewer._thicknessHeatmapMesh.renderOrder = 900;
+  viewer.scene.add(viewer._thicknessHeatmapMesh);
+  viewer.requestRender();
+}
+
+export function clearThicknessHeatmap(viewer: Viewer): void {
+  if (!viewer._thicknessHeatmapMesh) return;
+  viewer.scene.remove(viewer._thicknessHeatmapMesh);
+  viewer._thicknessHeatmapMesh.geometry?.dispose();
+  (viewer._thicknessHeatmapMesh.material as THREE.Material)?.dispose();
+  viewer._thicknessHeatmapMesh = null;
+  viewer.requestRender();
+}

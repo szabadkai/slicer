@@ -114,6 +114,7 @@ export interface LegacyViewer {
   autoArrange(padding?: number, elevation?: number): void;
   distributeAcrossPlates(plates: LegacyPlate[], padding?: number, elevation?: number): boolean;
   undo(): void;
+  redo(): void;
   copySelected(): void;
   paste(): void;
   _saveUndoState?(): void;
@@ -172,6 +173,19 @@ export interface LegacyViewer {
   ): { geometry: unknown; area: number; triangleCount: number } | null;
   showSupportHeatmap?(result: { geometry: unknown; area: number; triangleCount: number }): void;
   clearSupportHeatmap?(): void;
+
+  // Thickness heatmap
+  buildThicknessHeatmapGeometry?(
+    targets: LegacyObject[],
+    minThresholdMM: number,
+    maxThresholdMM: number,
+  ): { geometry: unknown; minThickness: number; maxThickness: number } | null;
+  showThicknessHeatmap?(result: {
+    geometry: unknown;
+    minThickness: number;
+    maxThickness: number;
+  }): void;
+  clearThicknessHeatmap?(): void;
 
   // Project serialization
   serializeObjects(objects?: LegacyObject[]): import('../project-store').SerializedObject[];

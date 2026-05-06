@@ -13,6 +13,10 @@ export interface StrategyWeights {
   flatBottomArea: number;
   /** Penalty weight for cosmetic faces that become overhang */
   cosmeticOverhangPenalty: number;
+  /** Penalty for removal-sensitive faces that become overhang */
+  removalSensitivePenalty: number;
+  /** Bonus for hidden faces that become overhang (negative = good) */
+  hiddenOverhangBonus: number;
 }
 
 export const STRATEGY_PRESETS: Record<Strategy, StrategyWeights> = {
@@ -22,6 +26,8 @@ export const STRATEGY_PRESETS: Record<Strategy, StrategyWeights> = {
     staircaseMetric: 0.1,
     flatBottomArea: 0.1,
     cosmeticOverhangPenalty: 0.3,
+    removalSensitivePenalty: 0.2,
+    hiddenOverhangBonus: 0.1,
   },
   'minimal-supports': {
     height: 0.1,
@@ -29,6 +35,8 @@ export const STRATEGY_PRESETS: Record<Strategy, StrategyWeights> = {
     staircaseMetric: 0.1,
     flatBottomArea: 0.2,
     cosmeticOverhangPenalty: 0.5,
+    removalSensitivePenalty: 0.4,
+    hiddenOverhangBonus: 0.15,
   },
   'surface-quality': {
     height: 0.1,
@@ -36,6 +44,8 @@ export const STRATEGY_PRESETS: Record<Strategy, StrategyWeights> = {
     staircaseMetric: 0.6,
     flatBottomArea: 0.2,
     cosmeticOverhangPenalty: 0.8,
+    removalSensitivePenalty: 0.6,
+    hiddenOverhangBonus: 0.2,
   },
 };
 
@@ -56,6 +66,10 @@ export interface CandidateMetrics {
   flatBottomArea: number;
   /** Area of cosmetic-intent faces that become overhang in this orientation */
   cosmeticOverhangArea: number;
+  /** Area of removal-sensitive faces that become overhang */
+  removalSensitiveOverhangArea: number;
+  /** Area of hidden-intent faces that become overhang (good — supports are acceptable here) */
+  hiddenOverhangArea: number;
 }
 
 /**
@@ -118,7 +132,9 @@ export function scoreCandidates(
       weights.overhangArea * metrics.overhangArea +
       weights.staircaseMetric * metrics.staircaseMetric -
       weights.flatBottomArea * metrics.flatBottomArea +
-      weights.cosmeticOverhangPenalty * metrics.cosmeticOverhangArea;
+      weights.cosmeticOverhangPenalty * metrics.cosmeticOverhangArea +
+      weights.removalSensitivePenalty * metrics.removalSensitiveOverhangArea -
+      weights.hiddenOverhangBonus * metrics.hiddenOverhangArea;
 
     candidates.push({ upX: up.x, upY: up.y, upZ: up.z, score, metrics });
   }
@@ -141,6 +157,8 @@ function computeMetrics(
   let flatBottomArea = 0;
   let staircaseMetric = 0;
   let cosmeticOverhangArea = 0;
+  let removalSensitiveOverhangArea = 0;
+  let hiddenOverhangArea = 0;
 
   const overhangCos = Math.cos((60 * Math.PI) / 180); // 60° from up = 30° overhang
 
@@ -186,6 +204,10 @@ function computeMetrics(
         const decoded = decodeIntent(intentBuffer[tri]);
         if (decoded?.intent === 'cosmetic') {
           cosmeticOverhangArea += triArea;
+        } else if (decoded?.intent === 'removal-sensitive') {
+          removalSensitiveOverhangArea += triArea;
+        } else if (decoded?.intent === 'hidden') {
+          hiddenOverhangArea += triArea;
         }
       }
     }
@@ -203,5 +225,13 @@ function computeMetrics(
   }
 
   const height = maxProj - minProj;
-  return { height, overhangArea, staircaseMetric, flatBottomArea, cosmeticOverhangArea };
+  return {
+    height,
+    overhangArea,
+    staircaseMetric,
+    flatBottomArea,
+    cosmeticOverhangArea,
+    removalSensitiveOverhangArea,
+    hiddenOverhangArea,
+  };
 }

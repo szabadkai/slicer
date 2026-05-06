@@ -43,6 +43,7 @@ const TOOL_PANELS = [
 ] as const;
 
 const MOD_SHIFT_BINDINGS: ShortcutBinding[] = [
+  { key: 'z', mod: true, shift: true, action: ({ viewer }) => viewer.redo() },
   { key: 'a', mod: true, shift: true, action: ({ viewer }) => viewer.autoArrange() },
   {
     key: 's',

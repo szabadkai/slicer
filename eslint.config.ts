@@ -70,6 +70,7 @@ export default tseslint.config(
       'src/viewer-core-models.ts',
       'src/viewer-core-selection.ts',
       'src/viewer-undo.ts',
+      'src/viewer-cut.ts',
       'src/viewer-plates.ts',
       'src/viewer-geometry.ts',
       'src/viewer-serialize.ts',

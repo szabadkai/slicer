@@ -137,6 +137,7 @@ export class ViewerCore {
   gridGroup: THREE.Group | null = null;
   buildVolumeEdges: BuildVolumeEdge[] = [];
   undoStack: unknown[] = [];
+  redoStack: unknown[] = [];
   clipboard: unknown[] = [];
   MAX_UNDO = 30;
   defaultMaterialPreset: Record<string, unknown>;

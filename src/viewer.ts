@@ -15,8 +15,11 @@ import {
   saveUndoState,
   saveMultiPlateUndoState,
   undo as undoImpl,
+  redo as redoImpl,
   copySelected as copySelectedImpl,
   paste as pasteImpl,
+} from './viewer-undo';
+import {
   cutSelectedByAxisPlane as cutByAxisImpl,
   cutSelectedByPlane as cutByPlaneImpl,
   previewCutPlane as previewCutImpl,
@@ -24,7 +27,7 @@ import {
   clearCutPlanePreview as clearCutImpl,
   getCutPlaneState as getCutStateImpl,
   syncInteractiveCutPlane as syncCutPlaneImpl,
-} from './viewer-undo';
+} from './viewer-cut';
 import {
   setActivePlate as setActivePlateImpl,
   bindInitialPlate as bindInitialPlateImpl,
@@ -49,6 +52,9 @@ import {
   buildSupportHeatmapGeometry as buildHeatmapImpl,
   showSupportHeatmap as showHeatmapImpl,
   clearSupportHeatmap as clearHeatmapImpl,
+  buildThicknessHeatmapGeometry as buildThicknessImpl,
+  showThicknessHeatmap as showThicknessImpl,
+  clearThicknessHeatmap as clearThicknessImpl,
 } from './viewer-geometry';
 import {
   serializeObjects as serializeImpl,
@@ -74,6 +80,7 @@ export class Viewer extends ViewerCore {
   _cutPlaneInteractive = false;
   _cutPlaneBounds: { min: THREE.Vector3; max: THREE.Vector3; center: THREE.Vector3 } | null = null;
   _supportHeatmapMesh: THREE.Mesh | null = null;
+  _thicknessHeatmapMesh: THREE.Mesh | null = null;
 
   // ---- multi-transform ----------------------------------------------------
   protected override _beginMultiTransform(): void {
@@ -401,6 +408,9 @@ export class Viewer extends ViewerCore {
   undo(): void {
     undoImpl(this);
   }
+  redo(): void {
+    redoImpl(this);
+  }
   copySelected(): void {
     copySelectedImpl(this);
   }
@@ -504,6 +514,25 @@ export class Viewer extends ViewerCore {
   }
   clearSupportHeatmap(): void {
     clearHeatmapImpl(this);
+  }
+
+  // ---- thickness heatmap (delegated to viewer-geometry.ts) ----------------
+  buildThicknessHeatmapGeometry(
+    targets: SceneObject[],
+    minThresholdMM: number,
+    maxThresholdMM: number,
+  ): ReturnType<typeof buildThicknessImpl> {
+    return buildThicknessImpl(targets, minThresholdMM, maxThresholdMM);
+  }
+  showThicknessHeatmap(result: {
+    geometry: THREE.BufferGeometry | null;
+    minThickness: number;
+    maxThickness: number;
+  }): void {
+    showThicknessImpl(this, result);
+  }
+  clearThicknessHeatmap(): void {
+    clearThicknessImpl(this);
   }
 
   // ---- project serialization (delegated to viewer-serialize.ts) -----------
