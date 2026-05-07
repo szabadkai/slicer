@@ -15,6 +15,7 @@ interface Preferences {
   selectedMaterialId: string;
   activeToolPanel: string;
   sidebarCollapsed: boolean;
+  mode?: 'basic' | 'advanced';
   sliceSettings: Record<string, string>;
   supportSettings: Record<string, string | boolean>;
   camera?: { position: number[]; quaternion: number[]; target: number[] };
@@ -51,12 +52,15 @@ export function mountPreferences(
   // Collect current state
   function collectPrefs(): Preferences {
     const sidebar = document.getElementById('sidebar');
+    const app = document.getElementById('app');
+    const currentMode = (app?.getAttribute('data-mode') ?? 'basic') as 'basic' | 'advanced';
     return {
       version: PREFS_VERSION,
       selectedPrinterKey: selectedPrinterKey(),
       selectedMaterialId: ctx.viewer.getActiveMaterialPreset()?.id ?? 'siraya-fast-navy-grey',
       activeToolPanel: getActiveToolPanel(),
       sidebarCollapsed: !!sidebar?.classList.contains('collapsed'),
+      mode: currentMode,
       sliceSettings: collectInputValues([
         'layer-height',
         'normal-exposure',
@@ -177,6 +181,13 @@ export function mountPreferences(
     }
     if (prefs.sidebarCollapsed) {
       document.getElementById('sidebar')?.classList.add('collapsed');
+    }
+    if (prefs.mode) {
+      // Use the applyMode function mounted by shell.ts
+      const applyMode = (window as unknown as Record<string, unknown>).__slicelab_applyMode as
+        | ((m: 'basic' | 'advanced') => void)
+        | undefined;
+      applyMode?.(prefs.mode);
     }
     if (prefs.activeToolPanel) {
       showToolPanel(prefs.activeToolPanel);

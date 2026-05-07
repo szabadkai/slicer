@@ -19,6 +19,10 @@
         </a>
       </div>
       <div id="toolbar-right">
+        <div class="mode-pill" id="mode-pill" title="Basic mode shows essential controls only. Advanced unlocks all options.">
+          <button type="button" class="mode-pill-btn active" id="mode-basic-btn">Basic</button>
+          <button type="button" class="mode-pill-btn" id="mode-advanced-btn">Advanced</button>
+        </div>
         <button type="button" id="theme-toggle-btn" class="toolbar-icon-btn" title="Toggle dark mode" aria-label="Toggle dark mode">
           <svg id="theme-icon-sun" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
             <path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0-4a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0V4a1 1 0 0 1 1-1zm0 16a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0v-1a1 1 0 0 1 1-1zm9-8a1 1 0 0 1-1 1h-1a1 1 0 1 1 0-2h1a1 1 0 0 1 1 1zM5 12a1 1 0 0 1-1 1H3a1 1 0 1 1 0-2h1a1 1 0 0 1 1 1zm13.07-5.07a1 1 0 0 1 0 1.41l-.71.71a1 1 0 0 1-1.41-1.41l.71-.71a1 1 0 0 1 1.41 0zM7.05 16.95a1 1 0 0 1 0 1.41l-.71.71a1 1 0 1 1-1.41-1.41l.71-.71a1 1 0 0 1 1.41 0zm11.31 1.41a1 1 0 0 1-1.41 0l-.71-.71a1 1 0 0 1 1.41-1.41l.71.71a1 1 0 0 1 0 1.41zM7.05 7.05a1 1 0 0 1-1.41 0l-.71-.71a1 1 0 1 1 1.41-1.41l.71.71a1 1 0 0 1 0 1.41z"/>
@@ -88,64 +92,162 @@
         <canvas id="viewport"></canvas>
         <div id="fps-counter">FPS --</div>
         <div id="model-info" class="floating-panel"></div>
-        <div id="cut-viewer-toolbar" class="cut-viewer-toolbar" hidden>
-          <button type="button" id="cut-viewer-move-btn" class="cut-viewer-tool active" title="Move cut plane" aria-label="Move cut plane">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-              <path d="M12 2 8 6h3v5H6V8l-4 4 4 4v-3h5v5H8l4 4 4-4h-3v-5h5v3l4-4-4-4v3h-5V6h3l-4-4z"/>
-            </svg>
-          </button>
-          <button type="button" id="cut-viewer-rotate-btn" class="cut-viewer-tool" title="Rotate cut plane" aria-label="Rotate cut plane">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-              <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.96-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm-6 6c0-1.01.25-1.96.7-2.8L5.24 5.74A7.93 7.93 0 0 0 4 10c0 4.42 3.58 8 8 8v3l4-4-4-4v3c-3.31 0-6-2.69-6-6z"/>
-            </svg>
-          </button>
-          <button type="button" id="cut-viewer-apply-btn" class="cut-viewer-apply" title="Cut selected model" aria-label="Cut selected model">
-            Cut
-          </button>
-        </div>
-        <div id="prim-viewer-toolbar" class="cut-viewer-toolbar" hidden>
-          <button type="button" id="prim-viewer-move-btn" class="cut-viewer-tool active" title="Move primitive" aria-label="Move primitive">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-              <path d="M12 2 8 6h3v5H6V8l-4 4 4 4v-3h5v5H8l4 4 4-4h-3v-5h5v3l4-4-4-4v3h-5V6h3l-4-4z"/>
-            </svg>
-          </button>
-          <button type="button" id="prim-viewer-rotate-btn" class="cut-viewer-tool" title="Rotate primitive" aria-label="Rotate primitive">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-              <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.96-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm-6 6c0-1.01.25-1.96.7-2.8L5.24 5.74A7.93 7.93 0 0 0 4 10c0 4.42 3.58 8 8 8v3l4-4-4-4v3c-3.31 0-6-2.69-6-6z"/>
-            </svg>
-          </button>
-          <button type="button" id="prim-viewer-scale-btn" class="cut-viewer-tool" title="Scale primitive" aria-label="Scale primitive">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-              <path d="M21 15h2v2h-2v-2zm0-4h2v2h-2v-2zm2 8h-2v2c1 0 2-1 2-2zM13 3h2v2h-2V3zm8 4h2v2h-2V7zm0-4v2h2c0-1-1-2-2-2zM1 7h2v2H1V7zm16-4h2v2h-2V3zm0 16h2v2h-2v-2zM3 3C2 3 1 4 1 5h2V3zm6 0h2v2H9V3zM5 3h2v2H5V3zm-4 8v8c0 1.1.9 2 2 2h12V11H1zm2 8l2.5-3.21 1.79 2.15 2.5-3.22L13 19H3z"/>
-            </svg>
-          </button>
-          <button type="button" id="prim-viewer-subtract-btn" class="cut-viewer-apply" title="Subtract primitive" aria-label="Subtract primitive">
-            Subtract
-          </button>
-          <button type="button" id="prim-viewer-split-btn" class="cut-viewer-apply" title="Split with primitive" aria-label="Split with primitive" style="background:transparent;color:var(--text);border-color:var(--border)">
-            Split
-          </button>
-        </div>
-        <div id="vol-viewer-toolbar" class="cut-viewer-toolbar" hidden>
-          <button type="button" id="vol-viewer-move-btn" class="cut-viewer-tool active" title="Move volume" aria-label="Move volume">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-              <path d="M12 2 8 6h3v5H6V8l-4 4 4 4v-3h5v5H8l4 4 4-4h-3v-5h5v3l4-4-4-4v3h-5V6h3l-4-4z"/>
-            </svg>
-          </button>
-          <button type="button" id="vol-viewer-rotate-btn" class="cut-viewer-tool" title="Rotate volume" aria-label="Rotate volume">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-              <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.96-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm-6 6c0-1.01.25-1.96.7-2.8L5.24 5.74A7.93 7.93 0 0 0 4 10c0 4.42 3.58 8 8 8v3l4-4-4-4v3c-3.31 0-6-2.69-6-6z"/>
-            </svg>
-          </button>
-          <button type="button" id="vol-viewer-scale-btn" class="cut-viewer-tool" title="Scale volume" aria-label="Scale volume">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-              <path d="M21 15h2v2h-2v-2zm0-4h2v2h-2v-2zm2 8h-2v2c1 0 2-1 2-2zM13 3h2v2h-2V3zm8 4h2v2h-2V7zm0-4v2h2c0-1-1-2-2-2zM1 7h2v2H1V7zm16-4h2v2h-2V3zm0 16h2v2h-2v-2zM3 3C2 3 1 4 1 5h2V3zm6 0h2v2H9V3zM5 3h2v2H5V3zm-4 8v8c0 1.1.9 2 2 2h12V11H1zm2 8l2.5-3.21 1.79 2.15 2.5-3.22L13 19H3z"/>
-            </svg>
-          </button>
-          <button type="button" id="vol-viewer-apply-btn" class="cut-viewer-apply" title="Apply volume fill" aria-label="Apply volume fill">
-            Apply
-          </button>
-        </div>
+        <!-- ═══ Tool HUD — persistent per-tool floating toolbar ═══ -->
+        <div id="tool-hud">
+
+          <!-- Plate HUD: transform mode + quick layout actions -->
+          <div class="tool-hud-section" id="hud-plate">
+            <button type="button" class="hud-btn active" id="hud-mode-translate" data-hud-mode="translate" title="Move (T)">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 2 8 6h3v5H6V8l-4 4 4 4v-3h5v5H8l4 4 4-4h-3v-5h5v3l4-4-4-4v3h-5V6h3l-4-4z"/></svg>
+              Move
+            </button>
+            <button type="button" class="hud-btn" id="hud-mode-rotate" data-hud-mode="rotate" title="Rotate (R)">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.96-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm-6 6c0-1.01.25-1.96.7-2.8L5.24 5.74A7.93 7.93 0 0 0 4 10c0 4.42 3.58 8 8 8v3l4-4-4-4v3c-3.31 0-6-2.69-6-6z"/></svg>
+              Rotate
+            </button>
+            <button type="button" class="hud-btn" id="hud-mode-scale" data-hud-mode="scale" title="Scale (S)">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z"/></svg>
+              Scale
+            </button>
+            <div class="hud-sep"></div>
+            <button type="button" class="hud-btn" id="hud-drop-bed" title="Drop to build plate">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 2l-5.5 5.5 1.41 1.41L11 5.83V16h2V5.83l3.09 3.09 1.41-1.42L12 2zM4 20h16v2H4v-2z"/></svg>
+              Drop to Bed
+            </button>
+            <button type="button" class="hud-btn" id="hud-duplicate" title="Duplicate selected">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+              Duplicate
+            </button>
+            <button type="button" class="hud-btn" id="hud-delete" title="Delete selected">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+              Delete
+            </button>
+          </div>
+
+          <!-- Orient HUD: preset + orient-selected -->
+          <div class="tool-hud-section" id="hud-orient">
+            <button type="button" class="hud-btn" id="hud-orient-fastest" title="Minimize print time">
+              ⚡ Fastest
+            </button>
+            <button type="button" class="hud-btn" id="hud-orient-balanced" title="Reduce support material">
+              ◆ Least Support
+            </button>
+            <button type="button" class="hud-btn" id="hud-orient-quality" title="Best surface finish">
+              ✦ Best Quality
+            </button>
+            <div class="hud-sep"></div>
+            <button type="button" class="hud-btn hud-btn-primary" id="hud-orient-selected" title="Orient selected models">
+              Orient Selected
+            </button>
+          </div>
+
+          <!-- Modify sub-toolbars: shown/hidden by panel.ts (keep original IDs) -->
+          <div id="cut-viewer-toolbar" class="cut-viewer-toolbar tool-hud-section" hidden>
+            <button type="button" id="cut-viewer-move-btn" class="cut-viewer-tool active" title="Move cut plane" aria-label="Move cut plane">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M12 2 8 6h3v5H6V8l-4 4 4 4v-3h5v5H8l4 4 4-4h-3v-5h5v3l4-4-4-4v3h-5V6h3l-4-4z"/>
+              </svg>
+            </button>
+            <button type="button" id="cut-viewer-rotate-btn" class="cut-viewer-tool" title="Rotate cut plane" aria-label="Rotate cut plane">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.96-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm-6 6c0-1.01.25-1.96.7-2.8L5.24 5.74A7.93 7.93 0 0 0 4 10c0 4.42 3.58 8 8 8v3l4-4-4-4v3c-3.31 0-6-2.69-6-6z"/>
+              </svg>
+            </button>
+            <button type="button" id="cut-viewer-apply-btn" class="cut-viewer-apply" title="Cut selected model" aria-label="Cut selected model">
+              Cut
+            </button>
+          </div>
+          <div id="prim-viewer-toolbar" class="cut-viewer-toolbar tool-hud-section" hidden>
+            <button type="button" id="prim-viewer-move-btn" class="cut-viewer-tool active" title="Move primitive" aria-label="Move primitive">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M12 2 8 6h3v5H6V8l-4 4 4 4v-3h5v5H8l4 4 4-4h-3v-5h5v3l4-4-4-4v3h-5V6h3l-4-4z"/>
+              </svg>
+            </button>
+            <button type="button" id="prim-viewer-rotate-btn" class="cut-viewer-tool" title="Rotate primitive" aria-label="Rotate primitive">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.96-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm-6 6c0-1.01.25-1.96.7-2.8L5.24 5.74A7.93 7.93 0 0 0 4 10c0 4.42 3.58 8 8 8v3l4-4-4-4v3c-3.31 0-6-2.69-6-6z"/>
+              </svg>
+            </button>
+            <button type="button" id="prim-viewer-scale-btn" class="cut-viewer-tool" title="Scale primitive" aria-label="Scale primitive">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M21 15h2v2h-2v-2zm0-4h2v2h-2v-2zm2 8h-2v2c1 0 2-1 2-2zM13 3h2v2h-2V3zm8 4h2v2h-2V7zm0-4v2h2c0-1-1-2-2-2zM1 7h2v2H1V7zm16-4h2v2h-2V3zm0 16h2v2h-2v-2zM3 3C2 3 1 4 1 5h2V3zm6 0h2v2H9V3zM5 3h2v2H5V3zm-4 8v8c0 1.1.9 2 2 2h12V11H1zm2 8l2.5-3.21 1.79 2.15 2.5-3.22L13 19H3z"/>
+              </svg>
+            </button>
+            <button type="button" id="prim-viewer-subtract-btn" class="cut-viewer-apply" title="Subtract primitive" aria-label="Subtract primitive">
+              Subtract
+            </button>
+            <button type="button" id="prim-viewer-split-btn" class="cut-viewer-apply" title="Split with primitive" aria-label="Split with primitive" style="background:transparent;color:var(--text);border-color:var(--border)">
+              Split
+            </button>
+          </div>
+          <div id="vol-viewer-toolbar" class="cut-viewer-toolbar tool-hud-section" hidden>
+            <button type="button" id="vol-viewer-move-btn" class="cut-viewer-tool active" title="Move volume" aria-label="Move volume">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M12 2 8 6h3v5H6V8l-4 4 4 4v-3h5v5H8l4 4 4-4h-3v-5h5v3l4-4-4-4v3h-5V6h3l-4-4z"/>
+              </svg>
+            </button>
+            <button type="button" id="vol-viewer-rotate-btn" class="cut-viewer-tool" title="Rotate volume" aria-label="Rotate volume">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.96-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm-6 6c0-1.01.25-1.96.7-2.8L5.24 5.74A7.93 7.93 0 0 0 4 10c0 4.42 3.58 8 8 8v3l4-4-4-4v3c-3.31 0-6-2.69-6-6z"/>
+              </svg>
+            </button>
+            <button type="button" id="vol-viewer-scale-btn" class="cut-viewer-tool" title="Scale volume" aria-label="Scale volume">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M21 15h2v2h-2v-2zm0-4h2v2h-2v-2zm2 8h-2v2c1 0 2-1 2-2zM13 3h2v2h-2V3zm8 4h2v2h-2V7zm0-4v2h2c0-1-1-2-2-2zM1 7h2v2H1V7zm16-4h2v2h-2V3zm0 16h2v2h-2v-2zM3 3C2 3 1 4 1 5h2V3zm6 0h2v2H9V3zM5 3h2v2H5V3zm-4 8v8c0 1.1.9 2 2 2h12V11H1zm2 8l2.5-3.21 1.79 2.15 2.5-3.22L13 19H3z"/>
+              </svg>
+            </button>
+            <button type="button" id="vol-viewer-apply-btn" class="cut-viewer-apply" title="Apply volume fill" aria-label="Apply volume fill">
+              Apply
+            </button>
+          </div>
+
+          <!-- Supports HUD -->
+          <div class="tool-hud-section" id="hud-supports">
+            <button type="button" class="hud-btn" id="hud-overhangs-toggle" title="Show/hide unsupported areas">
+              Show Overhangs
+            </button>
+            <div class="hud-sep"></div>
+            <button type="button" class="hud-btn hud-btn-primary" id="hud-generate-supports" title="Generate supports for selected models">
+              Generate Selected
+            </button>
+            <button type="button" class="hud-btn" id="hud-clear-supports" title="Clear all supports">
+              Clear Supports
+            </button>
+          </div>
+
+          <!-- Surface HUD: paint toggle + pattern quick-select + brush -->
+          <div class="tool-hud-section" id="hud-surface">
+            <button type="button" class="hud-btn" id="hud-paint-toggle" title="Start/stop brush painting">
+              Start Painting
+            </button>
+            <div class="hud-sep"></div>
+            <button type="button" class="hud-btn hud-pattern-btn" data-pattern="0" title="Solid">● Solid</button>
+            <button type="button" class="hud-btn hud-pattern-btn" data-pattern="1" title="Carbon Fiber">⧲ Carbon</button>
+            <button type="button" class="hud-btn hud-pattern-btn" data-pattern="2" title="Knurl">⚙ Knurl</button>
+            <button type="button" class="hud-btn hud-pattern-btn" data-pattern="3" title="Ribbed">≡ Ribbed</button>
+            <button type="button" class="hud-btn hud-pattern-btn" data-pattern="4" title="Noise">≈ Noise</button>
+            <button type="button" class="hud-btn hud-pattern-btn" data-pattern="5" title="Bumps">∷ Bumps</button>
+            <div class="hud-sep"></div>
+            <label class="hud-label" title="Brush size">
+              Brush
+              <input type="range" id="hud-brush-size" min="2" max="50" value="10">
+            </label>
+          </div>
+
+          <!-- Slice HUD: slice + export + live layer count -->
+          <div class="tool-hud-section" id="hud-slice">
+            <button type="button" class="hud-btn hud-btn-primary" id="hud-slice-btn" title="Slice active plate (Ctrl+S)">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M4 5h16v2H4V5zm2 4h12v2H6V9zm2 4h8v2H8v-2zm2 4h4v2h-4v-2z"/></svg>
+              Slice Plate
+            </button>
+            <button type="button" class="hud-btn" id="hud-export-btn" title="Export sliced file (Ctrl+E)">
+              Export&hellip;
+            </button>
+            <div class="hud-sep"></div>
+            <span class="hud-layer-count" id="hud-layer-count" title="Sliced layer count">— layers</span>
+          </div>
+
+        </div><!-- /#tool-hud -->
         <div id="plate-strip" aria-label="Build plates">
           <div id="plate-tabs"></div>
           <button type="button" id="add-plate-btn" class="plate-add-btn" title="Add plate">+</button>
@@ -277,7 +379,7 @@
             </button>
           </div>
 
-          <details class="advanced-group">
+          <details class="advanced-group adv">
             <summary>Custom Weights</summary>
             <div class="control-group">
               <label>Height</label>
@@ -312,7 +414,7 @@
             </div>
           </details>
 
-          <div id="intent-panel">
+          <div id="intent-panel" class="adv">
             <div class="field-heading">Surface Intent</div>
             <div class="control-group">
               <label>Intent Type</label>
@@ -349,7 +451,7 @@
             </div>
             <div id="intent-stats" class="intent-stats">No intents assigned</div>
 
-            <div class="control-group">
+            <div class="control-group exp">
               <label>Appearance &harr; Reliability</label>
               <div class="tradeoff-row">
                 <span class="tradeoff-label">Look</span>
@@ -357,7 +459,7 @@
                 <span class="tradeoff-label">Safe</span>
               </div>
             </div>
-            <div class="control-group">
+            <div class="control-group exp">
               <label>Fast Cleanup &harr; Min Material</label>
               <div class="tradeoff-row">
                 <span class="tradeoff-label">Quick</span>
@@ -365,10 +467,10 @@
                 <span class="tradeoff-label">Less</span>
               </div>
             </div>
-            <div id="intent-conflicts"></div>
+            <div id="intent-conflicts" class="exp"></div>
 
-            <div class="field-heading">Volume Fill</div>
-            <div id="intent-volume-fill">
+            <div class="field-heading exp">Volume Fill</div>
+            <div id="intent-volume-fill" class="exp">
               <div class="mode-toggles">
                 <button type="button" class="btn btn-secondary intent-vol-prim-btn" data-primitive="box">Box</button>
                 <button type="button" class="btn btn-secondary intent-vol-prim-btn" data-primitive="sphere">Sphere</button>
@@ -378,44 +480,6 @@
             </div>
           </div>
 
-        </section>
-
-        <section id="cut-panel" class="panel" hidden>
-          <h2>Cut Model</h2>
-          <div class="edit-actions">
-            <button class="btn btn-secondary edit-action-btn" id="cut-center-btn">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                <path d="M11 2h2v4h-2V2zm0 16h2v4h-2v-4zM2 11h4v2H2v-2zm16 0h4v2h-4v-2zm-6-3a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
-              </svg>
-              Place Cut Plane
-            </button>
-          </div>
-          <input type="hidden" id="cut-axis" value="x">
-          <input type="hidden" id="cut-position" value="0">
-          <span id="cut-min-label" hidden>0</span>
-          <span id="cut-max-label" hidden>0</span>
-        </section>
-
-        <section id="primitive-boolean-panel" class="panel" hidden>
-          <h2>Boolean Cut <span class="badge">Primitive</span></h2>
-          <div class="primitive-toolbar" role="group" aria-label="Primitives">
-            <button type="button" class="btn btn-secondary primitive-btn" data-primitive="box" title="Box">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M21 16.5c0 .38-.21.71-.53.88l-7.9 4.44c-.36.2-.8.2-1.14 0l-7.9-4.44A.991.991 0 0 1 3 16.5v-9c0-.38.21-.71.53-.88l7.9-4.44c.36-.2.8-.2 1.14 0l7.9 4.44c.32.17.53.5.53.88v9zM12 4.15 5 8.09v7.82l7 3.94 7-3.94V8.09l-7-3.94z"/></svg>
-              Box
-            </button>
-            <button type="button" class="btn btn-secondary primitive-btn" data-primitive="sphere" title="Sphere">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/></svg>
-              Sphere
-            </button>
-            <button type="button" class="btn btn-secondary primitive-btn" data-primitive="cylinder" title="Cylinder">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C8.13 2 5 3.34 5 5v14c0 1.66 3.13 3 7 3s7-1.34 7-3V5c0-1.66-3.13-3-7-3zm0 2c3.31 0 5 1.01 5 1s-1.69 1-5 1-5-1.01-5-1 1.69-1 5-1zm5 15c0 .01-1.69 1-5 1s-5-.99-5-1V7.73C8.55 8.5 10.18 9 12 9s3.45-.5 5-1.27V19z"/></svg>
-              Cylinder
-            </button>
-            <button type="button" class="btn btn-secondary primitive-btn" data-primitive="cone" title="Cone">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2 3 20h18L12 2zm0 4.36L17.53 18H6.47L12 6.36z"/></svg>
-              Cone
-            </button>
-          </div>
         </section>
 
         <section id="hollow-panel" class="panel" hidden>
@@ -533,6 +597,46 @@
               <button class="btn btn-primary" id="split-apply-btn">Apply Split</button>
             </div>
           </details>
+        </section>
+
+        <!-- Cut Model — advanced (hidden in Basic mode) -->
+        <section id="cut-panel" class="panel adv" hidden>
+          <h2>Cut Model</h2>
+          <div class="edit-actions">
+            <button class="btn btn-secondary edit-action-btn" id="cut-center-btn">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M11 2h2v4h-2V2zm0 16h2v4h-2v-4zM2 11h4v2H2v-2zm16 0h4v2h-4v-2zm-6-3a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
+              </svg>
+              Place Cut Plane
+            </button>
+          </div>
+          <input type="hidden" id="cut-axis" value="x">
+          <input type="hidden" id="cut-position" value="0">
+          <span id="cut-min-label" hidden>0</span>
+          <span id="cut-max-label" hidden>0</span>
+        </section>
+
+        <!-- Primitive Boolean — advanced (hidden in Basic mode) -->
+        <section id="primitive-boolean-panel" class="panel adv" hidden>
+          <h2>Boolean Cut <span class="badge">Primitive</span></h2>
+          <div class="primitive-toolbar" role="group" aria-label="Primitives">
+            <button type="button" class="btn btn-secondary primitive-btn" data-primitive="box" title="Box">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M21 16.5c0 .38-.21.71-.53.88l-7.9 4.44c-.36.2-.8.2-1.14 0l-7.9-4.44A.991.991 0 0 1 3 16.5v-9c0-.38.21-.71.53-.88l7.9-4.44c.36-.2.8-.2 1.14 0l7.9 4.44c.32.17.53.5.53.88v9zM12 4.15 5 8.09v7.82l7 3.94 7-3.94V8.09l-7-3.94z"/></svg>
+              Box
+            </button>
+            <button type="button" class="btn btn-secondary primitive-btn" data-primitive="sphere" title="Sphere">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/></svg>
+              Sphere
+            </button>
+            <button type="button" class="btn btn-secondary primitive-btn" data-primitive="cylinder" title="Cylinder">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C8.13 2 5 3.34 5 5v14c0 1.66 3.13 3 7 3s7-1.34 7-3V5c0-1.66-3.13-3-7-3zm0 2c3.31 0 5 1.01 5 1s-1.69 1-5 1-5-1.01-5-1 1.69-1 5-1zm5 15c0 .01-1.69 1-5 1s-5-.99-5-1V7.73C8.55 8.5 10.18 9 12 9s3.45-.5 5-1.27V19z"/></svg>
+              Cylinder
+            </button>
+            <button type="button" class="btn btn-secondary primitive-btn" data-primitive="cone" title="Cone">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2 3 20h18L12 2zm0 4.36L17.53 18H6.47L12 6.36z"/></svg>
+              Cone
+            </button>
+          </div>
         </section>
 
         <section id="supports-panel" class="panel" hidden>
@@ -738,7 +842,7 @@
           </div>
         </section>
 
-        <section id="paint-panel" class="panel" hidden>
+        <section id="paint-panel" class="panel adv" hidden>
           <h2>Paint <span class="badge">Surface</span></h2>
           <div class="action-buttons" style="margin-bottom: 8px;">
             <button type="button" class="btn btn-primary" id="paint-toggle-btn" style="width: 100%;">Start Painting</button>
@@ -787,80 +891,13 @@
           </div>
           <div id="paint-status" class="paint-status">0 strokes</div>
           <hr style="margin: 12px 0; border-color: var(--border);">
-          <div id="paint-volume-fill">
+          <div id="paint-volume-fill" class="exp">
             <div style="font-weight: 600; font-size: 12px; margin-bottom: 6px;">Volume Fill <span class="badge">Primitive</span></div>
             <div class="primitive-toolbar" role="group" aria-label="Paint volume primitives">
               <button type="button" class="btn btn-secondary paint-vol-prim-btn" data-primitive="box" style="font-size: 11px;">Box</button>
               <button type="button" class="btn btn-secondary paint-vol-prim-btn" data-primitive="sphere" style="font-size: 11px;">Sphere</button>
               <button type="button" class="btn btn-secondary paint-vol-prim-btn" data-primitive="cylinder" style="font-size: 11px;">Cylinder</button>
             </div>
-          </div>
-        </section>
-
-        <section id="health-panel" class="panel" hidden>
-          <h2>Model Health</h2>
-          
-          <div class="health-score-container">
-            <div class="health-score-ring">
-              <svg viewBox="0 0 36 36" class="health-score-svg">
-                <path class="health-score-bg"
-                  d="M18 2.0845
-                    a 15.9155 15.9155 0 0 1 0 31.831
-                    a 15.9155 15.9155 0 0 1 0 -31.831"
-                />
-                <path id="health-score-arc" class="health-score-arc"
-                  stroke-dasharray="0, 100"
-                  d="M18 2.0845
-                    a 15.9155 15.9155 0 0 1 0 31.831
-                    a 15.9155 15.9155 0 0 1 0 -31.831"
-                />
-              </svg>
-              <div class="health-score-value" id="health-score-value">--</div>
-            </div>
-            <div class="health-score-label" id="health-score-label">No model loaded</div>
-          </div>
-          
-          <div class="health-actions">
-            <button class="btn btn-primary" id="health-analyze-btn">Analyze Model</button>
-            <button class="btn btn-secondary" id="health-autorepair-btn" disabled>Auto-Repair</button>
-          </div>
-          <button class="btn btn-secondary health-heatmap-btn" id="health-support-heatmap-btn" disabled>Show Support Heatmap</button>
-          <button class="btn btn-secondary health-heatmap-btn" id="health-thickness-heatmap-btn" disabled>Show Thickness Heatmap</button>
-          <button class="btn btn-secondary health-heatmap-btn" id="health-edge-highlight-btn" disabled>Highlight Non-Manifold</button>
-          
-          <div id="health-issues" class="health-issues">
-            <div class="health-empty-state">Load a model and click Analyze to check for issues.</div>
-          </div>
-          
-          <div id="health-printer-context" class="health-printer-context" hidden>
-            <h3>Printer Compatibility</h3>
-            <div id="health-printer-specs"></div>
-          </div>
-        </section>
-
-        <section id="measure-panel" class="panel" hidden>
-          <h2>Measure</h2>
-          <p class="measure-hint">Click two points on a model to measure the distance between them.</p>
-          <div id="measure-result" class="measure-result" hidden>
-            <div class="measure-value-row">
-              <span>Distance</span>
-              <strong id="measure-distance">—</strong>
-            </div>
-            <div class="measure-value-row">
-              <span>ΔX</span>
-              <span id="measure-dx">—</span>
-            </div>
-            <div class="measure-value-row">
-              <span>ΔY</span>
-              <span id="measure-dy">—</span>
-            </div>
-            <div class="measure-value-row">
-              <span>ΔZ</span>
-              <span id="measure-dz">—</span>
-            </div>
-          </div>
-          <div class="action-buttons">
-            <button class="btn btn-secondary" id="measure-clear-btn">Clear</button>
           </div>
         </section>
 
@@ -910,7 +947,7 @@
             </label>
           </div>
 
-          <div class="control-group adaptive-layers-group">
+          <div class="control-group adaptive-layers-group adv">
             <label class="checkbox-label">
               <input type="checkbox" id="adaptive-layers-toggle">
               Adaptive Layers
@@ -929,7 +966,7 @@
             </div>
           </div>
 
-          <div class="control-group compensation-group">
+          <div class="control-group compensation-group adv">
             <label class="checkbox-label">
               <input type="checkbox" id="compensation-toggle">
               Dimensional Compensation
@@ -950,7 +987,7 @@
             </div>
           </div>
 
-          <div class="control-group exposure-region-group">
+          <div class="control-group exposure-region-group exp">
             <label class="checkbox-label">
               <input type="checkbox" id="exposure-region-toggle">
               Per-Region Exposure
@@ -964,7 +1001,7 @@
             </div>
           </div>
 
-          <div class="control-group gyroid-group">
+          <div class="control-group gyroid-group exp">
             <label class="checkbox-label">
               <input type="checkbox" id="gyroid-toggle">
               Gyroid Infill
@@ -1015,6 +1052,65 @@
               <span id="peel-force-peak" class="peel-force-peak"></span>
             </div>
             <canvas id="peel-force-canvas" width="280" height="60"></canvas>
+          </div>
+        </section>
+
+        <!-- Model Health — advanced (hidden in Basic mode) -->
+        <section id="health-panel" class="panel adv" hidden>
+          <h2>Model Health</h2>
+          <div class="health-score-container">
+            <div class="health-score-ring">
+              <svg viewBox="0 0 36 36" class="health-score-svg">
+                <path class="health-score-bg"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                <path id="health-score-arc" class="health-score-arc"
+                  stroke-dasharray="0, 100"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              </svg>
+              <div class="health-score-value" id="health-score-value">--</div>
+            </div>
+            <div class="health-score-label" id="health-score-label">No model loaded</div>
+          </div>
+          <div class="health-actions">
+            <button class="btn btn-primary" id="health-analyze-btn">Analyze Model</button>
+            <button class="btn btn-secondary" id="health-autorepair-btn" disabled>Auto-Repair</button>
+          </div>
+          <button class="btn btn-secondary health-heatmap-btn" id="health-support-heatmap-btn" disabled>Show Support Heatmap</button>
+          <button class="btn btn-secondary health-heatmap-btn" id="health-thickness-heatmap-btn" disabled>Show Thickness Heatmap</button>
+          <button class="btn btn-secondary health-heatmap-btn" id="health-edge-highlight-btn" disabled>Highlight Non-Manifold</button>
+          <div id="health-issues" class="health-issues">
+            <div class="health-empty-state">Load a model and click Analyze to check for issues.</div>
+          </div>
+          <div id="health-printer-context" class="health-printer-context" hidden>
+            <h3>Printer Compatibility</h3>
+            <div id="health-printer-specs"></div>
+          </div>
+        </section>
+
+        <!-- Measure — advanced (hidden in Basic mode) -->
+        <section id="measure-panel" class="panel adv" hidden>
+          <h2>Measure</h2>
+          <p class="measure-hint">Click two points on a model to measure the distance between them.</p>
+          <div id="measure-result" class="measure-result" hidden>
+            <div class="measure-value-row">
+              <span>Distance</span>
+              <strong id="measure-distance">—</strong>
+            </div>
+            <div class="measure-value-row">
+              <span>ΔX</span>
+              <span id="measure-dx">—</span>
+            </div>
+            <div class="measure-value-row">
+              <span>ΔY</span>
+              <span id="measure-dy">—</span>
+            </div>
+            <div class="measure-value-row">
+              <span>ΔZ</span>
+              <span id="measure-dz">—</span>
+            </div>
+          </div>
+          <div class="action-buttons">
+            <button class="btn btn-secondary" id="measure-clear-btn">Clear</button>
           </div>
         </section>
 

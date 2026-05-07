@@ -6,7 +6,7 @@ import type { AppContext, PrinterSpec, ProjectState } from '@core/types';
 import type { LegacyPlate, SlicedVolumes } from '@core/legacy-types';
 import { slicedLayerCount, slicedVolumes, inspectorAreaData } from '@core/state';
 import { mountShell } from './shell';
-import { mountContextMenu } from './context-menu';
+import { mountContextMenu, mountViewportContextMenu } from './context-menu';
 import { mountFileHandling } from './file-handling';
 import { mountPreferences } from './preferences';
 import { mountMaterialPanel } from '@features/material-selection/panel';
@@ -117,6 +117,7 @@ export function mountApp(ctx: AppContext, PRINTERS: Record<string, PrinterSpec>)
   ctx.showToolPanel = showToolPanel;
 
   mountContextMenu();
+  mountViewportContextMenu(ctx);
   mountFileHandling(ctx);
   mountMaterialPanel(ctx, selectedMaterialId, setSelectedMaterialId);
   mountPrinterPanel(ctx, applyPrinter, PRINTERS);

@@ -1,5 +1,6 @@
 /**
- * App shell — tool panel switching, keyboard shortcuts, sidebar toggle.
+ * App shell — tool panel switching, keyboard shortcuts, sidebar toggle,
+ * Basic/Advanced mode toggle, Tool HUD section switching.
  */
 import type { AppContext } from '@core/types';
 import { listen } from './utils';
@@ -18,13 +19,24 @@ const TOOL_BTN_IDS: Record<ToolPanel, string> = {
   slice: 'slice-tool-btn',
 };
 
+// Reordered to match new DOM order (hollow first for modify, materials first for surface,
+// slice before health/measure)
 const PANEL_IDS: Record<ToolPanel, string[]> = {
   plate: ['load-panel', 'edit-panel', 'transform-panel'],
   orient: ['orientation-panel'],
-  modify: ['cut-panel', 'hollow-panel', 'primitive-boolean-panel'],
+  modify: ['hollow-panel', 'cut-panel', 'primitive-boolean-panel'],
   supports: ['supports-panel'],
-  surface: ['paint-panel', 'materials-panel'],
+  surface: ['materials-panel', 'paint-panel'],
   slice: ['slice-panel', 'health-panel', 'measure-panel'],
+};
+
+// HUD section IDs per tool (modify has no static section — sub-toolbars manage it)
+const HUD_IDS: Partial<Record<ToolPanel, string>> = {
+  plate: 'hud-plate',
+  orient: 'hud-orient',
+  supports: 'hud-supports',
+  surface: 'hud-surface',
+  slice: 'hud-slice',
 };
 
 export function mountShell(ctx: AppContext): {
@@ -85,6 +97,15 @@ export function mountShell(ctx: AppContext): {
     const activeBtn = document.getElementById(TOOL_BTN_IDS[panel]);
     if (activeBtn) activeBtn.classList.add('active');
     activeToolPanel = panel;
+
+    // ── Swap Tool HUD section ──────────────────────────────────
+    // Deactivate all static HUD sections
+    for (const hudId of Object.values(HUD_IDS)) {
+      document.getElementById(hudId)?.classList.remove('active');
+    }
+    // Activate the section for the current tool (modify uses sub-toolbars instead)
+    const hudId = HUD_IDS[panel];
+    if (hudId) document.getElementById(hudId)?.classList.add('active');
 
     if (panel === 'plate') {
       const activeMode = document
@@ -157,6 +178,155 @@ export function mountShell(ctx: AppContext): {
   });
 
   showToolPanel('plate');
+
+  // ── Basic / Advanced mode toggle (Pattern 3) ───────────────
+  const app = document.getElementById('app');
+  const modeBasicBtn = document.getElementById('mode-basic-btn');
+  const modeAdvancedBtn = document.getElementById('mode-advanced-btn');
+
+  function applyMode(mode: 'basic' | 'advanced'): void {
+    app?.setAttribute('data-mode', mode);
+    modeBasicBtn?.classList.toggle('active', mode === 'basic');
+    modeAdvancedBtn?.classList.toggle('active', mode === 'advanced');
+    ctx.scheduleSavePreferences();
+  }
+
+  // Default to basic; preferences.ts will override on load
+  applyMode('basic');
+
+  listen(modeBasicBtn, 'click', () => applyMode('basic'));
+  listen(modeAdvancedBtn, 'click', () => applyMode('advanced'));
+
+  // Expose so preferences.ts can call it
+  (window as unknown as Record<string, unknown>).__slicelab_applyMode = applyMode;
+
+  // ── HUD button wiring (delegate to existing sidebar controls) ─
+  // Helpers
+  function clickById(id: string): void {
+    (document.getElementById(id) as HTMLElement | null)?.click();
+  }
+  function clickBySelector(sel: string): void {
+    (document.querySelector(sel) as HTMLElement | null)?.click();
+  }
+
+  // Plate HUD — transform mode buttons
+  const hudModes = ['translate', 'rotate', 'scale'] as const;
+  for (const mode of hudModes) {
+    const hudBtn = document.getElementById(`hud-mode-${mode}`);
+    listen(hudBtn, 'click', () => {
+      // Click the matching sidebar mode button (wired by model-transform/panel.ts)
+      clickBySelector(`.mode-btn[data-mode="${mode}"]`);
+      // Sync HUD active state immediately
+      document
+        .querySelectorAll('.hud-btn[data-hud-mode]')
+        .forEach((b) => b.classList.toggle('active', (b as HTMLElement).dataset.hudMode === mode));
+    });
+  }
+
+  // Keep HUD mode buttons in sync when sidebar mode buttons are clicked
+  document.querySelectorAll('.mode-btn[data-mode]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const mode = (btn as HTMLElement).dataset.mode;
+      document
+        .querySelectorAll('.hud-btn[data-hud-mode]')
+        .forEach((b) => b.classList.toggle('active', (b as HTMLElement).dataset.hudMode === mode));
+    });
+  });
+
+  // Plate HUD — layout actions
+  listen(document.getElementById('hud-drop-bed'), 'click', () => clickById('drop-bed-btn'));
+  listen(document.getElementById('hud-duplicate'), 'click', () => clickById('duplicate-btn'));
+  listen(document.getElementById('hud-delete'), 'click', () => clickById('delete-btn'));
+
+  // Orient HUD — preset buttons
+  listen(document.getElementById('hud-orient-fastest'), 'click', () =>
+    clickBySelector('.preset-btn[data-preset="fastest"]'),
+  );
+  listen(document.getElementById('hud-orient-balanced'), 'click', () =>
+    clickBySelector('.preset-btn[data-preset="least-support"]'),
+  );
+  listen(document.getElementById('hud-orient-quality'), 'click', () =>
+    clickBySelector('.preset-btn[data-preset="best-quality"]'),
+  );
+  listen(document.getElementById('hud-orient-selected'), 'click', () =>
+    clickBySelector('.preset-btn[data-preset="least-support"]'),
+  );
+
+  // Supports HUD
+  listen(document.getElementById('hud-overhangs-toggle'), 'click', () => {
+    const cb = document.getElementById('show-overhangs-cb') as HTMLInputElement | null;
+    if (cb) {
+      cb.checked = !cb.checked;
+      cb.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    const btn = document.getElementById('hud-overhangs-toggle');
+    btn?.classList.toggle('active', !!cb?.checked);
+  });
+  listen(document.getElementById('hud-generate-supports'), 'click', () =>
+    clickById('generate-supports-btn'),
+  );
+  listen(document.getElementById('hud-clear-supports'), 'click', () =>
+    clickById('clear-supports-btn'),
+  );
+
+  // Surface HUD — painting toggle
+  listen(document.getElementById('hud-paint-toggle'), 'click', () => {
+    clickById('paint-toggle-btn');
+    const sidebarBtn = document.getElementById('paint-toggle-btn');
+    const hudBtn = document.getElementById('hud-paint-toggle');
+    if (hudBtn && sidebarBtn) {
+      const isActive = sidebarBtn.classList.contains('active');
+      hudBtn.textContent = isActive ? 'Start Painting' : 'Stop Painting';
+      hudBtn.classList.toggle('active', !isActive);
+    }
+  });
+
+  // Surface HUD — pattern buttons
+  document.querySelectorAll('.hud-pattern-btn[data-pattern]').forEach((hudBtn) => {
+    hudBtn.addEventListener('click', () => {
+      const pattern = (hudBtn as HTMLElement).dataset.pattern;
+      // Sync active state on both HUD and sidebar
+      document.querySelectorAll('.hud-pattern-btn').forEach((b) => b.classList.remove('active'));
+      hudBtn.classList.add('active');
+      // Click corresponding sidebar pattern button
+      (
+        document.querySelector(
+          `.paint-pattern-btn[data-pattern="${pattern}"]`,
+        ) as HTMLElement | null
+      )?.click();
+    });
+  });
+
+  // Surface HUD — brush size slider
+  const hudBrush = document.getElementById('hud-brush-size') as HTMLInputElement | null;
+  if (hudBrush) {
+    hudBrush.addEventListener('input', () => {
+      const size = parseFloat(hudBrush.value);
+      // Forward to viewer if the method exists
+      const v = viewer as unknown as { setBrushSize?: (s: number) => void };
+      v.setBrushSize?.(size);
+    });
+  }
+
+  // Slice HUD
+  listen(document.getElementById('hud-slice-btn'), 'click', () => clickById('slice-btn'));
+  listen(document.getElementById('hud-export-btn'), 'click', () => clickById('export-btn'));
+
+  // Update HUD layer count whenever a slice completes
+  document.addEventListener('slice-complete', (e: Event) => {
+    const detail = (e as CustomEvent<{ layerCount?: number }>).detail;
+    const count = detail?.layerCount ?? getSlicedLayerCount();
+    const el = document.getElementById('hud-layer-count');
+    if (el) {
+      if (count > 0) {
+        el.textContent = `${count} layers`;
+        el.classList.add('has-layers');
+      } else {
+        el.textContent = '— layers';
+        el.classList.remove('has-layers');
+      }
+    }
+  });
 
   // Dark mode toggle
   const themeBtn = document.getElementById('theme-toggle-btn');

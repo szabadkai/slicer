@@ -1296,6 +1296,8 @@ button:disabled {
 }
 
 .cut-viewer-toolbar {
+  /* Positioned at bottom of viewport when used standalone (legacy).
+     When inside #tool-hud these overrides are cancelled below. */
   position: absolute;
   left: 50%;
   bottom: 22px;
@@ -1309,6 +1311,23 @@ button:disabled {
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 10px 28px rgba(15, 23, 42, 0.18);
   transform: translateX(-50%);
+}
+
+/* When inside #tool-hud the positioning is handled by the HUD container */
+#tool-hud .cut-viewer-toolbar {
+  position: static;
+  transform: none;
+  left: auto;
+  bottom: auto;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  border-radius: 0;
+}
+/* Show via :not([hidden]) instead of .active for backward compat */
+#tool-hud .cut-viewer-toolbar:not([hidden]) {
+  display: flex;
 }
 
 .cut-viewer-tool,
@@ -2726,4 +2745,213 @@ button:disabled {
   font-size: 11px;
   color: var(--text-dim);
   margin: 2px 0 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SliceLab UI Patterns v2
+   ═══════════════════════════════════════════════════════════ */
+
+/* ─── Pattern 3: Basic / Advanced Mode ──────────────────── */
+[data-mode="basic"] .adv { display: none !important; }
+[data-mode="basic"] .exp { display: none !important; }
+/* Experimental: always hidden — revealed only by an explicit
+   toggle inside an advanced drawer (future feature) */
+.exp { display: none !important; }
+
+/* Mode pill toggle (header toolbar) */
+.mode-pill {
+  display: flex;
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 2px;
+  gap: 1px;
+}
+.mode-pill-btn {
+  padding: 3px 11px;
+  border: none;
+  border-radius: 16px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  line-height: 1.6;
+}
+.mode-pill-btn.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+/* ─── Pattern 1: Tool HUD ────────────────────────────────── */
+#tool-hud {
+  position: absolute;
+  left: 50%;
+  bottom: 76px;
+  z-index: 20;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.tool-hud-section {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid rgba(31, 42, 55, 0.16);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.18);
+  pointer-events: auto;
+  white-space: nowrap;
+  backdrop-filter: blur(6px);
+}
+[data-theme="dark"] .tool-hud-section {
+  background: rgba(37, 38, 43, 0.96);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+}
+.tool-hud-section.active {
+  display: flex;
+}
+.hud-btn {
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.hud-btn:hover {
+  background: var(--tool-hover);
+}
+.hud-btn.active {
+  border-color: rgba(0, 112, 243, 0.35);
+  background: #e8f0fe;
+  color: var(--accent);
+}
+[data-theme="dark"] .hud-btn.active {
+  background: rgba(77, 171, 247, 0.15);
+  color: var(--accent);
+}
+.hud-btn-primary {
+  background: var(--accent) !important;
+  color: #fff !important;
+  border-color: var(--accent) !important;
+}
+.hud-btn-primary:hover {
+  background: var(--accent-hover) !important;
+  border-color: var(--accent-hover) !important;
+}
+.hud-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+.hud-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+}
+.hud-label input[type="range"] {
+  accent-color: var(--accent);
+  width: 64px;
+  cursor: pointer;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--border);
+  border-radius: 2px;
+}
+.hud-label input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+.hud-layer-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  padding: 0 6px;
+  font-variant-numeric: tabular-nums;
+}
+.hud-layer-count.has-layers {
+  color: var(--accent);
+}
+
+/* ─── Pattern 2: Advanced Drawer ────────────────────────── */
+.advanced-drawer {
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+.advanced-drawer > summary {
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 0;
+  user-select: none;
+}
+.advanced-drawer > summary::-webkit-details-marker { display: none; }
+.advanced-drawer > summary::before {
+  content: '▶';
+  font-size: 8px;
+  color: var(--text-dim);
+  transition: transform 0.15s;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.advanced-drawer[open] > summary::before {
+  transform: rotate(90deg);
+}
+.advanced-drawer-body {
+  padding-top: 8px;
+}
+
+/* ─── Context Menu Extensions ────────────────────────────── */
+.context-menu-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 6px;
+}
+.context-menu-group-label {
+  padding: 6px 10px 2px;
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.context-menu-item.has-arrow::after {
+  content: '▶';
+  margin-left: auto;
+  padding-left: 8px;
+  font-size: 9px;
+  opacity: 0.45;
 }
