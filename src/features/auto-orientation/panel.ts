@@ -109,6 +109,8 @@ export function mountOrientationPanel(ctx: AppContext): void {
     ctx.showToolPanel('orient');
     if (failureCount > 0) {
       alert(`Failed to orient ${failureCount} model${failureCount === 1 ? '' : 's'}.`);
+    } else {
+      document.dispatchEvent(new CustomEvent('orient-complete'));
     }
     ctx.hideProgress();
   }

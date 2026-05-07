@@ -26,7 +26,6 @@ export function mountMeasureTool(ctx: AppContext): void {
   const dxEl = document.getElementById('measure-dx');
   const dyEl = document.getElementById('measure-dy');
   const dzEl = document.getElementById('measure-dz');
-  const measureBtn = document.getElementById('measure-btn');
 
   let pointA: MeasurePoint | null = null;
   let pointB: MeasurePoint | null = null;
@@ -152,8 +151,5 @@ export function mountMeasureTool(ctx: AppContext): void {
   const panel = document.getElementById('measure-panel');
   if (panel) observer.observe(panel, { attributes: true, attributeFilter: ['hidden'] });
 
-  // Also handle toolbar button class
-  listen(measureBtn, 'click', () => {
-    // The shell handles panel switching; we just track active state
-  });
+  // Active state is managed by panel visibility via MutationObserver
 }

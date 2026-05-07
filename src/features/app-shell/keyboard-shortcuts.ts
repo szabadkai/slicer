@@ -21,26 +21,15 @@ export interface ShortcutContext {
 }
 
 const TOOL_PANEL_KEYS: Record<string, string> = {
-  '1': 'scene',
+  '1': 'plate',
   '2': 'orient',
   '3': 'modify',
   '4': 'supports',
   '5': 'surface',
-  '6': 'material',
-  '7': 'inspect',
-  '8': 'slice',
+  '6': 'slice',
 };
 
-const TOOL_PANELS = [
-  'scene',
-  'orient',
-  'modify',
-  'supports',
-  'surface',
-  'material',
-  'inspect',
-  'slice',
-] as const;
+const TOOL_PANELS = ['plate', 'orient', 'modify', 'supports', 'surface', 'slice'] as const;
 
 const MOD_SHIFT_BINDINGS: ShortcutBinding[] = [
   { key: 'z', mod: true, shift: true, action: ({ viewer }) => viewer.redo() },
@@ -225,7 +214,7 @@ function handleSimpleKeys(e: KeyboardEvent, ctx: ShortcutContext): boolean {
   if (e.key === ' ') {
     e.preventDefault();
     if (ctx.viewer.selected.length > 0 || ctx.viewer.objects.length > 0) {
-      ctx.showToolPanel('scene');
+      ctx.showToolPanel('plate');
     }
     return true;
   }

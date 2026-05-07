@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@preact/signals-core": "^1.14.1",
+    "fast-png": "^8.0.0",
     "jszip": "^3.10.1",
     "manifold-3d": "^3.4.1",
     "three": "^0.170.0",

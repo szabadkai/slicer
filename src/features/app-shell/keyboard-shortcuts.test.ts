@@ -16,7 +16,7 @@ function makeCtx(overrides: Partial<ShortcutContext> = {}): ShortcutContext {
       fillPlatform: vi.fn(),
     } as unknown as ShortcutContext['viewer'],
     showToolPanel: vi.fn(),
-    getActiveToolPanel: () => 'scene',
+    getActiveToolPanel: () => 'plate',
     hasSlicedLayers: () => false,
     toggleSidebar: vi.fn(),
     ...overrides,
@@ -134,10 +134,10 @@ describe('keyboard-shortcuts', () => {
   });
 
   describe('numeric panel switching', () => {
-    it('1 shows scene panel', () => {
+    it('1 shows plate panel', () => {
       const ctx = makeCtx();
       handleKeydown(keyEvent('1'), ctx);
-      expect(ctx.showToolPanel).toHaveBeenCalledWith('scene');
+      expect(ctx.showToolPanel).toHaveBeenCalledWith('plate');
     });
 
     it('5 shows surface panel', () => {
@@ -146,42 +146,36 @@ describe('keyboard-shortcuts', () => {
       expect(ctx.showToolPanel).toHaveBeenCalledWith('surface');
     });
 
-    it('7 shows inspect panel', () => {
+    it('6 shows slice panel', () => {
       const ctx = makeCtx();
-      handleKeydown(keyEvent('7'), ctx);
-      expect(ctx.showToolPanel).toHaveBeenCalledWith('inspect');
-    });
-
-    it('8 shows slice panel', () => {
-      const ctx = makeCtx();
-      handleKeydown(keyEvent('8'), ctx);
+      handleKeydown(keyEvent('6'), ctx);
       expect(ctx.showToolPanel).toHaveBeenCalledWith('slice');
     });
   });
 
   describe('Tab panel cycling', () => {
     it('Tab cycles forward', () => {
-      const ctx = makeCtx({ getActiveToolPanel: () => 'scene' });
+      const ctx = makeCtx({ getActiveToolPanel: () => 'plate' });
       handleKeydown(keyEvent('Tab'), ctx);
       expect(ctx.showToolPanel).toHaveBeenCalledWith('orient');
     });
 
     it('Shift+Tab cycles backward', () => {
-      const ctx = makeCtx({ getActiveToolPanel: () => 'scene' });
+      const ctx = makeCtx({ getActiveToolPanel: () => 'plate' });
       handleKeydown(keyEvent('Tab', { shiftKey: true }), ctx);
       expect(ctx.showToolPanel).toHaveBeenCalledWith('slice');
     });
   });
 
   describe('space key', () => {
-    it('shows scene panel when objects exist', () => {
+    it('shows plate panel when objects exist', () => {
       const ctx = makeCtx();
       (ctx.viewer as unknown as { objects: unknown[] }).objects = [{}];
       handleKeydown(keyEvent(' '), ctx);
-      expect(ctx.showToolPanel).toHaveBeenCalledWith('scene');
+      expect(ctx.showToolPanel).toHaveBeenCalledWith('plate');
     });
 
-    it('does not show scene when no objects or selection', () => {
+    it('does not show plate when no objects or selection', () => {
       const ctx = makeCtx();
       handleKeydown(keyEvent(' '), ctx);
       expect(ctx.showToolPanel).not.toHaveBeenCalled();

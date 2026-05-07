@@ -515,7 +515,6 @@ export class ViewerCore {
   protected _syncPaintMaterial(obj: SceneObject): void {
     syncPaintMaterialImpl(this, obj);
   }
-
   getActiveMaterialPreset(): Record<string, unknown> {
     const obj = this.selected[0] || this.objects[0];
     return (obj?.materialPreset || this.defaultMaterialPreset) as Record<string, unknown>;
@@ -585,7 +584,6 @@ export class ViewerCore {
   clearPlate(): void { clearPlateImpl(this); }
   // prettier-ignore
   duplicateSelected(): void { duplicateSelectedImpl(this); }
-
   getActivePlateOrigin(): THREE.Vector3 {
     return new THREE.Vector3(this.activePlate?.originX || 0, 0, this.activePlate?.originZ || 0);
   }

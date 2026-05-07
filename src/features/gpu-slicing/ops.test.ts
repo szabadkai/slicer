@@ -1,7 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
 import { executeSlice, type SliceProgress } from './ops';
+import { slicedLayerPngs } from '@features/layer-preview/ops';
 import type { LegacyViewer, LegacySlicer } from '@core/legacy-types';
 import type { PrinterSpec } from '@core/types';
+
+vi.mock('../../png-encode-pool', () => ({
+  getSharedPngEncodePool: () => ({
+    encode: () => Promise.resolve(new Uint8Array(8)), // stub PNG bytes
+  }),
+}));
 
 const PRINTER_SPEC: PrinterSpec = {
   name: 'Test Printer',
@@ -36,8 +43,8 @@ function makeSlicer(layers: Uint8Array[]): LegacySlicer {
     setInstances: vi.fn(),
     getPrinterSpec: vi.fn(() => PRINTER_SPEC),
     slice: vi.fn(async (_lh, _onProgress, opts) => {
-      for (const layer of layers) {
-        opts?.onLayer?.(layer);
+      for (let i = 0; i < layers.length; i++) {
+        opts?.onLayer?.(layers[i], i);
       }
       return layers;
     }),
@@ -177,5 +184,13 @@ describe('executeSlice', () => {
     await executeSlice(viewer, slicer, 0.05, progress);
     expect(progress.showProgress).toHaveBeenCalledWith('Merging & Uploading geometry...');
     expect(progress.showProgress).toHaveBeenCalledWith('Slicing...');
+  });
+
+  it('caches PNG bytes in slicedLayerPngs after slice', async () => {
+    const layer = makeWhiteLayer(10);
+    const slicer = makeSlicer([layer]);
+    await executeSlice(makeViewer(), slicer, 0.05, makeProgress());
+    expect(slicedLayerPngs.value).toHaveLength(1);
+    expect(slicedLayerPngs.value[0]).toBeInstanceOf(Uint8Array);
   });
 });

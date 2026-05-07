@@ -215,8 +215,8 @@ export function mountPlatePanel(
     if (!btn) return;
     const action = btn.dataset.menuAction;
     const menuCtx = getActiveMenuContext();
-    hideContextMenu();
     if (menuCtx?.type === 'plate') {
+      hideContextMenu();
       const plate = project.plates.find((p) => p.id === menuCtx.plateId);
       if (!plate) return;
       if (action === 'plate-rename') renamePlate(plate);

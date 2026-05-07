@@ -22,6 +22,9 @@
   --tool-bg: #ffffff;
   --tool-hover: #f0f2f5;
   --sidebar-shadow: rgba(0, 0, 0, 0.04);
+  /* Aliases — resolve against the tokens above so they track theme changes */
+  --bg-panel: var(--surface-2);
+  --text-secondary: var(--text-dim);
 }
 
 [data-theme="dark"] {
@@ -194,6 +197,12 @@ body {
 .btn:hover {
   background: var(--surface-2);
   border-color: #adb5bd;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .btn-primary {

@@ -1,4 +1,5 @@
 import JSZip from 'jszip';
+import { getSharedPngEncodePool } from './png-encode-pool';
 
 interface Vec3 {
   x: number;
@@ -246,53 +247,68 @@ export async function exportMesh(
 type ProgressCallback = (current: number, total: number, extra?: string) => void;
 
 /**
+ * Provider for layer pixel data. The proxy/array used by the export path returns
+ * a fresh Uint8Array per index so it can be transferred to the worker pool.
+ */
+export type LayerSource =
+  | { kind: 'pixels'; layers: Uint8Array[] }
+  | { kind: 'png'; pngs: Uint8Array[] };
+
+/**
  * Export sliced layers as a ZIP of PNG images.
+ * If pixels are provided, encoding runs in a worker pool, pipelined with
+ * however the layers are produced. If PNG bytes are already cached (from the
+ * slice pass), they are zipped directly.
  */
 export async function exportZip(
-  layers: Uint8Array[],
+  source: LayerSource,
   settings: SliceSettings,
   printerSpec: PrinterSpecLike,
   onProgress?: ProgressCallback,
 ): Promise<void> {
   const zip = new JSZip();
   const { resolutionX, resolutionY } = printerSpec;
+  const layerCount = source.kind === 'pixels' ? source.layers.length : source.pngs.length;
 
-  const canvas = document.createElement('canvas');
-  canvas.width = resolutionX;
-  canvas.height = resolutionY;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Failed to get 2D canvas context');
+  if (source.kind === 'png') {
+    for (let i = 0; i < layerCount; i++) {
+      onProgress?.(i + 1, layerCount, `Packing layer ${i + 1} / ${layerCount}`);
+      const layerNum = String(i).padStart(5, '0');
+      zip.file(`layer_${layerNum}.png`, source.pngs[i], { compression: 'STORE' });
+    }
+  } else {
+    const pool = getSharedPngEncodePool();
+    // Backpressure: cap in-flight encodes so we don't allocate unbounded RGBA buffers.
+    const maxInFlight = 8;
+    const pngs: Uint8Array[] = new Array(layerCount);
+    let dispatched = 0;
+    let completed = 0;
 
-  for (let i = 0; i < layers.length; i++) {
-    const pixels = new Uint8ClampedArray(
-      layers[i].buffer.slice(0),
-    ) as Uint8ClampedArray<ArrayBuffer>;
-    const imageData = new ImageData(pixels, resolutionX, resolutionY);
-
-    ctx.clearRect(0, 0, resolutionX, resolutionY);
-    ctx.save();
-    ctx.scale(1, -1);
-    ctx.drawImage(await createImageBitmap(imageData), 0, -resolutionY);
-    ctx.restore();
-
-    const blob = await new Promise<Blob>((resolve, reject) =>
-      canvas.toBlob((b) => {
-        if (!b) {
-          reject(new Error('Failed to create blob from canvas'));
-          return;
+    await new Promise<void>((resolve, reject) => {
+      const dispatch = (): void => {
+        while (dispatched < layerCount && dispatched - completed < maxInFlight) {
+          const i = dispatched++;
+          // Accessing source.layers[i] triggers the Proxy in handleExport which
+          // renders the layer on demand; the result is already a fresh buffer.
+          const rgba = source.layers[i];
+          onProgress?.(completed + 1, layerCount, `Encoding layer ${i + 1} / ${layerCount}`);
+          pool
+            .encode(rgba, resolutionX, resolutionY)
+            .then((png) => {
+              pngs[i] = png;
+              completed++;
+              if (completed === layerCount) resolve();
+              else dispatch();
+            })
+            .catch(reject);
         }
-        resolve(b);
-      }, 'image/png'),
-    );
-    const arrayBuffer = await blob.arrayBuffer();
+      };
+      dispatch();
+    });
 
-    const layerNum = String(i).padStart(5, '0');
-    zip.file(`layer_${layerNum}.png`, arrayBuffer);
-
-    onProgress?.(i + 1, layers.length);
-
-    if (i % 10 === 0) {
-      await new Promise((r) => setTimeout(r, 0));
+    for (let i = 0; i < layerCount; i++) {
+      const layerNum = String(i).padStart(5, '0');
+      zip.file(`layer_${layerNum}.png`, pngs[i], { compression: 'STORE' });
     }
   }
 
@@ -300,7 +316,7 @@ export async function exportZip(
     printer: printerSpec.name,
     resolutionX,
     resolutionY,
-    layerCount: layers.length,
+    layerCount,
     layerHeight: settings.layerHeight,
     normalExposure: settings.normalExposure,
     bottomLayers: settings.bottomLayers,
@@ -316,14 +332,15 @@ export async function exportZip(
       (settings.totalVolumeMm3 ?? settings.modelVolumeMm3 + (settings.supportVolumeMm3 ?? 0)) /
       1000;
   }
-  zip.file('metadata.json', JSON.stringify(metadata, null, 2));
+  zip.file('metadata.json', JSON.stringify(metadata, null, 2), { compression: 'STORE' });
 
-  const content = await zip.generateAsync({ type: 'blob' }, (meta) => {
-    onProgress?.(layers.length, layers.length, `Compressing: ${meta.percent.toFixed(0)}%`);
-  });
+  onProgress?.(layerCount, layerCount, 'Building ZIP archive...');
+  await new Promise((r) => setTimeout(r, 0));
+
+  const content = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
 
   const safeName = printerSpec.name.replace(/\s+/g, '-').toLowerCase();
-  downloadBlob(content, `${safeName}_${layers.length}layers.zip`);
+  downloadBlob(content, `${safeName}_${layerCount}layers.zip`);
 }
 
 /**

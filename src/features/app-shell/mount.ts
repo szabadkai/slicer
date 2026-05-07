@@ -27,6 +27,7 @@ import { mountIntentPanel } from '@features/surface-intent/panel';
 import { mountPrimitiveBoolean } from '@features/primitive-boolean/mount';
 import { mountMeasureTool } from '@features/scene-viewer/measure';
 import { mountGrouping } from '@features/scene-viewer/grouping';
+import { mountOnboarding } from '@features/onboarding';
 import { listen } from './utils';
 import { createPrinterManager } from './printer-manager';
 
@@ -153,6 +154,7 @@ export function mountApp(ctx: AppContext, PRINTERS: Record<string, PrinterSpec>)
   mountPrimitiveBoolean(ctx);
   mountMeasureTool(ctx);
   mountGrouping(ctx);
+  mountOnboarding(ctx);
 
   // ─── Preferences & autosave ──────────────────────────
   const { scheduleSavePreferences, scheduleProjectAutosave } = mountPreferences(

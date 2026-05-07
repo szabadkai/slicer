@@ -6,44 +6,25 @@ import { listen } from './utils';
 import { getSlicedLayerCount } from './mount';
 import { handleKeydown } from './keyboard-shortcuts';
 
-const TOOL_PANELS = [
-  'load',
-  'scene',
-  'orient',
-  'modify',
-  'supports',
-  'surface',
-  'material',
-  'inspect',
-  'measure',
-  'slice',
-] as const;
+const TOOL_PANELS = ['plate', 'orient', 'modify', 'supports', 'surface', 'slice'] as const;
 type ToolPanel = (typeof TOOL_PANELS)[number];
 
 const TOOL_BTN_IDS: Record<ToolPanel, string> = {
-  load: 'load-btn',
-  scene: 'scene-btn',
+  plate: 'plate-btn',
   orient: 'orient-btn',
   modify: 'modify-btn',
   supports: 'support-tool-btn',
   surface: 'surface-btn',
-  material: 'material-btn',
-  inspect: 'inspect-btn',
-  measure: 'measure-btn',
   slice: 'slice-tool-btn',
 };
 
 const PANEL_IDS: Record<ToolPanel, string[]> = {
-  load: ['load-panel'],
-  scene: ['edit-panel', 'transform-panel'],
+  plate: ['load-panel', 'edit-panel', 'transform-panel'],
   orient: ['orientation-panel'],
   modify: ['cut-panel', 'hollow-panel', 'primitive-boolean-panel'],
   supports: ['supports-panel'],
-  surface: ['paint-panel'],
-  material: ['materials-panel'],
-  inspect: ['health-panel'],
-  measure: ['measure-panel'],
-  slice: ['slice-panel'],
+  surface: ['paint-panel', 'materials-panel'],
+  slice: ['slice-panel', 'health-panel', 'measure-panel'],
 };
 
 export function mountShell(ctx: AppContext): {
@@ -51,18 +32,23 @@ export function mountShell(ctx: AppContext): {
   getActiveToolPanel: () => string;
 } {
   const { viewer } = ctx;
-  let activeToolPanel: ToolPanel = 'scene';
+  let activeToolPanel: ToolPanel = 'plate';
 
   function showToolPanel(name: string): void {
     // Support legacy panel names for backward compatibility (saved preferences)
     const LEGACY_MAP: Record<string, string> = {
-      edit: 'scene',
-      transform: 'scene',
+      load: 'plate',
+      scene: 'plate',
+      edit: 'plate',
+      transform: 'plate',
       hollow: 'modify',
       intent: 'orient',
-      materials: 'material',
+      materials: 'surface',
+      material: 'surface',
       paint: 'surface',
-      health: 'inspect',
+      health: 'slice',
+      inspect: 'slice',
+      measure: 'slice',
     };
     const resolved = LEGACY_MAP[name] ?? name;
     const panel = resolved as ToolPanel;
@@ -100,7 +86,7 @@ export function mountShell(ctx: AppContext): {
     if (activeBtn) activeBtn.classList.add('active');
     activeToolPanel = panel;
 
-    if (panel === 'scene') {
+    if (panel === 'plate') {
       const activeMode = document
         .getElementById('transform-panel')
         ?.querySelector('.mode-btn.active') as HTMLElement | null;
@@ -160,13 +146,9 @@ export function mountShell(ctx: AppContext): {
     });
   });
 
-  // Shortcuts modal
-  const shortcutsBtn = document.getElementById('shortcuts-btn');
+  // Shortcuts modal (opened via ? key)
   const shortcutsModal = document.getElementById('shortcuts-modal');
   const shortcutsClose = document.getElementById('shortcuts-modal-close');
-  listen(shortcutsBtn, 'click', () => {
-    if (shortcutsModal) shortcutsModal.hidden = false;
-  });
   listen(shortcutsClose, 'click', () => {
     if (shortcutsModal) shortcutsModal.hidden = true;
   });
@@ -174,7 +156,7 @@ export function mountShell(ctx: AppContext): {
     if (e.target === shortcutsModal && shortcutsModal) shortcutsModal.hidden = true;
   });
 
-  showToolPanel('scene');
+  showToolPanel('plate');
 
   // Dark mode toggle
   const themeBtn = document.getElementById('theme-toggle-btn');

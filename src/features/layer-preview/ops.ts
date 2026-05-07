@@ -6,6 +6,9 @@ import { countWhitePixels } from '@core/pixel-utils';
 // ─── Feature-local state ───────────────────────────────────
 
 export const slicedLayers = signal<Uint8Array[]>([]);
+// PNG-encoded layer bytes, populated by the slice pass via the worker pool.
+// When non-empty and matching layerCount, the export path skips re-slicing.
+export const slicedLayerPngs = signal<Uint8Array[]>([]);
 export const currentLayerIndex = signal(0);
 
 export const layerCount = computed(() => slicedLayers.value.length);
@@ -48,10 +51,6 @@ export function countWhitePixelsForLayer(layerIndex: number): number {
   return countWhitePixels(layers[layerIndex]);
 }
 
-export function formatLayerInfo(
-  index: number,
-  total: number,
-  heightMM: number,
-): string {
+export function formatLayerInfo(index: number, total: number, heightMM: number): string {
   return `Layer ${index + 1} / ${total} — Z ${heightMM.toFixed(2)} mm`;
 }

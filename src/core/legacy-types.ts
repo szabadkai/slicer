@@ -270,7 +270,7 @@ export interface LegacySlicer {
   slice(
     layerHeightMM: number,
     onProgress: (current: number, total: number) => void,
-    options?: { collect?: boolean; onLayer?: (pixels: Uint8Array) => void },
+    options?: { collect?: boolean; onLayer?: (pixels: Uint8Array, index: number) => void },
   ): Promise<Uint8Array[] | null>;
   renderLayer(layerIndex: number, layerHeightMM: number, target?: Uint8Array): Uint8Array;
   getPrinterSpec(): PrinterSpec;

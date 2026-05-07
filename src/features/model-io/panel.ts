@@ -4,8 +4,13 @@
 import type { AppContext, ProjectState } from '@core/types';
 import type { LegacySlicer } from '@core/legacy-types';
 import { listen } from '@features/app-shell/utils';
-import { showContextMenu, hideContextMenu, getActiveMenuContext } from '@features/app-shell/context-menu';
+import {
+  showContextMenu,
+  hideContextMenu,
+  getActiveMenuContext,
+} from '@features/app-shell/context-menu';
 import { getSlicedLayerCount, getSlicedVolumes } from '@features/app-shell/mount';
+import { slicedLayerPngs } from '@features/layer-preview/ops';
 
 export function mountExportPanel(
   ctx: AppContext,
@@ -18,12 +23,25 @@ export function mountExportPanel(
 
   function getSettings(): Record<string, unknown> {
     return {
-      layerHeight: parseFloat((document.getElementById('layer-height') as HTMLInputElement)?.value ?? '0.05'),
-      normalExposure: parseFloat((document.getElementById('normal-exposure') as HTMLInputElement)?.value ?? '2'),
-      bottomLayers: parseInt((document.getElementById('bottom-layers') as HTMLInputElement)?.value ?? '6', 10),
-      bottomExposure: parseFloat((document.getElementById('bottom-exposure') as HTMLInputElement)?.value ?? '30'),
-      liftHeight: parseFloat((document.getElementById('lift-height') as HTMLInputElement)?.value ?? '8'),
-      liftSpeed: parseFloat((document.getElementById('lift-speed') as HTMLInputElement)?.value ?? '3'),
+      layerHeight: parseFloat(
+        (document.getElementById('layer-height') as HTMLInputElement)?.value ?? '0.05',
+      ),
+      normalExposure: parseFloat(
+        (document.getElementById('normal-exposure') as HTMLInputElement)?.value ?? '2',
+      ),
+      bottomLayers: parseInt(
+        (document.getElementById('bottom-layers') as HTMLInputElement)?.value ?? '6',
+        10,
+      ),
+      bottomExposure: parseFloat(
+        (document.getElementById('bottom-exposure') as HTMLInputElement)?.value ?? '30',
+      ),
+      liftHeight: parseFloat(
+        (document.getElementById('lift-height') as HTMLInputElement)?.value ?? '8',
+      ),
+      liftSpeed: parseFloat(
+        (document.getElementById('lift-speed') as HTMLInputElement)?.value ?? '3',
+      ),
     };
   }
 
@@ -41,8 +59,16 @@ export function mountExportPanel(
       title: 'Export',
       context: { type: 'export' },
       items: [
-        { action: 'export-zip', label: 'Export print package', disabled: getSlicedLayerCount() === 0 },
-        { action: 'export-all-zip', label: 'Export all sliced plates', disabled: !project.plates.some((p) => p.slicedLayers) },
+        {
+          action: 'export-zip',
+          label: 'Export print package',
+          disabled: getSlicedLayerCount() === 0,
+        },
+        {
+          action: 'export-all-zip',
+          label: 'Export all sliced plates',
+          disabled: !project.plates.some((p) => p.slicedLayers),
+        },
         ...meshExportItems(),
       ],
     });
@@ -52,9 +78,8 @@ export function mountExportPanel(
     const layerCount = getSlicedLayerCount();
     if (layerCount === 0) return;
 
-    const { exportZip } = await import('../../exporter') as unknown as {
-      exportZip: (layers: Uint8Array[], settings: Record<string, unknown>, spec: unknown, onProgress: (cur: number, total: number, extra?: string) => void) => Promise<void>;
-    };
+    const exporter = (await import('../../exporter')) as typeof import('../../exporter');
+    const exportZip = exporter.exportZip;
 
     const settings = getSettings();
     const vols = getSlicedVolumes();
@@ -69,26 +94,55 @@ export function mountExportPanel(
       (document.getElementById('layer-height') as HTMLInputElement | null)?.value ?? '0.05',
     );
 
-    // Re-render layers on demand during export to avoid holding all in memory
-    const pixelByteCount = spec.resolutionX * spec.resolutionY * 4;
-    const reusableBuffer = new Uint8Array(pixelByteCount);
-    const layerProvider: Uint8Array[] = new Proxy([] as Uint8Array[], {
-      get(target, prop) {
-        if (prop === 'length') return layerCount;
-        const idx = typeof prop === 'string' ? parseInt(prop, 10) : undefined;
-        if (idx !== undefined && !isNaN(idx)) {
-          return slicer.renderLayer(idx, layerHeight, reusableBuffer);
-        }
-        return Reflect.get(target, prop);
-      },
-    });
-
     ctx.showProgress('Exporting...');
     await new Promise((r) => setTimeout(r, 50));
 
-    await exportZip(layerProvider, settings, spec, (current, total, extra) => {
-      ctx.updateProgress(current / total, extra ?? `Encoding PNG ${current} / ${total}`);
-    });
+    const t0 = performance.now();
+    const cachedPngs = slicedLayerPngs.value;
+    const cacheUsable =
+      cachedPngs.length === layerCount && cachedPngs.every((p) => p && p.length > 0);
+
+    if (cacheUsable) {
+      // Fast path — slicing already produced PNG bytes; just zip and download.
+      await exportZip(
+        { kind: 'png', pngs: cachedPngs },
+        settings as unknown as Parameters<typeof exportZip>[1],
+        spec,
+        (current, total, extra) => {
+          ctx.updateProgress(current / total, extra ?? `Layer ${current} / ${total}`);
+        },
+      );
+    } else {
+      // Fallback — re-render layers on demand. Allocate a *fresh* buffer per
+      // layer so the worker pool can transfer it (zero-copy).
+      const pixelByteCount = spec.resolutionX * spec.resolutionY * 4;
+      const layerProvider: Uint8Array[] = new Proxy([] as Uint8Array[], {
+        get(target, prop) {
+          if (prop === 'length') return layerCount;
+          const idx = typeof prop === 'string' ? parseInt(prop, 10) : undefined;
+          if (idx !== undefined && !isNaN(idx)) {
+            const buf = new Uint8Array(pixelByteCount);
+            return slicer.renderLayer(idx, layerHeight, buf);
+          }
+          return Reflect.get(target, prop);
+        },
+      });
+
+      await exportZip(
+        { kind: 'pixels', layers: layerProvider },
+        settings as unknown as Parameters<typeof exportZip>[1],
+        spec,
+        (current, total, extra) => {
+          ctx.updateProgress(current / total, extra ?? `Encoding layer ${current} / ${total}`);
+        },
+      );
+    }
+
+    const elapsed = performance.now() - t0;
+    const pixelsPerLayer = spec.resolutionX * spec.resolutionY;
+    console.warn(
+      `[export] ${layerCount} layers, ${pixelsPerLayer} px/layer, ${elapsed.toFixed(0)} ms total, ${(elapsed / layerCount).toFixed(1)} ms/layer, cache=${cacheUsable}`,
+    );
 
     ctx.hideProgress();
   }
@@ -113,7 +167,7 @@ export function mountExportPanel(
   async function handleMeshExport(format: string): Promise<void> {
     if (viewer.objects.length === 0) return;
 
-    const { exportMesh } = await import('../../exporter') as unknown as {
+    const { exportMesh } = (await import('../../exporter')) as unknown as {
       exportMesh: (geos: unknown[], format: string, name: string) => Promise<void>;
     };
 
@@ -129,7 +183,9 @@ export function mountExportPanel(
       await exportMesh(geometries, format, 'slicelab-plate');
     } catch (error) {
       console.error(`Failed to export ${format}`, error);
-      alert(`Failed to export ${format.toUpperCase()}: ${error instanceof Error ? error.message : 'unknown error'}`);
+      alert(
+        `Failed to export ${format.toUpperCase()}: ${error instanceof Error ? error.message : 'unknown error'}`,
+      );
     } finally {
       geometries.forEach((g) => (g as { dispose?(): void }).dispose?.());
       ctx.hideProgress();
@@ -142,7 +198,9 @@ export function mountExportPanel(
     const rect = (exportBtn as HTMLElement).getBoundingClientRect();
     openExportMenu(rect.left, rect.bottom + 4);
   });
-  listen(exportAllBtn, 'click', () => { handleExportAll(); });
+  listen(exportAllBtn, 'click', () => {
+    handleExportAll();
+  });
 
   // Canvas right-click for mesh export
   listen(viewer.canvas, 'contextmenu', (e) => {
@@ -164,8 +222,16 @@ export function mountExportPanel(
     const menuCtx = getActiveMenuContext();
     if (menuCtx?.type !== 'export' && menuCtx?.type !== 'mesh-export') return;
     hideContextMenu();
-    if (action === 'export-zip') { handleExport(); return; }
-    if (action === 'export-all-zip') { handleExportAll(); return; }
-    if (action?.startsWith('mesh-')) { handleMeshExport(action.replace('mesh-', '')); }
+    if (action === 'export-zip') {
+      handleExport();
+      return;
+    }
+    if (action === 'export-all-zip') {
+      handleExportAll();
+      return;
+    }
+    if (action?.startsWith('mesh-')) {
+      handleMeshExport(action.replace('mesh-', ''));
+    }
   });
 }

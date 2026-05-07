@@ -8,6 +8,8 @@ import type { IntentConflict } from '@features/surface-intent/engine-types';
 import { getIntentBuffer } from '@features/surface-intent/store';
 import { detectConflicts } from '@features/surface-intent/engine';
 import { detectOverhangs } from '@features/support-generation/detect';
+import { getSharedPngEncodePool } from '../../png-encode-pool';
+import { slicedLayerPngs } from '@features/layer-preview/ops';
 
 export interface SliceResult {
   layerCount: number;
@@ -116,6 +118,14 @@ export async function executeSlice(
   let filledPx = 0;
   const perLayerWhite: number[] = [];
 
+  // Encode each layer's pixels to PNG in the worker pool, in parallel with
+  // the next layer's GPU render. The resulting bytes are cached so export
+  // can skip the second slice pass entirely.
+  const pool = getSharedPngEncodePool();
+  const pngs: Uint8Array[] = [];
+  const encodePromises: Promise<void>[] = [];
+  slicedLayerPngs.value = [];
+
   await slicer.slice(
     layerHeight,
     (current, total) => {
@@ -123,13 +133,26 @@ export async function executeSlice(
     },
     {
       collect: false,
-      onLayer: (pixels: Uint8Array) => {
+      onLayer: (pixels: Uint8Array, layerIndex: number) => {
         const w = countWhitePixels(pixels);
         filledPx += w;
         perLayerWhite.push(w);
+
+        // Copy because the slice loop reuses the buffer for the next layer.
+        const copy = new Uint8Array(pixels);
+        encodePromises.push(
+          pool.encode(copy, printerSpec.resolutionX, printerSpec.resolutionY).then((png) => {
+            pngs[layerIndex] = png;
+          }),
+        );
       },
     },
   );
+
+  // Wait for all PNG encodes to complete before returning so the cache is
+  // ready when the user clicks export.
+  await Promise.all(encodePromises);
+  slicedLayerPngs.value = pngs;
 
   const volumes = computeVolumes(filledPx, pxArea, layerHeight, !!mergedSupportGeo, viewer);
 

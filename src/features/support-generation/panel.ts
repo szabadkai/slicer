@@ -65,7 +65,22 @@ export function mountSupportPanel(ctx: AppContext): void {
 
     // Collect existing support contact points from supportsMesh
     const contacts: Array<{ x: number; y: number; z: number }> = [];
-    const mesh = (obj as unknown as { supportsMesh: { geometry: { attributes: { position: { count: number; getX(i: number): number; getY(i: number): number; getZ(i: number): number } } } } | null }).supportsMesh;
+    const mesh = (
+      obj as unknown as {
+        supportsMesh: {
+          geometry: {
+            attributes: {
+              position: {
+                count: number;
+                getX(i: number): number;
+                getY(i: number): number;
+                getZ(i: number): number;
+              };
+            };
+          };
+        } | null;
+      }
+    ).supportsMesh;
     if (mesh) {
       const pos = mesh.geometry.attributes.position;
       // Sample every 18th vertex (6 segments × 3 verts per pillar ring) as rough contacts
@@ -206,6 +221,8 @@ export function mountSupportPanel(ctx: AppContext): void {
       alert(
         `Failed to generate supports for ${failureCount} model${failureCount === 1 ? '' : 's'}.`,
       );
+    } else {
+      document.dispatchEvent(new CustomEvent('supports-generated'));
     }
     ctx.hideProgress();
     refreshOverhangOverlay();
