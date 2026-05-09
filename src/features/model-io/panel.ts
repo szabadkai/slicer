@@ -145,6 +145,7 @@ export function mountExportPanel(
     );
 
     ctx.hideProgress();
+    document.dispatchEvent(new CustomEvent('export-complete'));
   }
 
   async function handleExportAll(): Promise<void> {
@@ -181,6 +182,7 @@ export function mountExportPanel(
       ctx.showProgress(`Exporting ${format.toUpperCase()}...`);
       await new Promise((r) => setTimeout(r, 50));
       await exportMesh(geometries, format, 'slicelab-plate');
+      document.dispatchEvent(new CustomEvent('export-complete'));
     } catch (error) {
       console.error(`Failed to export ${format}`, error);
       alert(

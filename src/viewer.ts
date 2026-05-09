@@ -390,8 +390,13 @@ export class Viewer extends ViewerCore {
     const min = rbb.min.clone();
     sel.mesh.geometry.translate(-min.x, -min.y, -min.z);
     sel.mesh.geometry.computeBoundingBox();
-    sel.mesh.position.x += min.x;
-    sel.mesh.position.z += min.z;
+    const newBB = sel.mesh.geometry.boundingBox;
+    if (!newBB) return;
+    const size = new THREE.Vector3();
+    newBB.getSize(size);
+    const origin = this.getActivePlateOrigin();
+    sel.mesh.position.x = origin.x - size.x / 2;
+    sel.mesh.position.z = origin.z - size.z / 2;
     sel.mesh.position.y = sel.elevation;
     sel.mesh.updateMatrixWorld(true);
     this.clearSupports();
