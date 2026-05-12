@@ -66,6 +66,16 @@ export function mountShell(ctx: AppContext): {
     const panel = resolved as ToolPanel;
     if (!TOOL_PANELS.includes(panel)) return;
 
+    // Auto-select the single model when jumping to a panel that needs a selection.
+    // Panels like orient, modify, supports, and surface all require a selected model
+    // to do anything useful. If there's exactly one model on the plate and nothing
+    // is selected, select it automatically so the user doesn't hit dead buttons.
+    if (panel !== 'plate' && panel !== 'slice') {
+      if (viewer.objects.length === 1 && viewer.selected.length === 0) {
+        viewer.selectObject(viewer.objects[0].id);
+      }
+    }
+
     // Expand the sidebar if it was collapsed
     const sidebar = document.getElementById('sidebar');
     const toggleBtn = document.getElementById('toggle-sidebar-btn');
