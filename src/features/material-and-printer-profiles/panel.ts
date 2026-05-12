@@ -23,7 +23,7 @@ const PRINTER_DETAILS: Record<string, { image: string; description: string }> = 
   'saturn-s': {
     image: 'printers/elegoo-saturn-s.jpg',
     description:
-      '8.9 inch 4K MSLA with a larger plate and solid build quality for medium-sized resin projects.',
+      '9.1 inch 4K mono LCD with a larger plate and solid build quality for medium-sized resin projects.',
   },
   'mars-3': {
     image: 'printers/elegoo-mars-3.jpg',
