@@ -23,6 +23,14 @@
     "buildDepthMM": 120,
     "buildHeightMM": 200
   },
+  "saturn-4-ultra-16k": {
+    "name": "Elegoo Saturn 4 Ultra 16K",
+    "resolutionX": 15120,
+    "resolutionY": 6230,
+    "buildWidthMM": 211.68,
+    "buildDepthMM": 118.37,
+    "buildHeightMM": 220
+  },
   "mars-3": {
     "name": "Elegoo Mars 3",
     "resolutionX": 4098,
