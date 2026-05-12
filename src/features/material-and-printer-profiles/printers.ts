@@ -32,6 +32,18 @@ export const PRINTERS: Record<string, PrinterProfile> = {
     buildDepthMM: 122.88,
     buildHeightMM: 200,
   },
+  'saturn-s': {
+    key: 'saturn-s',
+    name: 'Elegoo Saturn S',
+    vendor: 'Elegoo',
+    image: 'printers/elegoo-saturn-s.jpg',
+    description: '8.9" 4K mono LCD, 50μm XY resolution',
+    resolutionX: 3840,
+    resolutionY: 2400,
+    buildWidthMM: 192,
+    buildDepthMM: 120,
+    buildHeightMM: 200,
+  },
   'mars-3': {
     key: 'mars-3',
     name: 'Elegoo Mars 3',

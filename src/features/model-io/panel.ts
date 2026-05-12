@@ -45,6 +45,11 @@ export function mountExportPanel(
     };
   }
 
+  function isElegooPrinter(): boolean {
+    const spec = slicer.getPrinterSpec();
+    return spec?.name.toLowerCase().startsWith('elegoo');
+  }
+
   function meshExportItems(): Array<{ action: string; label: string; disabled: boolean }> {
     const disabled = viewer.objects.length === 0;
     return [
@@ -64,6 +69,15 @@ export function mountExportPanel(
           label: 'Export print package',
           disabled: getSlicedLayerCount() === 0,
         },
+        ...(isElegooPrinter()
+          ? [
+              {
+                action: 'export-goo',
+                label: 'Export .goo (native Elegoo)',
+                disabled: getSlicedLayerCount() === 0,
+              },
+            ]
+          : []),
         {
           action: 'export-all-zip',
           label: 'Export all sliced plates',
@@ -148,6 +162,76 @@ export function mountExportPanel(
     document.dispatchEvent(new CustomEvent('export-complete'));
   }
 
+  async function handleExportGoo(): Promise<void> {
+    const layerCount = getSlicedLayerCount();
+    if (layerCount === 0) return;
+
+    const { exportGoo } = (await import('../../goo-exporter')) as unknown as {
+      exportGoo: (
+        source: unknown,
+        settings: Record<string, unknown>,
+        spec: unknown,
+        onProgress?: (current: number, total: number, extra?: string) => void,
+      ) => Promise<void>;
+    };
+
+    const settings = getSettings();
+    const vols = getSlicedVolumes();
+    if (vols) {
+      settings.modelVolumeMm3 = vols.model;
+      settings.supportVolumeMm3 = vols.supports;
+      settings.totalVolumeMm3 = vols.total;
+      settings.volumeBreakdownExact = vols.exactBreakdown;
+    }
+    const spec = slicer.getPrinterSpec();
+    const layerHeight = Number.parseFloat(
+      (document.getElementById('layer-height') as HTMLInputElement | null)?.value ?? '0.05',
+    );
+
+    ctx.showProgress('Exporting .goo...');
+    await new Promise((r) => setTimeout(r, 50));
+
+    const cachedPngs = slicedLayerPngs.value;
+    const cacheUsable =
+      cachedPngs.length === layerCount && cachedPngs.every((p) => p && p.length > 0);
+
+    if (cacheUsable) {
+      await exportGoo(
+        { kind: 'png', pngs: cachedPngs },
+        settings,
+        spec,
+        (current, total, extra) => {
+          ctx.updateProgress(current / total, extra ?? `Layer ${current} / ${total}`);
+        },
+      );
+    } else {
+      const pixelByteCount = spec.resolutionX * spec.resolutionY * 4;
+      const layerProvider: Uint8Array[] = new Proxy([] as Uint8Array[], {
+        get(target, prop) {
+          if (prop === 'length') return layerCount;
+          const idx = typeof prop === 'string' ? parseInt(prop, 10) : undefined;
+          if (idx !== undefined && !isNaN(idx)) {
+            const buf = new Uint8Array(pixelByteCount);
+            return slicer.renderLayer(idx, layerHeight, buf);
+          }
+          return Reflect.get(target, prop);
+        },
+      });
+
+      await exportGoo(
+        { kind: 'pixels', layers: layerProvider },
+        settings,
+        spec,
+        (current, total, extra) => {
+          ctx.updateProgress(current / total, extra ?? `Encoding layer ${current} / ${total}`);
+        },
+      );
+    }
+
+    ctx.hideProgress();
+    document.dispatchEvent(new CustomEvent('export-complete'));
+  }
+
   async function handleExportAll(): Promise<void> {
     const startId = project.activePlateId;
     const slicedPlates = project.plates.filter((p) => p.slicedLayers);
@@ -226,6 +310,10 @@ export function mountExportPanel(
     hideContextMenu();
     if (action === 'export-zip') {
       handleExport();
+      return;
+    }
+    if (action === 'export-goo') {
+      handleExportGoo();
       return;
     }
     if (action === 'export-all-zip') {

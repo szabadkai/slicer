@@ -30,6 +30,9 @@ interface PrinterSpecLike {
   name: string;
   resolutionX: number;
   resolutionY: number;
+  buildWidthMM?: number;
+  buildDepthMM?: number;
+  buildHeightMM?: number;
 }
 
 interface SliceSettings {

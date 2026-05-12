@@ -11,8 +11,8 @@ import {
 } from './printers';
 
 describe('printer profiles', () => {
-  it('contains at least 10 profiles', () => {
-    expect(getAllPrinterKeys().length).toBeGreaterThanOrEqual(10);
+  it('contains at least 11 profiles', () => {
+    expect(getAllPrinterKeys().length).toBeGreaterThanOrEqual(11);
   });
 
   it('default printer exists', () => {
@@ -30,7 +30,7 @@ describe('printer profiles', () => {
 
   it('getPrintersByVendor filters correctly', () => {
     const elegoo = getPrintersByVendor('Elegoo');
-    expect(elegoo.length).toBeGreaterThanOrEqual(3);
+    expect(elegoo.length).toBeGreaterThanOrEqual(4);
     expect(elegoo.every((p) => p.vendor === 'Elegoo')).toBe(true);
   });
 
