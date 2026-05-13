@@ -64,12 +64,17 @@ export function segmentCollides(
   return false;
 }
 
-function clearanceSampleStarts(origin: THREE.Vector3, axis: THREE.Vector3, clearance: number): THREE.Vector3[] {
+function clearanceSampleStarts(
+  origin: THREE.Vector3,
+  axis: THREE.Vector3,
+  clearance: number,
+): THREE.Vector3[] {
   const radius = Math.max(0, clearance * 0.5);
   if (radius === 0) return [origin];
-  const tangent = Math.abs(axis.dot(UP)) < 0.9
-    ? new THREE.Vector3().crossVectors(axis, UP).normalize()
-    : new THREE.Vector3(1, 0, 0);
+  const tangent =
+    Math.abs(axis.dot(UP)) < 0.9
+      ? new THREE.Vector3().crossVectors(axis, UP).normalize()
+      : new THREE.Vector3(1, 0, 0);
   const bitangent = new THREE.Vector3().crossVectors(axis, tangent).normalize();
   return [
     origin,
@@ -144,6 +149,7 @@ function buildSupportProfile(
   baseRadius: number,
   baseHeight: number,
   floorY: number,
+  sphereRadius = 0,
 ): ProfileRing[] {
   const profile: ProfileRing[] = [];
   const top = toVector3(route[0]);
@@ -152,37 +158,62 @@ function buildSupportProfile(
   const firstLength = firstDir.length();
   if (firstLength < 0.1) return profile;
   firstDir.normalize();
-  addProfileRing(profile, top, 0);
-  addProfileRing(profile, top.clone().addScaledVector(firstDir, Math.min(tipHeight, firstLength * 0.8)), tipRadius);
+  // When using a spherical connection, shift the shaft start down by sphereRadius
+  // so the shaft cap aligns with the sphere's equator for a seamless join.
+  const tipPos = sphereRadius > 0 ? top.clone().addScaledVector(firstDir, sphereRadius) : top;
+  addProfileRing(profile, tipPos, sphereRadius);
+  addProfileRing(
+    profile,
+    top.clone().addScaledVector(firstDir, Math.min(tipHeight, firstLength * 0.8)),
+    tipRadius,
+  );
 
   const lastPoint = route[route.length - 1];
   const lastIsInternal = Boolean(lastPoint.internalResting);
   const bodyEndIndex = lastIsInternal ? route.length - 2 : route.length - 1;
 
   for (let i = 1; i <= bodyEndIndex; i++) {
-    addProfileRing(profile, routeTargetPoint(route, i - 1, baseHeight, tipHeight, floorY), pillarRadius);
+    addProfileRing(
+      profile,
+      routeTargetPoint(route, i - 1, baseHeight, tipHeight, floorY),
+      pillarRadius,
+    );
   }
 
   if (lastIsInternal) {
-    addProfileRing(profile, routeTargetPoint(route, route.length - 2, baseHeight, tipHeight, floorY), pillarRadius);
+    addProfileRing(
+      profile,
+      routeTargetPoint(route, route.length - 2, baseHeight, tipHeight, floorY),
+      pillarRadius,
+    );
     const bottomContact = toVector3(lastPoint);
     const previous = profile[profile.length - 1]?.center || top;
     const bottomDir = new THREE.Vector3().subVectors(bottomContact, previous);
     const bottomLength = bottomDir.length();
     if (bottomLength >= 0.1) {
       bottomDir.normalize();
-      addProfileRing(profile, bottomContact.clone().addScaledVector(bottomDir, -Math.min(tipHeight, bottomLength * 0.8)), tipRadius);
+      addProfileRing(
+        profile,
+        bottomContact.clone().addScaledVector(bottomDir, -Math.min(tipHeight, bottomLength * 0.8)),
+        tipRadius,
+      );
       addProfileRing(profile, bottomContact, 0);
     }
   } else {
     const base = route[route.length - 1];
-    addProfileRing(profile, new THREE.Vector3(base.x, Math.max(baseHeight, floorY + baseHeight), base.z), pillarRadius);
+    addProfileRing(
+      profile,
+      new THREE.Vector3(base.x, Math.max(baseHeight, floorY + baseHeight), base.z),
+      pillarRadius,
+    );
     addProfileRing(profile, new THREE.Vector3(base.x, floorY, base.z), baseRadius);
   }
   return profile;
 }
 
-function computeProfileFrames(profile: ProfileRing[]): { tangent: THREE.Vector3; normal: THREE.Vector3; binormal: THREE.Vector3 }[] {
+function computeProfileFrames(
+  profile: ProfileRing[],
+): { tangent: THREE.Vector3; normal: THREE.Vector3; binormal: THREE.Vector3 }[] {
   const DOWN = new THREE.Vector3(0, -1, 0);
   const frames: { tangent: THREE.Vector3; normal: THREE.Vector3; binormal: THREE.Vector3 }[] = [];
   let previousNormal: THREE.Vector3 | null = null;
@@ -194,13 +225,16 @@ function computeProfileFrames(profile: ProfileRing[]): { tangent: THREE.Vector3;
     tangent.normalize();
     let normal: THREE.Vector3 | null = null;
     if (previousNormal) {
-      normal = previousNormal.clone().sub(tangent.clone().multiplyScalar(previousNormal.dot(tangent)));
+      normal = previousNormal
+        .clone()
+        .sub(tangent.clone().multiplyScalar(previousNormal.dot(tangent)));
       if (normal.lengthSq() < 1e-6) normal = null;
     }
     if (!normal) {
-      normal = Math.abs(tangent.dot(UP)) < 0.95
-        ? new THREE.Vector3().crossVectors(tangent, UP)
-        : new THREE.Vector3(1, 0, 0);
+      normal =
+        Math.abs(tangent.dot(UP)) < 0.95
+          ? new THREE.Vector3().crossVectors(tangent, UP)
+          : new THREE.Vector3(1, 0, 0);
     }
     normal.normalize();
     const binormal = new THREE.Vector3().crossVectors(tangent, normal).normalize();
@@ -218,11 +252,13 @@ function connectProfileRings(
 ): void {
   if (ringA.count === 1 && ringB.count === 1) return;
   if (ringA.count === 1) {
-    for (let s = 0; s < segments; s++) indices.push(ringA.start, ringB.start + s, ringB.start + ((s + 1) % segments));
+    for (let s = 0; s < segments; s++)
+      indices.push(ringA.start, ringB.start + s, ringB.start + ((s + 1) % segments));
     return;
   }
   if (ringB.count === 1) {
-    for (let s = 0; s < segments; s++) indices.push(ringA.start + s, ringB.start, ringA.start + ((s + 1) % segments));
+    for (let s = 0; s < segments; s++)
+      indices.push(ringA.start + s, ringB.start, ringA.start + ((s + 1) % segments));
     return;
   }
   for (let s = 0; s < segments; s++) {
@@ -250,7 +286,10 @@ function addCap(
   }
 }
 
-function createSweptSupportGeometry(profile: ProfileRing[], segments: number): THREE.BufferGeometry | null {
+function createSweptSupportGeometry(
+  profile: ProfileRing[],
+  segments: number,
+): THREE.BufferGeometry | null {
   if (profile.length < 2) return null;
   const positions: number[] = [];
   const indices: number[] = [];
@@ -268,15 +307,26 @@ function createSweptSupportGeometry(profile: ProfileRing[], segments: number): T
     const { normal, binormal } = frames[i];
     for (let s = 0; s < segments; s++) {
       const angle = (s / segments) * Math.PI * 2;
-      const offset = normal.clone().multiplyScalar(Math.cos(angle) * radius).addScaledVector(binormal, Math.sin(angle) * radius);
+      const offset = normal
+        .clone()
+        .multiplyScalar(Math.cos(angle) * radius)
+        .addScaledVector(binormal, Math.sin(angle) * radius);
       positions.push(center.x + offset.x, center.y + offset.y, center.z + offset.z);
     }
     rings.push({ start, count: segments });
   }
 
-  for (let i = 0; i < profile.length - 1; i++) connectProfileRings(indices, rings[i], rings[i + 1], segments);
+  for (let i = 0; i < profile.length - 1; i++)
+    connectProfileRings(indices, rings[i], rings[i + 1], segments);
   addCap(indices, positions, profile[0], segments, rings[0].start, true);
-  addCap(indices, positions, profile[profile.length - 1], segments, rings[rings.length - 1].start, false);
+  addCap(
+    indices,
+    positions,
+    profile[profile.length - 1],
+    segments,
+    rings[rings.length - 1].start,
+    false,
+  );
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -294,10 +344,33 @@ export function buildSupportGeometry(
   baseRadius: number,
   baseHeight: number,
   floorY = 0,
+  sphereRadius = 0,
 ): void {
-  const profile = buildSupportProfile(route, tipDiameter / 2, tipHeight, pillarRadius, baseRadius, baseHeight, floorY);
+  const profile = buildSupportProfile(
+    route,
+    tipDiameter / 2,
+    tipHeight,
+    pillarRadius,
+    baseRadius,
+    baseHeight,
+    floorY,
+    sphereRadius,
+  );
   const supportGeo = createSweptSupportGeometry(profile, SUPPORT_SEGMENTS);
   if (supportGeo) geometries.push(supportGeo);
+
+  // Attach a sphere at the contact point for spherical connection.
+  // Offset downward along the shaft direction by sphereRadius so the sphere
+  // just kisses the model surface instead of embedding halfway into it.
+  if (sphereRadius > 0) {
+    const top = toVector3(route[0]);
+    const firstTarget = routeTargetPoint(route, 0, baseHeight, tipHeight, floorY);
+    const offsetDir = new THREE.Vector3().subVectors(firstTarget, top).normalize();
+    const sphereCenter = top.clone().addScaledVector(offsetDir, sphereRadius);
+    const sphereGeo = new THREE.SphereGeometry(sphereRadius, 6, 4);
+    sphereGeo.translate(sphereCenter.x, sphereCenter.y, sphereCenter.z);
+    geometries.push(sphereGeo);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -314,17 +387,33 @@ export function generateCrossBracing(
   clearance: number,
   floorY = 0,
 ): void {
-  interface Shaft { x: number; z: number; topY: number; bottomY: number }
+  interface Shaft {
+    x: number;
+    z: number;
+    topY: number;
+    bottomY: number;
+  }
   const shafts: Shaft[] = [];
   for (const route of routes) {
     for (let i = 0; i < route.length - 1; i++) {
-      const from = route[i], to = route[i + 1];
+      const from = route[i],
+        to = route[i + 1];
       const actualFromY = i === 0 ? from.y - tipHeight : from.y;
       const isLast = i === route.length - 2;
-      const actualToY = isLast ? (to.internalResting ? to.y + tipHeight : floorY + baseHeight) : to.y;
-      const dx = to.x - from.x, dz = to.z - from.z;
+      const actualToY = isLast
+        ? to.internalResting
+          ? to.y + tipHeight
+          : floorY + baseHeight
+        : to.y;
+      const dx = to.x - from.x,
+        dz = to.z - from.z;
       if (Math.sqrt(dx * dx + dz * dz) < 0.01) {
-        shafts.push({ x: from.x, z: from.z, topY: Math.max(actualFromY, actualToY), bottomY: Math.min(actualFromY, actualToY) });
+        shafts.push({
+          x: from.x,
+          z: from.z,
+          topY: Math.max(actualFromY, actualToY),
+          bottomY: Math.min(actualFromY, actualToY),
+        });
       }
     }
   }
@@ -347,7 +436,10 @@ export function generateCrossBracing(
       const dist = Math.sqrt((s2.x - s1.x) ** 2 + (s2.z - s1.z) ** 2);
       if (dist >= pillarRadius * 2.5) neighbors.push({ shaft: s2, dist, index: j });
     }
-    neighbors.sort((a, b) => a.dist - b.dist || a.shaft.x - b.shaft.x || a.shaft.z - b.shaft.z || a.index - b.index);
+    neighbors.sort(
+      (a, b) =>
+        a.dist - b.dist || a.shaft.x - b.shaft.x || a.shaft.z - b.shaft.z || a.index - b.index,
+    );
 
     for (const neighbor of neighbors) {
       if ((conns.get(i) ?? 0) >= maxConns || (conns.get(neighbor.index) ?? 0) >= maxConns) continue;
@@ -365,16 +457,24 @@ export function generateCrossBracing(
         const p1 = new THREE.Vector3(s1.x, dir === 1 ? yStart : yEnd, s1.z);
         const p2 = new THREE.Vector3(s2.x, dir === 1 ? yEnd : yStart, s2.z);
         if (segmentCollides(p1, p2, context, Math.max(clearance, pillarRadius * 2))) {
-          yStart += zInterval; dir *= -1; continue;
+          yStart += zInterval;
+          dir *= -1;
+          continue;
         }
         const braceLength = p1.distanceTo(p2);
-        const braceGeo = new THREE.CylinderGeometry(braceRadius, braceRadius, braceLength, Math.max(3, SUPPORT_SEGMENTS));
+        const braceGeo = new THREE.CylinderGeometry(
+          braceRadius,
+          braceRadius,
+          braceLength,
+          Math.max(3, SUPPORT_SEGMENTS),
+        );
         const bDir = new THREE.Vector3().subVectors(p2, p1).normalize();
         braceGeo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(UP, bDir));
         braceGeo.translate((p1.x + p2.x) / 2, (p1.y + p2.y) / 2, (p1.z + p2.z) / 2);
         geometries.push(braceGeo);
         added = true;
-        yStart += zInterval; dir *= -1;
+        yStart += zInterval;
+        dir *= -1;
       }
       if (added) {
         conns.set(i, (conns.get(i) ?? 0) + 1);
@@ -419,7 +519,12 @@ export function createBasePanGeometry(
   for (const point of basePoints) {
     for (let i = 0; i < 12; i++) {
       const angle = (i / 12) * Math.PI * 2;
-      outlineSamples.push(new THREE.Vector2(point.x + Math.cos(angle) * sampleRadius, point.y + Math.sin(angle) * sampleRadius));
+      outlineSamples.push(
+        new THREE.Vector2(
+          point.x + Math.cos(angle) * sampleRadius,
+          point.y + Math.sin(angle) * sampleRadius,
+        ),
+      );
     }
   }
   const outline = convexHull2D(outlineSamples);
@@ -511,17 +616,30 @@ function convexHull2D(points: THREE.Vector2[]): THREE.Vector2[] {
   const seen = new Set<string>();
   for (const p of points) {
     const key = `${p.x.toFixed(3)},${p.y.toFixed(3)}`;
-    if (!seen.has(key)) { seen.add(key); unique.push(p); }
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(p);
+    }
   }
   unique.sort((a, b) => (a.x === b.x ? a.y - b.y : a.x - b.x));
   if (unique.length <= 3) return unique;
   const cross = (o: THREE.Vector2, a: THREE.Vector2, b: THREE.Vector2): number =>
     (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
   const lower: THREE.Vector2[] = [];
-  for (const p of unique) { while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop(); lower.push(p); }
+  for (const p of unique) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0)
+      lower.pop();
+    lower.push(p);
+  }
   const upper: THREE.Vector2[] = [];
-  for (let i = unique.length - 1; i >= 0; i--) { const p = unique[i]; while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop(); upper.push(p); }
-  lower.pop(); upper.pop();
+  for (let i = unique.length - 1; i >= 0; i--) {
+    const p = unique[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0)
+      upper.pop();
+    upper.push(p);
+  }
+  lower.pop();
+  upper.pop();
   return lower.concat(upper);
 }
 
@@ -549,12 +667,18 @@ export function mergeGeometries(geometries: THREE.BufferGeometry[]): THREE.Buffe
       positions[idx] = pos.getX(i);
       positions[idx + 1] = pos.getY(i);
       positions[idx + 2] = pos.getZ(i);
-      if (norm) { normalsArr[idx] = norm.getX(i); normalsArr[idx + 1] = norm.getY(i); normalsArr[idx + 2] = norm.getZ(i); }
+      if (norm) {
+        normalsArr[idx] = norm.getX(i);
+        normalsArr[idx + 1] = norm.getY(i);
+        normalsArr[idx + 2] = norm.getZ(i);
+      }
     }
     offset += pos.count;
   }
   for (const g of geometries) g.dispose();
-  for (const g of nonIndexed) { if (!geometries.includes(g)) g.dispose(); }
+  for (const g of nonIndexed) {
+    if (!geometries.includes(g)) g.dispose();
+  }
 
   const merged = new THREE.BufferGeometry();
   merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));

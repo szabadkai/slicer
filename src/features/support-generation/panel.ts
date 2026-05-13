@@ -38,6 +38,13 @@ export function mountSupportPanel(ctx: AppContext): void {
   const supportClearance = document.getElementById('support-clearance') as HTMLInputElement | null;
   const supportMaxOffset = document.getElementById('support-max-offset') as HTMLInputElement | null;
   const crossBracing = document.getElementById('cross-bracing') as HTMLInputElement | null;
+  const sphericalConnection = document.getElementById(
+    'spherical-connection',
+  ) as HTMLInputElement | null;
+  const sphereConnectionDiameterGroup = document.getElementById('sphere-connection-diameter-group');
+  const sphereConnectionDiameter = document.getElementById(
+    'sphere-connection-diameter',
+  ) as HTMLInputElement | null;
   const basePanEnabled = document.getElementById('base-pan-enabled') as HTMLInputElement | null;
   const basePanOptions = document.getElementById('base-pan-options');
   const basePanMargin = document.getElementById('base-pan-margin') as HTMLInputElement | null;
@@ -112,6 +119,14 @@ export function mountSupportPanel(ctx: AppContext): void {
       basePanOptions.style.opacity = panEnabled ? '1' : '0.5';
       basePanOptions.style.pointerEvents = panEnabled ? 'auto' : 'none';
     }
+
+    // Spherical connection toggle
+    const sphereEnabled = sphericalConnection?.checked;
+    if (sphereConnectionDiameter) sphereConnectionDiameter.disabled = !sphereEnabled;
+    if (sphereConnectionDiameterGroup) {
+      sphereConnectionDiameterGroup.style.opacity = sphereEnabled ? '1' : '0.5';
+      sphereConnectionDiameterGroup.style.pointerEvents = sphereEnabled ? 'auto' : 'none';
+    }
   }
 
   function setGroupOpacity(el: HTMLElement | null, enabled: boolean): void {
@@ -151,6 +166,8 @@ export function mountSupportPanel(ctx: AppContext): void {
       basePanThickness: parseFloat(basePanThickness?.value ?? '2'),
       basePanLipWidth: parseFloat(basePanLipWidth?.value ?? '1'),
       basePanLipHeight: parseFloat(basePanLipHeight?.value ?? '0.5'),
+      sphericalConnection: sphericalConnection?.checked ?? false,
+      sphereConnectionDiameter: parseFloat(sphereConnectionDiameter?.value ?? '0.3'),
       onProgress,
       intentParams,
     };
@@ -234,6 +251,7 @@ export function mountSupportPanel(ctx: AppContext): void {
   listen(autoDensity, 'change', syncUi);
   listen(autoThickness, 'change', syncUi);
   listen(basePanEnabled, 'change', syncUi);
+  listen(sphericalConnection, 'change', syncUi);
   listen(generateBtn, 'click', () => {
     handleGenerate();
   });

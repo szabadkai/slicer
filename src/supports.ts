@@ -66,6 +66,8 @@ interface SupportOptions {
   basePanThickness?: number;
   basePanLipWidth?: number;
   basePanLipHeight?: number;
+  sphericalConnection?: boolean;
+  sphereConnectionDiameter?: number;
   onProgress?: (fraction: number, text: string) => void;
 }
 
@@ -96,6 +98,8 @@ export async function generateSupports(
     basePanThickness = 0.8,
     basePanLipWidth = 1.2,
     basePanLipHeight = 1,
+    sphericalConnection = false,
+    sphereConnectionDiameter = 0.3,
     onProgress,
   } = options;
 
@@ -217,6 +221,7 @@ export async function generateSupports(
   }
 
   const supportFloorY = basePanEnabled ? basePanThickness + 0.01 : 0;
+  const sphereRadius = sphericalConnection ? sphereConnectionDiameter / 2 : 0;
   if (onProgress) onProgress(0.7, 'Building geometry...');
   for (let i = 0; i < routes.length; i++) {
     buildSupportGeometry(
@@ -228,6 +233,7 @@ export async function generateSupports(
       baseRadius,
       baseHeight,
       supportFloorY,
+      sphereRadius,
     );
     if (i % 500 === 0 && onProgress) {
       onProgress(
