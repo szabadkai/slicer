@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 
 export interface HollowResult {
-  hollowGeo: THREE.BufferGeometry;    // outer + inner merged — replaces mesh.geometry
+  hollowGeo: THREE.BufferGeometry; // outer + inner merged — replaces mesh.geometry
   wallThickness: number;
 }
 
 export interface ThinWallWarning {
   hasThinWalls: boolean;
-  minThickness: number;               // mm, sampled estimate
+  minThickness: number; // mm, sampled estimate
 }
 
 /**
@@ -16,7 +16,8 @@ export interface ThinWallWarning {
  */
 export function estimateWallThickness(geometry: THREE.BufferGeometry): number {
   geometry.computeBoundingBox();
-  const bb = geometry.boundingBox!;
+  const bb = geometry.boundingBox;
+  if (!bb) return 1.5;
   const size = new THREE.Vector3();
   bb.getSize(size);
   const bboxVol = size.x * size.y * size.z;
@@ -39,10 +40,7 @@ export function estimateWallThickness(geometry: THREE.BufferGeometry): number {
  * outer front faces increment stencil, inner (flipped) back faces
  * decrement it — hollow interior stays stencil=0.
  */
-export function hollowMesh(
-  geometry: THREE.BufferGeometry,
-  wallThickness: number,
-): HollowResult {
+export function hollowMesh(geometry: THREE.BufferGeometry, wallThickness: number): HollowResult {
   // Work on a non-indexed copy
   const geo = geometry.index ? geometry.toNonIndexed() : geometry.clone();
   geo.computeVertexNormals();
@@ -64,7 +62,12 @@ export function hollowMesh(
       entry.nz += normAttr.getZ(i);
       entry.indices.push(i);
     } else {
-      normMap.set(key, { nx: normAttr.getX(i), ny: normAttr.getY(i), nz: normAttr.getZ(i), indices: [i] });
+      normMap.set(key, {
+        nx: normAttr.getX(i),
+        ny: normAttr.getY(i),
+        nz: normAttr.getZ(i),
+        indices: [i],
+      });
     }
   }
 
@@ -73,14 +76,20 @@ export function hollowMesh(
   const smoothNz = new Float32Array(vertCount);
   for (const e of normMap.values()) {
     const len = Math.sqrt(e.nx * e.nx + e.ny * e.ny + e.nz * e.nz) || 1;
-    const nx = e.nx / len; const ny = e.ny / len; const nz = e.nz / len;
-    for (const i of e.indices) { smoothNx[i] = nx; smoothNy[i] = ny; smoothNz[i] = nz; }
+    const nx = e.nx / len;
+    const ny = e.ny / len;
+    const nz = e.nz / len;
+    for (const i of e.indices) {
+      smoothNx[i] = nx;
+      smoothNy[i] = ny;
+      smoothNz[i] = nz;
+    }
   }
 
   // --- Step 2: build inner shell positions (offset inward) ---
   const innerPos = new Float32Array(vertCount * 3);
   for (let i = 0; i < vertCount; i++) {
-    innerPos[i * 3]     = posAttr.getX(i) - smoothNx[i] * wallThickness;
+    innerPos[i * 3] = posAttr.getX(i) - smoothNx[i] * wallThickness;
     innerPos[i * 3 + 1] = posAttr.getY(i) - smoothNy[i] * wallThickness;
     innerPos[i * 3 + 2] = posAttr.getZ(i) - smoothNz[i] * wallThickness;
   }
@@ -89,17 +98,19 @@ export function hollowMesh(
   const innerPosFlipped = new Float32Array(innerPos.length);
   const triCount = vertCount / 3;
   for (let t = 0; t < triCount; t++) {
-    const v0 = t * 3, v1 = t * 3 + 1, v2 = t * 3 + 2;
+    const v0 = t * 3,
+      v1 = t * 3 + 1,
+      v2 = t * 3 + 2;
     // v0 unchanged
-    innerPosFlipped[v0 * 3]     = innerPos[v0 * 3];
+    innerPosFlipped[v0 * 3] = innerPos[v0 * 3];
     innerPosFlipped[v0 * 3 + 1] = innerPos[v0 * 3 + 1];
     innerPosFlipped[v0 * 3 + 2] = innerPos[v0 * 3 + 2];
     // v1 gets v2's position
-    innerPosFlipped[v1 * 3]     = innerPos[v2 * 3];
+    innerPosFlipped[v1 * 3] = innerPos[v2 * 3];
     innerPosFlipped[v1 * 3 + 1] = innerPos[v2 * 3 + 1];
     innerPosFlipped[v1 * 3 + 2] = innerPos[v2 * 3 + 2];
     // v2 gets v1's position
-    innerPosFlipped[v2 * 3]     = innerPos[v1 * 3];
+    innerPosFlipped[v2 * 3] = innerPos[v1 * 3];
     innerPosFlipped[v2 * 3 + 1] = innerPos[v1 * 3 + 1];
     innerPosFlipped[v2 * 3 + 2] = innerPos[v1 * 3 + 2];
   }

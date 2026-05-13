@@ -17,7 +17,7 @@ This is a personal testbed for exploring SLA slicing workflows: orientation algo
 | **Load** | Drag-and-drop STL / STEP / IGES onto the viewport, or browse. Sample models included. Multi-plate projects with IndexedDB autosave. |
 | **Orient** | Genetic algorithm evaluates 26+ candidate orientations. Three presets: Fastest / Least Support / Best Quality. Custom multi-objective weight sliders (height, overhang, staircase, flat surface). Batch orient-all. Surface intent biasing. |
 | **Modify** | Hollow with configurable wall thickness. Smart drain-hole placement with resin trap analysis and drain plugs. Boolean cut/subtract/split with box, sphere, cylinder, and cone primitives. Model grouping and ungroup. |
-| **Supports** | Overhang angle threshold, auto-density, cross-bracing, base pans with configurable lip. Manual click-to-place pillars. Intent-aware generation. Live unsupported-areas overlay. |
+| **Supports** | Overhang angle threshold, auto-density, cross-bracing, base pans with configurable lip. Manual click-to-place pillars with per-pillar editing (right-click to delete). Intent-aware generation. Live unsupported-areas overlay. |
 | **Surface** | Brush-paint surface intents (cosmetic, hidden, reliability-critical, removal-sensitive). Six fill patterns: solid, carbon fiber, knurl, ribbed, noise, bumps. Volume paint with primitive shapes. |
 | **Inspect** | Mesh health score. Non-manifold edge highlighting, inverted normals, degenerate triangles, duplicate vertices. Wall-thickness heatmap. Support-stress heatmap. Auto-repair. Two-click distance measurement with ΔX/Y/Z. |
 | **Material** | 21 resin presets — Siraya Tech, Anycubic, Elegoo — with PBR visual preview in the 3D viewport. |
@@ -168,6 +168,8 @@ src/
 - `three` imports only inside `src/core/viewer-service.ts` and `src/features/gpu-slicing/`
 
 See `CONTRIBUTING.md` for the progress bar / thread-yielding directive.
+
+**AI agents:** See `CLAUDE.md` at the repo root for full development context. See `docs/SUPPORT_SYSTEM_ARCHITECTURE.md` for the support generation system internals.
 
 ---
 

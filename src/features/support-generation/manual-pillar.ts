@@ -1,28 +1,27 @@
 /**
- * Manual pillar — build and merge a single support pillar into the viewer.
- * Called by manual-support.ts when the user clicks to place.
- * Supports auto-routing around geometry (same algorithm as auto-gen).
+ * Manual pillar — plan a route for a user-placed support and add it to the
+ * pillar store, then rebuild the supports mesh. Both auto and manual pillars
+ * flow through the same store → rebuild path so settings apply uniformly.
  */
 import * as THREE from 'three';
-import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import {
-  buildSupportGeometry,
   type RouteWaypoint,
   type RouteContext,
   type RouteOptions,
   type ContactPoint,
 } from '../../supports-geometry';
 import { planSupportRoute } from '../../supports';
+import { addManualPillarRecord, buildPillarFromRoute } from './pillar-store';
 
 interface PillarViewer {
   activePlate: { originX?: number; originZ?: number };
   scene: THREE.Scene;
   requestRender(): void;
+  rebuildSupportsFromStore(modelId: string): void;
 }
 
 interface PillarObject {
-  supportsMesh: THREE.Mesh | null;
-  _cachedLocalSupportVolume?: number;
+  id: string;
 }
 
 export interface ManualPillarOptions {
@@ -71,7 +70,6 @@ export function addManualPillar(
 
   // Try auto-routing around geometry if we have the model mesh
   if (modelGeometry) {
-    // Ensure BVH is available for accelerated raycasting
     if (
       !(modelGeometry as unknown as { boundsTree: unknown }).boundsTree &&
       typeof modelGeometry.computeBoundsTree === 'function'
@@ -90,10 +88,14 @@ export function addManualPillar(
       maxPillarAngle: opts.maxPillarAngle,
       modelClearance: Math.max(opts.modelClearance, pillarRadius * 1.5),
       supportCollisionRadius: Math.max(pillarRadius * 1.1, 0.2),
+      supportTipRadius: Math.max((opts.tipDiameterMM / 2) * 1.1, 0.15),
       maxContactOffset: opts.maxContactOffset,
     };
 
-    const tempMesh = new THREE.Mesh(modelGeometry, new THREE.MeshBasicMaterial());
+    const tempMesh = new THREE.Mesh(
+      modelGeometry,
+      new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }),
+    );
     tempMesh.updateMatrixWorld(true);
     const raycaster = new THREE.Raycaster();
     raycaster.firstHitOnly = false;
@@ -110,7 +112,15 @@ export function addManualPillar(
     tempMesh.material.dispose();
   }
 
-  // Fall back to straight vertical if routing failed or no geometry provided
+  // If we have model geometry but no route fits without piercing, bail out.
+  // Falling back to a vertical drop here would let manual pillars pierce
+  // the model — exactly what the pierce-through fix prevents for auto-gen.
+  if (!route && modelGeometry) {
+    document.dispatchEvent(new CustomEvent('manual-support-failed'));
+    return;
+  }
+
+  // No model geometry available (e.g. early in load): straight vertical is safe.
   if (!route) {
     route = [
       { x: localPosition.x, y: localPosition.y, z: localPosition.z },
@@ -118,56 +128,20 @@ export function addManualPillar(
     ];
   }
 
-  // Route is already in plate-local coordinates — no further offset needed
+  // Snapshot for undo before we mutate the pillar store.
+  document.dispatchEvent(new CustomEvent('pillar-edit-undo-save', { detail: { modelId: obj.id } }));
 
-  const geometries: THREE.BufferGeometry[] = [];
-  buildSupportGeometry(
+  const pillar = buildPillarFromRoute(
     route,
-    geometries,
-    opts.tipDiameterMM,
-    tipHeight,
-    pillarRadius,
-    baseRadius,
-    baseHeight,
+    {
+      tipDiameter: opts.tipDiameterMM,
+      pillarRadius,
+      baseRadius,
+      tipHeight,
+      baseHeight,
+    },
+    'manual',
   );
-
-  if (geometries.length === 0) return;
-
-  const newPillarGeo =
-    geometries.length === 1
-      ? geometries[0]
-      : BufferGeometryUtils.mergeGeometries(geometries, false);
-
-  if (!newPillarGeo) {
-    geometries.forEach((g) => g.dispose());
-    return;
-  }
-
-  // Merge with existing support geometry if present
-  if (obj.supportsMesh) {
-    const existingGeo = obj.supportsMesh.geometry;
-    const merged = BufferGeometryUtils.mergeGeometries([existingGeo, newPillarGeo], false);
-    if (merged) {
-      existingGeo.dispose();
-      obj.supportsMesh.geometry = merged;
-      obj._cachedLocalSupportVolume = undefined;
-    }
-    newPillarGeo.dispose();
-  } else {
-    // Create new support mesh
-    const mat = new THREE.MeshPhongMaterial({
-      color: 0x9b59b6,
-      specular: 0x222222,
-      shininess: 30,
-      transparent: true,
-      opacity: 0.55,
-    });
-    const mesh = new THREE.Mesh(newPillarGeo, mat);
-    mesh.position.set(originX, 0, originZ);
-    obj.supportsMesh = mesh;
-    obj._cachedLocalSupportVolume = undefined;
-    viewer.scene.add(mesh);
-  }
-
-  viewer.requestRender();
+  addManualPillarRecord(obj.id, pillar);
+  viewer.rebuildSupportsFromStore(obj.id);
 }

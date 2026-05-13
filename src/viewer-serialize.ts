@@ -1,7 +1,12 @@
 import * as THREE from 'three';
 import { createResinMaterial, type SceneObject } from './viewer-core';
 import type { Viewer } from './viewer';
-import type { SerializedObject } from './project-store';
+import type { SerializedObject, SerializedPillarSet } from './project-store';
+import {
+  getPillarSet,
+  setPillarSet,
+  type ModelPillarSet,
+} from './features/support-generation/pillar-store';
 
 function serializeMeshGeo(mesh: THREE.Mesh): {
   positions: ArrayBuffer;
@@ -24,7 +29,12 @@ function serializeMeshGeo(mesh: THREE.Mesh): {
     positions: new Float32Array(posArr).buffer as ArrayBuffer,
     normals: normArr ? (new Float32Array(normArr).buffer as ArrayBuffer) : null,
     position: [mesh.position.x, mesh.position.y, mesh.position.z] as [number, number, number],
-    rotation: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z, mesh.rotation.order] as [number, number, number, string],
+    rotation: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z, mesh.rotation.order] as [
+      number,
+      number,
+      number,
+      string,
+    ],
     scale: [mesh.scale.x, mesh.scale.y, mesh.scale.z] as [number, number, number],
   };
   if (geo !== srcGeo) geo.dispose();
@@ -65,10 +75,37 @@ function restoreMesh(
   return mesh;
 }
 
+function serializePillarSet(set: ModelPillarSet): SerializedPillarSet | null {
+  if (set.legacyOpaque || set.pillars.length === 0) return null;
+  return {
+    pillars: set.pillars.map((p) => ({
+      id: p.id,
+      origin: p.origin,
+      route: p.route.map((w) => ({ x: w.x, y: w.y, z: w.z })),
+      tipDiameter: p.tipDiameter,
+      pillarRadius: p.pillarRadius,
+      baseRadius: p.baseRadius,
+      tipHeight: p.tipHeight,
+      baseHeight: p.baseHeight,
+      contact: { x: p.contact.x, y: p.contact.y, z: p.contact.z },
+    })),
+    settings: {
+      crossBracing: set.settings.crossBracing,
+      basePan: set.settings.basePan ? { ...set.settings.basePan } : null,
+      sphericalConnection: set.settings.sphericalConnection
+        ? { ...set.settings.sphericalConnection }
+        : null,
+      supportFloorY: set.settings.supportFloorY,
+      bracingCollisionRadius: set.settings.bracingCollisionRadius,
+    },
+  };
+}
+
 export function serializeObjects(viewer: Viewer, objects?: SceneObject[]): SerializedObject[] {
   const objs = objects ?? viewer.objects;
   return objs.map((obj) => {
     const meshData = serializeMeshGeo(obj.mesh);
+    const set = getPillarSet(obj.id);
     return {
       id: obj.id,
       ...meshData,
@@ -79,13 +116,23 @@ export function serializeObjects(viewer: Viewer, objects?: SceneObject[]): Seria
         localPoint: [...stroke.localPoint],
       })),
       intentBuffer: obj.intentBuffer ? Array.from(obj.intentBuffer) : undefined,
-      supports: obj.supportsMesh ? serializeMeshGeo(obj.supportsMesh) : null,
+      supports: obj.supportsMesh && set.legacyOpaque ? serializeMeshGeo(obj.supportsMesh) : null,
+      pillarSet: serializePillarSet(set),
     };
   });
 }
 
+export function rebuildPillarSetsAfterRestore(viewer: Viewer, ids: string[]): void {
+  for (const id of ids) {
+    const set = getPillarSet(id);
+    if (!set.legacyOpaque && set.pillars.length > 0) {
+      viewer.rebuildSupportsFromStore(id);
+    }
+  }
+}
+
 export function restoreSerializedObjects(viewer: Viewer, data: SerializedObject[]): SceneObject[] {
-  return data.map((item) => {
+  const objects = data.map((item) => {
     const material = createResinMaterial(item.materialPreset);
     const mesh = restoreMesh(item, material);
     const id = item.id;
@@ -93,7 +140,37 @@ export function restoreSerializedObjects(viewer: Viewer, data: SerializedObject[
     viewer.scene.add(mesh);
 
     let supportsMesh: THREE.Mesh | null = null;
-    if (item.supports) {
+
+    if (item.pillarSet && item.pillarSet.pillars.length > 0) {
+      // Rework-era project: restore per-pillar data. Mesh is rebuilt below
+      // after the object is added to the plate (rebuildSupportsFromStore
+      // needs findObjectAnywhere to succeed).
+      const s = item.pillarSet;
+      const restoredSet: ModelPillarSet = {
+        pillars: s.pillars.map((p) => ({
+          id: p.id,
+          origin: p.origin,
+          route: p.route.map((w) => ({ x: w.x, y: w.y, z: w.z })),
+          tipDiameter: p.tipDiameter,
+          pillarRadius: p.pillarRadius,
+          baseRadius: p.baseRadius,
+          tipHeight: p.tipHeight,
+          baseHeight: p.baseHeight,
+          contact: { x: p.contact.x, y: p.contact.y, z: p.contact.z },
+        })),
+        settings: {
+          crossBracing: s.settings.crossBracing,
+          basePan: s.settings.basePan ? { ...s.settings.basePan } : null,
+          sphericalConnection: s.settings.sphericalConnection
+            ? { ...s.settings.sphericalConnection }
+            : null,
+          supportFloorY: s.settings.supportFloorY,
+          bracingCollisionRadius: s.settings.bracingCollisionRadius,
+        },
+      };
+      setPillarSet(id, restoredSet);
+    } else if (item.supports) {
+      // Pre-rework project: restore opaque support mesh, mark as legacy.
       const supMat = new THREE.MeshPhongMaterial({
         color: 0x9b59b6,
         specular: 0x222222,
@@ -103,6 +180,17 @@ export function restoreSerializedObjects(viewer: Viewer, data: SerializedObject[
       });
       supportsMesh = restoreMesh(item.supports, supMat);
       viewer.scene.add(supportsMesh);
+      setPillarSet(id, {
+        pillars: [],
+        settings: {
+          crossBracing: false,
+          basePan: null,
+          sphericalConnection: null,
+          supportFloorY: 0,
+          bracingCollisionRadius: 0.2,
+        },
+        legacyOpaque: true,
+      });
     }
 
     return {
@@ -123,4 +211,18 @@ export function restoreSerializedObjects(viewer: Viewer, data: SerializedObject[
       intentBuffer: item.intentBuffer ? new Uint8Array(item.intentBuffer) : undefined,
     } as SceneObject;
   });
+  // Rebuild pillar meshes after objects are returned and added to the plate.
+  // Uses queueMicrotask so the caller's plate assignment completes first.
+  const idsToRebuild = objects
+    .filter((o) => {
+      const set = getPillarSet(o.id);
+      return !set.legacyOpaque && set.pillars.length > 0;
+    })
+    .map((o) => o.id);
+  if (idsToRebuild.length > 0) {
+    queueMicrotask(() => {
+      for (const id of idsToRebuild) viewer.rebuildSupportsFromStore(id);
+    });
+  }
+  return objects;
 }

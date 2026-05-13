@@ -1,12 +1,16 @@
 import * as THREE from 'three';
 
 export interface SplitResult {
-  part1: THREE.BufferGeometry;   // above the plane
-  part2: THREE.BufferGeometry;   // below the plane
-  capArea: number;               // mm²
+  part1: THREE.BufferGeometry; // above the plane
+  part2: THREE.BufferGeometry; // below the plane
+  capArea: number; // mm²
 }
 
-interface Vertex { x: number; y: number; z: number }
+interface Vertex {
+  x: number;
+  y: number;
+  z: number;
+}
 
 /**
  * Split a mesh along an axis-aligned plane.
@@ -39,11 +43,17 @@ export function splitMesh(
   function getV(i: number): Vertex {
     return { x: pos.getX(i), y: pos.getY(i), z: pos.getZ(i) };
   }
-  function vToArr(v: Vertex): number[] { return [v.x, v.y, v.z]; }
-  function sign(v: Vertex): number { return [v.x, v.y, v.z][axisIdx] - positionMM; }
+  function vToArr(v: Vertex): number[] {
+    return [v.x, v.y, v.z];
+  }
+  function sign(v: Vertex): number {
+    return [v.x, v.y, v.z][axisIdx] - positionMM;
+  }
 
   for (let t = 0; t < triCount; t++) {
-    const i0 = t * 3, i1 = t * 3 + 1, i2 = t * 3 + 2;
+    const i0 = t * 3,
+      i1 = t * 3 + 1,
+      i2 = t * 3 + 2;
     const v = [getV(i0), getV(i1), getV(i2)];
     const s = v.map(sign);
     const aboveMask = s.map((x) => x >= 0);
@@ -59,7 +69,7 @@ export function splitMesh(
   }
 
   // Cap the cut face by fan-triangulating the cut edge loop
-  const { cap1, cap2, capArea } = buildCap(cutEdge, axis, positionMM);
+  const { cap1, cap2, capArea } = buildCap(cutEdge, axis);
   above.push(...cap1);
   below.push(...cap2);
 
@@ -87,14 +97,22 @@ function clipTriangle(
 
   for (let i = 0; i < 3; i++) {
     const j = (i + 1) % 3;
-    const vi = v[i], vj = v[j];
-    const si = s[i], sj = s[j];
-    if (si >= 0) a.push(vi); else b.push(vi);
-    if ((si >= 0) !== (sj >= 0)) {
+    const vi = v[i],
+      vj = v[j];
+    const si = s[i],
+      sj = s[j];
+    if (si >= 0) a.push(vi);
+    else b.push(vi);
+    if (si >= 0 !== sj >= 0) {
       // Edge crosses plane
       const t = si / (si - sj);
-      const cut = { x: vi.x + (vj.x - vi.x) * t, y: vi.y + (vj.y - vi.y) * t, z: vi.z + (vj.z - vi.z) * t };
-      a.push(cut); b.push(cut);
+      const cut = {
+        x: vi.x + (vj.x - vi.x) * t,
+        y: vi.y + (vj.y - vi.y) * t,
+        z: vi.z + (vj.z - vi.z) * t,
+      };
+      a.push(cut);
+      b.push(cut);
     }
   }
 
@@ -110,10 +128,15 @@ function clipTriangle(
   const cutPoints: Vertex[] = [];
   for (let i = 0; i < 3; i++) {
     const j = (i + 1) % 3;
-    const si = s[i], sj = s[j];
-    if ((si >= 0) !== (sj >= 0)) {
+    const si = s[i],
+      sj = s[j];
+    if (si >= 0 !== sj >= 0) {
       const t = si / (si - sj);
-      cutPoints.push({ x: v[i].x + (v[j].x - v[i].x) * t, y: v[i].y + (v[j].y - v[i].y) * t, z: v[i].z + (v[j].z - v[i].z) * t });
+      cutPoints.push({
+        x: v[i].x + (v[j].x - v[i].x) * t,
+        y: v[i].y + (v[j].y - v[i].y) * t,
+        z: v[i].z + (v[j].z - v[i].z) * t,
+      });
     }
   }
   if (cutPoints.length === 2) {
@@ -124,7 +147,6 @@ function clipTriangle(
 function buildCap(
   cutEdge: { a: Vertex; b: Vertex }[],
   axis: 'x' | 'y' | 'z',
-  _positionMM: number,
 ): { cap1: number[]; cap2: number[]; capArea: number } {
   if (cutEdge.length === 0) return { cap1: [], cap2: [], capArea: 0 };
 
@@ -139,28 +161,35 @@ function buildCap(
   // Sort points around centroid in the cut plane
   const axisOther = axis === 'x' ? ['y', 'z'] : axis === 'y' ? ['x', 'z'] : ['x', 'y'];
   type K = 'x' | 'y' | 'z';
-  const a0 = axisOther[0] as K, a1 = axisOther[1] as K;
+  const a0 = axisOther[0] as K,
+    a1 = axisOther[1] as K;
   const sorted = [...pts].sort((p, q) => {
     const ap = Math.atan2(p[a0] - cy, p[a1] - cz);
     const aq = Math.atan2(q[a0] - cy, q[a1] - cz);
     return ap - aq;
   });
 
-  const cap1: number[] = []; const cap2: number[] = [];
+  const cap1: number[] = [];
+  const cap2: number[] = [];
   let area = 0;
 
   for (let i = 0; i < sorted.length; i++) {
-    const p1 = sorted[i], p2 = sorted[(i + 1) % sorted.length];
+    const p1 = sorted[i],
+      p2 = sorted[(i + 1) % sorted.length];
     // Fan triangles from centroid
     cap1.push(cx, cy, cz, p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
     cap2.push(cx, cy, cz, p2.x, p2.y, p2.z, p1.x, p1.y, p1.z); // flipped winding
 
     // Accumulate area using cross product
-    const ax2 = p1.x - cx, ay = p1.y - cy, az = p1.z - cz;
-    const bx = p2.x - cx, by = p2.y - cy, bz = p2.z - cz;
-    area += 0.5 * Math.sqrt(
-      (ay * bz - az * by) ** 2 + (az * bx - ax2 * bz) ** 2 + (ax2 * by - ay * bx) ** 2,
-    );
+    const ax2 = p1.x - cx,
+      ay = p1.y - cy,
+      az = p1.z - cz;
+    const bx = p2.x - cx,
+      by = p2.y - cy,
+      bz = p2.z - cz;
+    area +=
+      0.5 *
+      Math.sqrt((ay * bz - az * by) ** 2 + (az * bx - ax2 * bz) ** 2 + (ax2 * by - ay * bx) ** 2);
   }
 
   return { cap1, cap2, capArea: area };
@@ -203,23 +232,51 @@ function addPinStubs(
       const a1 = ((s + 1) / segments) * Math.PI * 2;
 
       // Choose radial axes perpendicular to axisDir
-      const rx = dy, ry = dz, rz = dx; // cyclic shift
-      const x0 = r * Math.cos(a0) * rx, y0 = r * Math.cos(a0) * ry, z0 = r * Math.cos(a0) * rz;
-      const x1 = r * Math.cos(a1) * rx, y1 = r * Math.cos(a1) * ry, z1 = r * Math.cos(a1) * rz;
-      const xn = r * Math.sin(a0) * rz, yn = r * Math.sin(a0) * rx, zn = r * Math.sin(a0) * ry;
-      const xn2 = r * Math.sin(a1) * rz, yn2 = r * Math.sin(a1) * rx, zn2 = r * Math.sin(a1) * ry;
+      const rx = dy,
+        ry = dz,
+        rz = dx; // cyclic shift
+      const x0 = r * Math.cos(a0) * rx,
+        y0 = r * Math.cos(a0) * ry,
+        z0 = r * Math.cos(a0) * rz;
+      const x1 = r * Math.cos(a1) * rx,
+        y1 = r * Math.cos(a1) * ry,
+        z1 = r * Math.cos(a1) * rz;
+      const xn = r * Math.sin(a0) * rz,
+        yn = r * Math.sin(a0) * rx,
+        zn = r * Math.sin(a0) * ry;
+      const xn2 = r * Math.sin(a1) * rz,
+        yn2 = r * Math.sin(a1) * rx,
+        zn2 = r * Math.sin(a1) * ry;
 
       // Two triangles forming a quad on the cylinder side
-      const bx = px + x0 + xn, by = py + y0 + yn, bz = pz + z0 + zn;
-      const cx2 = px + x1 + xn2, cy2 = py + y1 + yn2, cz2 = pz + z1 + zn2;
-      const topOffset = dx * pinH, tpy = dy * pinH, tpz = dz * pinH;
+      const bx = px + x0 + xn,
+        by = py + y0 + yn,
+        bz = pz + z0 + zn;
+      const cx2 = px + x1 + xn2,
+        cy2 = py + y1 + yn2,
+        cz2 = pz + z1 + zn2;
+      const topOffset = dx * pinH,
+        tpy = dy * pinH,
+        tpz = dz * pinH;
       above.push(
-        bx, by, bz,
-        cx2, cy2, cz2,
-        bx + topOffset, by + tpy, bz + tpz,
-        cx2, cy2, cz2,
-        cx2 + topOffset, cy2 + tpy, cz2 + tpz,
-        bx + topOffset, by + tpy, bz + tpz,
+        bx,
+        by,
+        bz,
+        cx2,
+        cy2,
+        cz2,
+        bx + topOffset,
+        by + tpy,
+        bz + tpz,
+        cx2,
+        cy2,
+        cz2,
+        cx2 + topOffset,
+        cy2 + tpy,
+        cz2 + tpz,
+        bx + topOffset,
+        by + tpy,
+        bz + tpz,
       );
       void positionMM;
     }

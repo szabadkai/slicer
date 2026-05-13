@@ -31,6 +31,30 @@
     "buildDepthMM": 118.37,
     "buildHeightMM": 220
   },
+  "mars-5-ultra": {
+    "name": "Elegoo Mars 5 Ultra",
+    "resolutionX": 8520,
+    "resolutionY": 4320,
+    "buildWidthMM": 153.36,
+    "buildDepthMM": 77.76,
+    "buildHeightMM": 165
+  },
+  "saturn-3-ultra": {
+    "name": "Elegoo Saturn 3 Ultra",
+    "resolutionX": 11520,
+    "resolutionY": 5120,
+    "buildWidthMM": 218.88,
+    "buildDepthMM": 122.88,
+    "buildHeightMM": 260
+  },
+  "jupiter-se": {
+    "name": "Elegoo Jupiter SE",
+    "resolutionX": 5448,
+    "resolutionY": 3064,
+    "buildWidthMM": 277.848,
+    "buildDepthMM": 156.264,
+    "buildHeightMM": 300
+  },
   "mars-3": {
     "name": "Elegoo Mars 3",
     "resolutionX": 4098,
@@ -55,6 +79,30 @@
     "buildDepthMM": 123.12,
     "buildHeightMM": 250
   },
+  "photon-mono-x2": {
+    "name": "Anycubic Photon Mono X2",
+    "resolutionX": 4096,
+    "resolutionY": 2560,
+    "buildWidthMM": 196.608,
+    "buildDepthMM": 122.88,
+    "buildHeightMM": 200
+  },
+  "photon-mono-m7-pro": {
+    "name": "Anycubic Photon Mono M7 Pro",
+    "resolutionX": 13320,
+    "resolutionY": 5120,
+    "buildWidthMM": 223.776,
+    "buildDepthMM": 125.952,
+    "buildHeightMM": 230
+  },
+  "photon-mono-m7-max": {
+    "name": "Anycubic Photon Mono M7 Max",
+    "resolutionX": 6480,
+    "resolutionY": 3600,
+    "buildWidthMM": 298.08,
+    "buildDepthMM": 165.6,
+    "buildHeightMM": 300
+  },
   "halot-mage-8k": {
     "name": "Creality HALOT-MAGE 8K",
     "resolutionX": 7680,
@@ -71,6 +119,14 @@
     "buildDepthMM": 128,
     "buildHeightMM": 245
   },
+  "sonic-mega-8k-s": {
+    "name": "Phrozen Sonic Mega 8K S",
+    "resolutionX": 7680,
+    "resolutionY": 4320,
+    "buildWidthMM": 330.24,
+    "buildDepthMM": 185.76,
+    "buildHeightMM": 300
+  },
   "sonic-mini-8k": {
     "name": "Phrozen Sonic Mini 8K",
     "resolutionX": 7500,
@@ -86,6 +142,14 @@
     "buildWidthMM": 223,
     "buildDepthMM": 126,
     "buildHeightMM": 235
+  },
+  "sl1s-speed": {
+    "name": "Prusa SL1S Speed",
+    "resolutionX": 2560,
+    "resolutionY": 1620,
+    "buildWidthMM": 127,
+    "buildDepthMM": 80,
+    "buildHeightMM": 150
   },
   "form-4": {
     "name": "Formlabs Form 4",

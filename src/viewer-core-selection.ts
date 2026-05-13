@@ -109,6 +109,31 @@ export function handleClick(core: ViewerCore, e: PointerEvent): void {
   } else if (!multi) clearSelection(core);
 }
 
+export function handleSupportContextMenu(core: ViewerCore, e: MouseEvent): boolean {
+  const allObjects = core.getAllObjects();
+  const supportMeshes = allObjects
+    .map((o) => o.supportsMesh)
+    .filter((m): m is THREE.Mesh => m !== null);
+  if (supportMeshes.length === 0) return false;
+  const rect = core.canvas.getBoundingClientRect();
+  core.raycaster.setFromCamera(
+    new THREE.Vector2(
+      ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      -((e.clientY - rect.top) / rect.height) * 2 + 1,
+    ),
+    core.camera,
+  );
+  const hits = core.raycaster.intersectObjects(supportMeshes, false);
+  if (hits.length === 0) return false;
+  const p = hits[0].point;
+  core.canvas.dispatchEvent(
+    new CustomEvent('support-right-clicked', {
+      detail: { x: p.x, y: p.y, z: p.z },
+    }),
+  );
+  return true;
+}
+
 export function attachTransformControls(core: ViewerCore): void {
   if (isCutterGizmoActive()) return;
   if (core.selected.length === 1) {

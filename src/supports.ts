@@ -13,11 +13,12 @@ import {
   type RouteContext,
   type RouteOptions,
   routeCollides,
-  buildSupportGeometry,
-  generateCrossBracing,
-  createBasePanGeometry,
-  mergeGeometries,
 } from './supports-geometry';
+import {
+  buildPillarFromRoute,
+  type Pillar,
+  type PillarSetSettings,
+} from './features/support-generation/pillar-store';
 import {
   ROUTE_DIRECTIONS,
   halton,
@@ -27,6 +28,7 @@ import {
   normalizedAngleDelta,
   yieldThread,
 } from './supports-utils';
+import { detectMinima, detectStabilization, detectReinforcements } from './supports-detect';
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
@@ -68,6 +70,11 @@ interface SupportOptions {
   basePanLipHeight?: number;
   sphericalConnection?: boolean;
   sphereConnectionDiameter?: number;
+  detectMinima?: boolean;
+  detectStabilization?: boolean;
+  detectReinforcements?: boolean;
+  stabilizationDensity?: number;
+  reinforcementThreshold?: number;
   onProgress?: (fraction: number, text: string) => void;
 }
 
@@ -75,10 +82,16 @@ interface SupportOptions {
 // Main entry point
 // ---------------------------------------------------------------------------
 
+export interface GenerateSupportsResult {
+  pillars: Pillar[];
+  settings: PillarSetSettings;
+  modelBounds: THREE.Box3;
+}
+
 export async function generateSupports(
   geometry: THREE.BufferGeometry,
   options: SupportOptions = {},
-): Promise<THREE.BufferGeometry> {
+): Promise<GenerateSupportsResult> {
   const {
     overhangAngle = 30,
     density = 5,
@@ -100,6 +113,11 @@ export async function generateSupports(
     basePanLipHeight = 1,
     sphericalConnection = false,
     sphereConnectionDiameter = 0.3,
+    detectMinima: doDetectMinima = true,
+    detectStabilization: doDetectStabilization = true,
+    detectReinforcements: doDetectReinforcements = false,
+    stabilizationDensity = 4,
+    reinforcementThreshold = 2.0,
     onProgress,
   } = options;
 
@@ -123,35 +141,15 @@ export async function generateSupports(
     );
   }
 
-  if (onProgress) onProgress(0, 'Finding contact points...');
-  await yieldThread();
-  const contactPoints = await findContactPoints(
-    geometry,
-    overhangAngle,
-    effectiveDensity,
-    (text) => {
-      if (onProgress) onProgress(0, text);
-    },
-  );
-
-  if (contactPoints.length === 0) {
-    if (!basePanEnabled) return new THREE.BufferGeometry();
-    return createBasePanGeometry(
-      modelBounds,
-      [],
-      basePanMargin,
-      basePanThickness,
-      basePanLipWidth,
-      basePanLipHeight,
-    );
-  }
-
   if (onProgress) {
-    onProgress(0.1, 'Building bounds tree...');
+    onProgress(0.05, 'Building bounds tree...');
     await yieldThread();
   }
   if (!(geometry as unknown as { boundsTree: unknown }).boundsTree) geometry.computeBoundsTree();
-  const tempMesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
+  const tempMesh = new THREE.Mesh(
+    geometry,
+    new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }),
+  );
   tempMesh.updateMatrixWorld(true);
   const modelCenter = new THREE.Vector3();
   modelBounds.getCenter(modelCenter);
@@ -169,9 +167,9 @@ export async function generateSupports(
 
   const pillarRadius = actualSupportThickness / 2;
   const tipHeight = actualTipDiameter * 3;
-  const baseRadius = pillarRadius * 2.5;
   const baseHeight = 0.6;
   const minSupportHeight = tipHeight + baseHeight + 0.5;
+  const spacing = 12 - effectiveDensity;
 
   const routeOpts: RouteOptions = {
     allowInternalSupports: supportScope === 'all',
@@ -180,40 +178,95 @@ export async function generateSupports(
     maxPillarAngle,
     modelClearance: Math.max(modelClearance, pillarRadius * 1.5),
     supportCollisionRadius: Math.max(pillarRadius * 1.1, 0.2),
+    supportTipRadius: Math.max((actualTipDiameter / 2) * 1.1, 0.15),
     maxContactOffset,
   };
   const ctx: RouteContext = { mesh: tempMesh, raycaster, modelBounds, modelCenter };
 
-  let supportPoints = contactPoints;
+  if (onProgress) onProgress(0.07, 'Finding contact points...');
+  await yieldThread();
+  const contactPoints = await findContactPoints(
+    geometry,
+    overhangAngle,
+    effectiveDensity,
+    (text) => {
+      if (onProgress) onProgress(0.07, text);
+    },
+  );
+
+  if (doDetectMinima) {
+    if (onProgress) onProgress(0.14, 'Detecting minima...');
+    const pts = detectMinima(geometry, { minSupportHeight });
+    contactPoints.push(...pts);
+  }
+
+  if (doDetectStabilization) {
+    if (onProgress) onProgress(0.16, 'Detecting stabilization needs...');
+    const pts = detectStabilization(geometry, {
+      density: stabilizationDensity,
+      minSupportHeight,
+    });
+    contactPoints.push(...pts);
+  }
+
+  if (doDetectReinforcements) {
+    if (onProgress) onProgress(0.18, 'Detecting thin sections...');
+    await yieldThread();
+    const pts = await detectReinforcements(geometry, ctx, {
+      thresholdMM: reinforcementThreshold,
+      minSupportHeight,
+    });
+    contactPoints.push(...pts);
+  }
+
+  // Deduplicate across all detectors
+  const allContactPoints = deduplicatePoints(contactPoints, spacing * 0.5);
+
+  if (allContactPoints.length === 0) {
+    return {
+      pillars: [],
+      settings: buildSettings({
+        basePanEnabled,
+        basePanMargin,
+        basePanThickness,
+        basePanLipWidth,
+        basePanLipHeight,
+        sphericalConnection,
+        sphereConnectionDiameter,
+        crossBracing,
+        routeContext: undefined,
+        bracingCollisionRadius: 0.5,
+      }),
+      modelBounds,
+    };
+  }
+
+  let supportPoints = allContactPoints;
   if (!routeOpts.allowCavityContacts) {
     if (onProgress) {
-      onProgress(0.08, 'Filtering interior contact points...');
+      onProgress(0.2, 'Filtering interior contact points...');
       await yieldThread();
     }
-    supportPoints = contactPoints.filter((p) =>
+    supportPoints = allContactPoints.filter((p) =>
       isExteriorContact(p, ctx, routeOpts.modelClearance),
     );
   }
 
-  const geometries: THREE.BufferGeometry[] = [];
+  const routedContacts: ContactPoint[] = [];
   const routes: RouteWaypoint[][] = [];
 
   for (let i = 0; i < supportPoints.length; i++) {
-    const { position } = supportPoints[i];
-    if (position.y > minSupportHeight) {
-      const route = planSupportRoute(
-        supportPoints[i],
-        ctx,
-        pillarRadius,
-        baseHeight,
-        tipHeight,
-        routeOpts,
-      );
-      if (route) routes.push(route);
+    const cp = supportPoints[i];
+    if (cp.position.y > minSupportHeight) {
+      const route = planSupportRoute(cp, ctx, pillarRadius, baseHeight, tipHeight, routeOpts);
+      if (route) {
+        routes.push(route);
+        routedContacts.push(cp);
+      }
     }
     if (i % 200 === 0 && onProgress) {
       onProgress(
-        0.1 + 0.6 * (i / supportPoints.length),
+        0.2 + 0.6 * (i / supportPoints.length),
         `Planning routes... ${Math.round((i / supportPoints.length) * 100)}%`,
       );
       await yieldThread();
@@ -221,65 +274,84 @@ export async function generateSupports(
   }
 
   const supportFloorY = basePanEnabled ? basePanThickness + 0.01 : 0;
-  const sphereRadius = sphericalConnection ? sphereConnectionDiameter / 2 : 0;
-  if (onProgress) onProgress(0.7, 'Building geometry...');
-  for (let i = 0; i < routes.length; i++) {
-    buildSupportGeometry(
-      routes[i],
-      geometries,
-      actualTipDiameter,
-      tipHeight,
-      pillarRadius,
-      baseRadius,
-      baseHeight,
-      supportFloorY,
-      sphereRadius,
-    );
-    if (i % 500 === 0 && onProgress) {
-      onProgress(
-        0.7 + 0.2 * (i / routes.length),
-        `Building geometry... ${Math.round((i / routes.length) * 100)}%`,
-      );
-      await yieldThread();
-    }
-  }
-
-  if (crossBracing) {
-    if (onProgress) {
-      onProgress(0.9, 'Generating cross bracing...');
-      await yieldThread();
-    }
-    generateCrossBracing(
-      routes,
-      geometries,
-      pillarRadius,
-      baseHeight,
-      tipHeight,
-      ctx,
-      routeOpts.supportCollisionRadius,
-      supportFloorY,
-    );
-  }
-
-  if (basePanEnabled) {
-    geometries.push(
-      createBasePanGeometry(
-        modelBounds,
-        routes,
-        basePanMargin,
-        basePanThickness,
-        basePanLipWidth,
-        basePanLipHeight,
-      ),
-    );
-  }
-
   if (onProgress) {
-    onProgress(0.95, 'Merging geometry...');
+    onProgress(0.9, 'Building pillars...');
     await yieldThread();
   }
-  if (geometries.length === 0) return new THREE.BufferGeometry();
-  return mergeGeometries(geometries);
+
+  const pillars: Pillar[] = routes.map((route, i) => {
+    const cp = routedContacts[i];
+    let effectiveTipDiameter = actualTipDiameter;
+    let effectivePillarRadius = pillarRadius;
+    if (cp.reason === 'reinforcement') {
+      effectiveTipDiameter = Math.min(actualTipDiameter * 1.4, 1.2);
+      effectivePillarRadius = Math.min(pillarRadius * 1.2, 1.0);
+    }
+    return buildPillarFromRoute(
+      route,
+      {
+        tipDiameter: effectiveTipDiameter,
+        pillarRadius: effectivePillarRadius,
+        baseRadius: effectivePillarRadius * 2.5,
+        tipHeight,
+        baseHeight,
+      },
+      'auto',
+    );
+  });
+
+  return {
+    pillars,
+    settings: buildSettings({
+      basePanEnabled,
+      basePanMargin,
+      basePanThickness,
+      basePanLipWidth,
+      basePanLipHeight,
+      sphericalConnection,
+      sphereConnectionDiameter,
+      crossBracing,
+      routeContext: ctx,
+      bracingCollisionRadius: routeOpts.supportCollisionRadius,
+      supportFloorY,
+    }),
+    modelBounds,
+  };
+}
+
+interface SettingsInput {
+  basePanEnabled: boolean;
+  basePanMargin: number;
+  basePanThickness: number;
+  basePanLipWidth: number;
+  basePanLipHeight: number;
+  sphericalConnection: boolean;
+  sphereConnectionDiameter: number;
+  crossBracing: boolean;
+  routeContext: RouteContext | undefined;
+  bracingCollisionRadius: number;
+  supportFloorY?: number;
+}
+
+function buildSettings(input: SettingsInput): PillarSetSettings {
+  return {
+    crossBracing: input.crossBracing,
+    basePan: input.basePanEnabled
+      ? {
+          margin: input.basePanMargin,
+          thickness: input.basePanThickness,
+          lipWidth: input.basePanLipWidth,
+          lipHeight: input.basePanLipHeight,
+        }
+      : null,
+    sphericalConnection: input.sphericalConnection
+      ? { radius: input.sphereConnectionDiameter / 2 }
+      : null,
+    supportFloorY:
+      input.supportFloorY ?? (input.basePanEnabled ? input.basePanThickness + 0.01 : 0),
+    routeContext: input.routeContext,
+    bracingCollisionRadius: input.bracingCollisionRadius,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -319,6 +391,7 @@ function planSupportRoute(
         null,
         preferredAngle,
         options.supportCollisionRadius,
+        options.supportTipRadius,
       );
       if (angled) return angled;
     }
@@ -326,7 +399,14 @@ function planSupportRoute(
       { x: contactPos.x, y: contactPos.y, z: contactPos.z },
       { x: contactPos.x, y: baseHeight, z: contactPos.z },
     ];
-    return routeCollides(route, context, tipHeight, baseHeight, options.supportCollisionRadius)
+    return routeCollides(
+      route,
+      context,
+      tipHeight,
+      baseHeight,
+      options.supportCollisionRadius,
+      options.supportTipRadius,
+    )
       ? null
       : route;
   }
@@ -374,6 +454,7 @@ function planSupportRoute(
       angleStartY,
       preferredAngle,
       options.supportCollisionRadius,
+      options.supportTipRadius,
     );
     if (route) return route;
   }
@@ -419,6 +500,7 @@ function findAngledRoute(
   forcedAngleStartY: number | null,
   preferredAngle: number | null,
   collisionRadius: number,
+  tipRadius: number,
 ): RouteWaypoint[] | null {
   const tipBottomY = contactPos.y - tipHeight;
   const angleStartY =
@@ -447,7 +529,7 @@ function findAngledRoute(
         { x: shaftX, y: angleStartY, z: shaftZ },
         { x: shaftX, y: baseHeight, z: shaftZ },
       ];
-      if (!routeCollides(route, context, tipHeight, baseHeight, collisionRadius)) {
+      if (!routeCollides(route, context, tipHeight, baseHeight, collisionRadius, tipRadius)) {
         const preferencePenalty =
           preferredAngle === null ? 0 : Math.abs(normalizedAngleDelta(angle, preferredAngle));
         candidates.push({
@@ -585,6 +667,7 @@ async function findContactPoints(
           a.z * u + b.z * v + c.z * w,
         ),
         normal: n.clone(),
+        reason: 'overhang',
       });
     }
   }

@@ -59,6 +59,29 @@ export interface SerializedMesh {
   scale: [number, number, number];
 }
 
+export interface SerializedPillar {
+  id: string;
+  origin: 'auto' | 'manual';
+  route: { x: number; y: number; z: number }[];
+  tipDiameter: number;
+  pillarRadius: number;
+  baseRadius: number;
+  tipHeight: number;
+  baseHeight: number;
+  contact: { x: number; y: number; z: number };
+}
+
+export interface SerializedPillarSet {
+  pillars: SerializedPillar[];
+  settings: {
+    crossBracing: boolean;
+    basePan: { margin: number; thickness: number; lipWidth: number; lipHeight: number } | null;
+    sphericalConnection: { radius: number } | null;
+    supportFloorY: number;
+    bracingCollisionRadius: number;
+  };
+}
+
 export interface SerializedObject {
   id: string;
   positions: ArrayBuffer;
@@ -71,6 +94,7 @@ export interface SerializedObject {
   paintStrokes?: import('./viewer-core').PaintStroke[];
   intentBuffer?: number[];
   supports: SerializedMesh | null;
+  pillarSet?: SerializedPillarSet | null;
 }
 
 export interface SerializedPlate {
@@ -91,7 +115,9 @@ export interface ProjectSnapshot {
 
 export async function loadAutosavedProject(): Promise<ProjectSnapshot | null> {
   if (!('indexedDB' in globalThis)) return null;
-  const result = await withStore<ProjectSnapshot & { id: string }>('readonly', (store) => store.get(AUTOSAVE_KEY));
+  const result = await withStore<ProjectSnapshot & { id: string }>('readonly', (store) =>
+    store.get(AUTOSAVE_KEY),
+  );
   if (result?.version !== 2) return null;
   return result;
 }

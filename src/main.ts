@@ -12,12 +12,14 @@ async function init(): Promise<void> {
   if (!canvas) throw new Error('Missing #viewport canvas');
 
   // Dynamic imports — keeps THREE.js out of the main type graph
-  const { Viewer } = await import('./viewer') as unknown as { Viewer: new (c: HTMLCanvasElement) => LegacyViewer };
-  const { Slicer, PRINTERS } = await import('./slicer') as {
+  const { Viewer } = (await import('./viewer')) as unknown as {
+    Viewer: new (c: HTMLCanvasElement) => LegacyViewer;
+  };
+  const { Slicer, PRINTERS } = (await import('./slicer')) as {
     Slicer: new () => LegacySlicer;
     PRINTERS: Record<string, import('@core/types').PrinterSpec>;
   };
-  const { createPlate } = await import('./plates') as {
+  const { createPlate } = (await import('./plates')) as {
     createPlate: (n: number) => LegacyPlate;
   };
 
@@ -40,6 +42,7 @@ async function init(): Promise<void> {
     hideProgress,
     // These are filled by mountApp → shell/panels set them
     showToolPanel: () => {},
+    getActiveToolPanel: () => null,
     scheduleProjectAutosave: () => {},
     scheduleSavePreferences: () => {},
     updateEstimate: () => {},
@@ -53,5 +56,3 @@ async function init(): Promise<void> {
 init().catch((err) => {
   console.error('Failed to initialize SliceLab:', err);
 });
-
-

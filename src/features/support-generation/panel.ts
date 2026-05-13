@@ -58,6 +58,21 @@ export function mountSupportPanel(ctx: AppContext): void {
   const supportAllBtn = document.getElementById('support-all-btn');
   const zElevation = document.getElementById('z-elevation') as HTMLInputElement | null;
   const showOverhangsCb = document.getElementById('show-overhangs-cb') as HTMLInputElement | null;
+  const detectMinima = document.getElementById('detect-minima') as HTMLInputElement | null;
+  const detectStabilization = document.getElementById(
+    'detect-stabilization',
+  ) as HTMLInputElement | null;
+  const stabilizationDensityInput = document.getElementById(
+    'stabilization-density',
+  ) as HTMLInputElement | null;
+  const stabilizationDensityVal = document.getElementById('stabilization-density-val');
+  const detectReinforcements = document.getElementById(
+    'detect-reinforcements',
+  ) as HTMLInputElement | null;
+  const reinforcementThresholdGroup = document.getElementById('reinforcement-threshold-group');
+  const reinforcementThreshold = document.getElementById(
+    'reinforcement-threshold',
+  ) as HTMLInputElement | null;
 
   function refreshOverhangOverlay(): void {
     if (!overhangOverlayVisible.value) {
@@ -127,6 +142,14 @@ export function mountSupportPanel(ctx: AppContext): void {
       sphereConnectionDiameterGroup.style.opacity = sphereEnabled ? '1' : '0.5';
       sphereConnectionDiameterGroup.style.pointerEvents = sphereEnabled ? 'auto' : 'none';
     }
+
+    // Detection mode toggles
+    if (stabilizationDensityVal && stabilizationDensityInput) {
+      stabilizationDensityVal.textContent = stabilizationDensityInput.value;
+    }
+    const reinEnabled = detectReinforcements?.checked;
+    if (reinforcementThreshold) reinforcementThreshold.disabled = !reinEnabled;
+    setGroupOpacity(reinforcementThresholdGroup, !!reinEnabled);
   }
 
   function setGroupOpacity(el: HTMLElement | null, enabled: boolean): void {
@@ -168,6 +191,11 @@ export function mountSupportPanel(ctx: AppContext): void {
       basePanLipHeight: parseFloat(basePanLipHeight?.value ?? '0.5'),
       sphericalConnection: sphericalConnection?.checked ?? false,
       sphereConnectionDiameter: parseFloat(sphereConnectionDiameter?.value ?? '0.3'),
+      detectMinima: detectMinima?.checked ?? true,
+      detectStabilization: detectStabilization?.checked ?? true,
+      detectReinforcements: detectReinforcements?.checked ?? false,
+      stabilizationDensity: parseInt(stabilizationDensityInput?.value ?? '4', 10),
+      reinforcementThreshold: parseFloat(reinforcementThreshold?.value ?? '2.0'),
       onProgress,
       intentParams,
     };
@@ -178,13 +206,8 @@ export function mountSupportPanel(ctx: AppContext): void {
     if (targets.length === 0) return;
     const originalIds = targets.map((o) => o.id);
 
-    // Dynamic import of legacy supports module
-    const { generateSupports } = (await import('../../supports')) as unknown as {
-      generateSupports: (
-        geo: unknown,
-        opts: Record<string, unknown>,
-      ) => Promise<{ attributes: { position: { count: number } } }>;
-    };
+    const { generateSupports } = await import('../../supports');
+    const { replaceAutoPillars, updatePillarSettings } = await import('./pillar-store');
 
     ctx.showProgress(
       targets.length === 1
@@ -208,21 +231,23 @@ export function mountSupportPanel(ctx: AppContext): void {
       );
 
       try {
-        const supportGeo = await generateSupports(
-          geometry,
+        const result = await generateSupports(
+          geometry as Parameters<typeof generateSupports>[0],
           getSupportOptions((fraction, text) => {
             const overall = (i + fraction) / targets.length;
             ctx.updateProgress(
               overall,
               targets.length === 1 ? text : `Supporting model ${i + 1} / ${targets.length}`,
             );
-          }, obj.id),
+          }, obj.id) as Parameters<typeof generateSupports>[1],
         );
-        if (supportGeo.attributes.position?.count > 0) {
-          viewer.setSupports(supportGeo);
-        } else {
-          viewer.clearSupports();
-        }
+        // Push pillar-edit undo so regen is reversible.
+        document.dispatchEvent(
+          new CustomEvent('pillar-edit-undo-save', { detail: { modelId: obj.id } }),
+        );
+        replaceAutoPillars(obj.id, result.pillars);
+        updatePillarSettings(obj.id, result.settings);
+        viewer.rebuildSupportsFromStore(obj.id);
       } catch (error) {
         failureCount += 1;
         console.error(`Failed to generate supports for model ${i + 1}`, error);
@@ -252,6 +277,8 @@ export function mountSupportPanel(ctx: AppContext): void {
   listen(autoThickness, 'change', syncUi);
   listen(basePanEnabled, 'change', syncUi);
   listen(sphericalConnection, 'change', syncUi);
+  listen(detectReinforcements, 'change', syncUi);
+  listen(stabilizationDensityInput, 'input', syncUi);
   listen(generateBtn, 'click', () => {
     handleGenerate();
   });
@@ -279,6 +306,21 @@ export function mountSupportPanel(ctx: AppContext): void {
     } else {
       clearInspection();
     }
+  }) as EventListener);
+
+  // Wire support-right-click → delete pillar (only when supports panel is active)
+  listen(canvas, 'support-right-clicked', ((
+    e: CustomEvent<{ x: number; y: number; z: number }>,
+  ) => {
+    if (ctx.getActiveToolPanel() !== 'supports') return;
+    const { x, y, z } = e.detail;
+    const hit = viewer.findPillarHit({ x, y, z });
+    if (!hit) return;
+    viewer.removePillarAndRebuild(hit.modelId, hit.pillarId);
+    clearInspection();
+    ctx.updateEstimate();
+    ctx.scheduleProjectAutosave();
+    refreshOverhangOverlay();
   }) as EventListener);
   listen(zElevation, 'change', () => {
     viewer.setElevation(parseFloat(zElevation?.value ?? '0'));

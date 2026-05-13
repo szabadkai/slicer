@@ -115,6 +115,7 @@ export function mountApp(ctx: AppContext, PRINTERS: Record<string, PrinterSpec>)
   // ─── Mount all panels ────────────────────────────────
   const { showToolPanel, getActiveToolPanel } = mountShell(ctx);
   ctx.showToolPanel = showToolPanel;
+  ctx.getActiveToolPanel = getActiveToolPanel;
 
   mountContextMenu();
   mountViewportContextMenu(ctx);

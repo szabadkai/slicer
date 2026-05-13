@@ -55,6 +55,7 @@ import {
   selectAll as selectAllImpl,
   getObjectTriangleCount as getObjectTriangleCountImpl,
   handleClick,
+  handleSupportContextMenu,
   attachTransformControls,
   getSelectionBounds,
   positionSelectionPivot,
@@ -286,6 +287,12 @@ export class ViewerCore {
     canvas.addEventListener('pointerdown', (e: PointerEvent) => this._handlePaintPointerDown(e));
     canvas.addEventListener('pointerup', () => this._handlePaintPointerUp());
     canvas.addEventListener('pointerleave', () => this._handlePaintPointerLeave());
+    canvas.addEventListener('contextmenu', (e: MouseEvent) => {
+      if (handleSupportContextMenu(this, e)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    });
     canvas.addEventListener('mesh-changed', () => this.requestRender());
     canvas.addEventListener('selection-changed', () => {
       this._saveActivePlateSelection();

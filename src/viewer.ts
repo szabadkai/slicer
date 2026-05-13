@@ -14,11 +14,20 @@ import type { SerializedObject } from './project-store';
 import {
   saveUndoState,
   saveMultiPlateUndoState,
+  savePillarEditUndoState,
   undo as undoImpl,
   redo as redoImpl,
   copySelected as copySelectedImpl,
   paste as pasteImpl,
 } from './viewer-undo';
+import {
+  setSupportsMesh as setSupportsMeshImpl,
+  clearSupports as clearSupportsImpl,
+  removePillarAndRebuild as removePillarAndRebuildImpl,
+  rebuildSupportsFromStore as rebuildSupportsFromStoreImpl,
+  findPillarHit as findPillarHitImpl,
+  findObjectAnywhere,
+} from './viewer-supports';
 import {
   cutSelectedByAxisPlane as cutByAxisImpl,
   cutSelectedByPlane as cutByPlaneImpl,
@@ -75,6 +84,15 @@ export type { SceneObject, PlateState };
 
 export class Viewer extends ViewerCore {
   _significantFaceMarkers: THREE.Group[] = [];
+
+  constructor(canvas: HTMLCanvasElement) {
+    super(canvas);
+    document.addEventListener('pillar-edit-undo-save', (e) => {
+      const modelId = (e as CustomEvent<{ modelId: string }>).detail?.modelId;
+      if (modelId) savePillarEditUndoState(this, modelId);
+    });
+  }
+
   _cutPlanePreview: THREE.Mesh | null = null;
   _cutPlaneAxis: CutAxis = 'x';
   _cutPlaneInteractive = false;
@@ -328,35 +346,28 @@ export class Viewer extends ViewerCore {
     updateBoundsImpl(this);
   }
 
-  // ---- supports -----------------------------------------------------------
+  // ---- supports (delegated to viewer-supports.ts) -------------------------
   setSupports(supportGeometry: THREE.BufferGeometry): void {
     if (this.selected.length !== 1) return;
-    this.clearSupports();
-    const mat = new THREE.MeshPhongMaterial({
-      color: 0x9b59b6,
-      specular: 0x222222,
-      shininess: 30,
-      transparent: true,
-      opacity: 0.55,
-    });
-    const mesh = new THREE.Mesh(supportGeometry, mat);
-    mesh.position.set(this.activePlate.originX || 0, 0, this.activePlate.originZ || 0);
-    this.selected[0].supportsMesh = mesh;
-    this.selected[0]._cachedLocalSupportVolume = undefined;
-    this.scene.add(mesh);
-    this.requestRender();
+    setSupportsMeshImpl(this, this.selected[0].id, supportGeometry);
+  }
+  setSupportsMesh(modelId: string, geo: THREE.BufferGeometry | null): void {
+    setSupportsMeshImpl(this, modelId, geo);
   }
   clearSupports(): void {
-    this.selected.forEach((s) => {
-      if (s.supportsMesh) {
-        this.scene.remove(s.supportsMesh);
-        s.supportsMesh.geometry.dispose();
-        (s.supportsMesh.material as THREE.Material).dispose();
-        s.supportsMesh = null;
-      }
-      s._cachedLocalSupportVolume = undefined;
-    });
-    this.requestRender();
+    clearSupportsImpl(this);
+  }
+  removePillarAndRebuild(modelId: string, pillarId: string): boolean {
+    return removePillarAndRebuildImpl(this, modelId, pillarId);
+  }
+  rebuildSupportsFromStore(modelId: string): void {
+    rebuildSupportsFromStoreImpl(this, modelId);
+  }
+  _findObjectAnywhere(modelId: string): SceneObject | null {
+    return findObjectAnywhere(this, modelId);
+  }
+  findPillarHit(point: THREE.Vector3, maxDistMM = 5): { modelId: string; pillarId: string } | null {
+    return findPillarHitImpl(this, point, maxDistMM);
   }
   getSupportsMesh(): THREE.Mesh | null {
     return this.selected.length === 1 ? this.selected[0].supportsMesh : null;

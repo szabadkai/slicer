@@ -1,6 +1,58 @@
 import * as THREE from 'three';
 import type { Viewer } from './viewer';
 import type { SceneObject } from './viewer-core';
+import {
+  getPillarSet,
+  setPillarSet,
+  type ModelPillarSet,
+} from './features/support-generation/pillar-store';
+
+interface PillarEditEntry {
+  type: 'pillar-edit';
+  modelId: string;
+  previousPillarSet: ModelPillarSet;
+}
+
+function clonePillarSet(set: ModelPillarSet): ModelPillarSet {
+  // structuredClone handles the nested Vector/Box objects in routeContext
+  // poorly, so we strip it (routeContext is recomputed on next auto-gen).
+  return {
+    pillars: set.pillars.map((p) => ({
+      ...p,
+      route: p.route.map((w) => ({ ...w })),
+      contact: { ...p.contact },
+    })),
+    settings: {
+      ...set.settings,
+      routeContext: undefined,
+    },
+    legacyOpaque: set.legacyOpaque,
+  };
+}
+
+export function savePillarEditUndoState(viewer: Viewer, modelId: string): void {
+  const entry: PillarEditEntry = {
+    type: 'pillar-edit',
+    modelId,
+    previousPillarSet: clonePillarSet(getPillarSet(modelId)),
+  };
+  viewer.undoStack.push(entry);
+  if (viewer.undoStack.length > viewer.MAX_UNDO) viewer.undoStack.shift();
+  viewer.redoStack.length = 0;
+}
+
+function snapshotPillarEdit(modelId: string): PillarEditEntry {
+  return {
+    type: 'pillar-edit',
+    modelId,
+    previousPillarSet: clonePillarSet(getPillarSet(modelId)),
+  };
+}
+
+function restorePillarEdit(viewer: Viewer, entry: PillarEditEntry): void {
+  setPillarSet(entry.modelId, clonePillarSet(entry.previousPillarSet));
+  viewer.rebuildSupportsFromStore(entry.modelId);
+}
 
 // ---- undo / clipboard -----------------------------------------------------
 
@@ -75,9 +127,22 @@ function snapshotCurrentState(viewer: Viewer): unknown {
 
 export function undo(viewer: Viewer): void {
   if (viewer.undoStack.length === 0) return;
-  viewer.redoStack.push(snapshotCurrentState(viewer));
   const entry = viewer.undoStack.pop();
   viewer.transformControl.detach();
+
+  if (
+    entry &&
+    typeof entry === 'object' &&
+    'type' in (entry as Record<string, unknown>) &&
+    (entry as { type: string }).type === 'pillar-edit'
+  ) {
+    viewer.redoStack.push(snapshotPillarEdit((entry as PillarEditEntry).modelId));
+    restorePillarEdit(viewer, entry as PillarEditEntry);
+    viewer.canvas.dispatchEvent(new CustomEvent('selection-changed'));
+    return;
+  }
+
+  viewer.redoStack.push(snapshotCurrentState(viewer));
 
   if (
     entry &&
@@ -207,10 +272,24 @@ function undoMultiPlate(
 
 export function redo(viewer: Viewer): void {
   if (viewer.redoStack.length === 0) return;
-  viewer.undoStack.push(snapshotCurrentState(viewer));
-  if (viewer.undoStack.length > viewer.MAX_UNDO) viewer.undoStack.shift();
   const entry = viewer.redoStack.pop();
   viewer.transformControl.detach();
+
+  if (
+    entry &&
+    typeof entry === 'object' &&
+    'type' in (entry as Record<string, unknown>) &&
+    (entry as { type: string }).type === 'pillar-edit'
+  ) {
+    viewer.undoStack.push(snapshotPillarEdit((entry as PillarEditEntry).modelId));
+    if (viewer.undoStack.length > viewer.MAX_UNDO) viewer.undoStack.shift();
+    restorePillarEdit(viewer, entry as PillarEditEntry);
+    viewer.canvas.dispatchEvent(new CustomEvent('selection-changed'));
+    return;
+  }
+
+  viewer.undoStack.push(snapshotCurrentState(viewer));
+  if (viewer.undoStack.length > viewer.MAX_UNDO) viewer.undoStack.shift();
 
   if (
     entry &&

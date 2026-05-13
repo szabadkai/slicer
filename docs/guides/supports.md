@@ -55,6 +55,12 @@ Switch to **Manual Placement** mode (the crosshair button) and click directly on
 
 Press `Esc` to leave manual placement mode.
 
+## Deleting individual pillars
+
+When the Supports panel is open, **right-click** any support pillar in the viewport to delete it instantly. This works on both auto-generated and manually placed pillars. Press `Ctrl+Z` to undo the deletion.
+
+Auto-generated pillars and manual pillars coexist freely. Running **Auto-Generate** again will replace the auto pillars but keep your manual ones. All settings (cross-bracing, base pan, spherical connections) apply to the combined set of pillars.
+
 ## Intent-aware generation
 
 If you've painted surface intents, supports will avoid cosmetic faces where possible and preferentially contact hidden or reliability-critical faces. Run Auto-Generate *after* painting intents for best results.

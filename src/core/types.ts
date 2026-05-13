@@ -92,6 +92,7 @@ export interface AppContext {
   updateProgress: (fraction: number, text?: string) => void;
   hideProgress: () => void;
   showToolPanel: (name: string) => void;
+  getActiveToolPanel: () => string | null;
   scheduleProjectAutosave: () => void;
   scheduleSavePreferences: () => void;
   updateEstimate: () => void;
