@@ -6,9 +6,11 @@
 import * as THREE from 'three';
 import { ViewerCore, createResinMaterial, type SceneObject, type PlateState } from './viewer-core';
 import {
-  addSignificantFaceMarker as addMarker,
-  clearSignificantFaceMarkers as clearMarkers,
-} from './viewer-scene';
+  addSignificantFaceMarker as addMarkerImpl,
+  clearSignificantFaceMarkers as clearMarkersImpl,
+  highlightSignificantFaces as highlightFacesImpl,
+  clearSignificantFaceHighlights as clearHighlightsImpl,
+} from './viewer-face-markers';
 import type { CutAxis } from './features/model-transform/cut';
 import type { SerializedObject } from './project-store';
 import {
@@ -49,6 +51,7 @@ import {
   autoArrange as autoArrangeImpl,
   fillPlatform as fillPlatformImpl,
   distributeAcrossPlates as distributeImpl,
+  DEFAULT_ARRANGE_ELEVATION,
 } from './viewer-plates';
 import {
   getModelGeometry as getModelGeoImpl,
@@ -408,7 +411,8 @@ export class Viewer extends ViewerCore {
     const origin = this.getActivePlateOrigin();
     sel.mesh.position.x = origin.x - size.x / 2;
     sel.mesh.position.z = origin.z - size.z / 2;
-    sel.mesh.position.y = sel.elevation;
+    sel.elevation = DEFAULT_ARRANGE_ELEVATION;
+    sel.mesh.position.y = sel.elevation - (newBB.min.y ?? 0);
     sel.mesh.updateMatrixWorld(true);
     this.clearSupports();
     this.canvas.dispatchEvent(new CustomEvent('mesh-changed'));
@@ -471,47 +475,27 @@ export class Viewer extends ViewerCore {
     return distributeImpl(this, plates, padding, elevation);
   }
 
-  // ---- face markers -------------------------------------------------------
+  // ---- face markers (delegated to viewer-face-markers.ts) -----------------
   addSignificantFaceMarker(
-    centroid: THREE.Vector3,
-    normal: THREE.Vector3,
-    area: number,
-    color: number,
-    index: number,
-    options?: Record<string, unknown>,
+    c: THREE.Vector3,
+    n: THREE.Vector3,
+    a: number,
+    col: number,
+    idx: number,
+    opts?: Record<string, unknown>,
   ): void {
-    addMarker(
-      this.scene,
-      this._significantFaceMarkers,
-      centroid,
-      normal,
-      area,
-      color,
-      index,
-      options,
-    );
+    addMarkerImpl(this, c, n, a, col, idx, opts);
   }
   clearSignificantFaceMarkers(): void {
-    clearMarkers(this.scene, this._significantFaceMarkers);
+    clearMarkersImpl(this);
   }
   highlightSignificantFaces(
     faces: { centroid: THREE.Vector3; normal: THREE.Vector3; area: number }[],
   ): void {
-    const colors = [0xff6b6b, 0x4ecdc4, 0xffe66d, 0x95e1d3, 0xf38181, 0xaa96da];
-    faces.forEach((f, i) =>
-      this.addSignificantFaceMarker(f.centroid, f.normal, f.area, colors[i % colors.length], i + 1),
-    );
+    highlightFacesImpl(this, faces);
   }
   clearSignificantFaceHighlights(): void {
-    if (this.significantFaceHighlights) {
-      this.significantFaceHighlights.forEach((m) => {
-        if (m.parent === this.scene) this.scene.remove(m);
-        m.geometry?.dispose();
-        (m.material as THREE.Material)?.dispose();
-      });
-      this.significantFaceHighlights = null;
-    }
-    this.requestRender();
+    clearHighlightsImpl(this);
   }
 
   // ---- support heatmap (delegated to viewer-geometry.ts) ------------------

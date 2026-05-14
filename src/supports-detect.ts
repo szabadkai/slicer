@@ -5,7 +5,7 @@
 
 import * as THREE from 'three';
 import type { ContactPoint, RouteContext } from './supports-geometry';
-import { deduplicatePoints, yieldThread } from './supports-utils';
+import { deduplicatePoints, halton, yieldThread } from './supports-utils';
 import { convexHull2D } from './supports-base-pan';
 
 const DOWN = new THREE.Vector3(0, -1, 0);
@@ -381,4 +381,89 @@ export async function detectReinforcements(
   }
 
   return deduplicatePoints(points, thresholdMM * 0.5);
+}
+
+// ---------------------------------------------------------------------------
+// Overhang contact-point detection
+// ---------------------------------------------------------------------------
+
+const UP = new THREE.Vector3(0, 1, 0);
+
+export async function findContactPoints(
+  geometry: THREE.BufferGeometry,
+  overhangAngleDeg: number,
+  density: number,
+  onProgress: (text: string) => void,
+): Promise<ContactPoint[]> {
+  const pos = geometry.attributes.position;
+  const normals = geometry.attributes.normal;
+  const index = geometry.index;
+  const triCount = index ? index.count / 3 : pos.count / 3;
+  const overhangThreshold = Math.cos(THREE.MathUtils.degToRad(90 - overhangAngleDeg));
+  const spacing = 12 - density;
+  const points: ContactPoint[] = [];
+
+  const a = new THREE.Vector3(),
+    b = new THREE.Vector3(),
+    c = new THREE.Vector3();
+  const n = new THREE.Vector3(),
+    edge1 = new THREE.Vector3(),
+    edge2 = new THREE.Vector3(),
+    cross = new THREE.Vector3();
+
+  for (let i = 0; i < triCount; i++) {
+    if (i % 50000 === 0 && i !== 0) {
+      onProgress(`Finding contact points... ${Math.round((i / triCount) * 100)}%`);
+      await yieldThread();
+    }
+
+    const [idxA, idxB, idxC] = index
+      ? [index.getX(i * 3), index.getX(i * 3 + 1), index.getX(i * 3 + 2)]
+      : [i * 3, i * 3 + 1, i * 3 + 2];
+
+    a.set(pos.getX(idxA), pos.getY(idxA), pos.getZ(idxA));
+    b.set(pos.getX(idxB), pos.getY(idxB), pos.getZ(idxB));
+    c.set(pos.getX(idxC), pos.getY(idxC), pos.getZ(idxC));
+    edge1.subVectors(b, a);
+    edge2.subVectors(c, a);
+    cross.crossVectors(edge1, edge2);
+    n.copy(cross).normalize();
+
+    if (
+      normals &&
+      n.dot(new THREE.Vector3(normals.getX(idxA), normals.getY(idxA), normals.getZ(idxA))) < 0
+    ) {
+      n.multiplyScalar(-1);
+      cross.multiplyScalar(-1);
+    }
+    if (n.dot(UP) >= -overhangThreshold) continue;
+
+    const area = cross.length() * 0.5;
+    const numSamples = Math.max(1, Math.round(area / (spacing * spacing)));
+    for (let s = 0; s < numSamples; s++) {
+      let u: number, v: number;
+      if (numSamples === 1) {
+        u = 1 / 3;
+        v = 1 / 3;
+      } else {
+        u = halton(i * 31 + s + 1, 2);
+        v = halton(i * 31 + s + 1, 3);
+      }
+      if (u + v > 1) {
+        u = 1 - u;
+        v = 1 - v;
+      }
+      const w = 1 - u - v;
+      points.push({
+        position: new THREE.Vector3(
+          a.x * u + b.x * v + c.x * w,
+          a.y * u + b.y * v + c.y * w,
+          a.z * u + b.z * v + c.z * w,
+        ),
+        normal: n.clone(),
+        reason: 'overhang',
+      });
+    }
+  }
+  return deduplicatePoints(points, spacing * 0.5);
 }

@@ -97,34 +97,11 @@ export interface PlateState {
   slicedVolumes?: unknown;
 }
 
-const FALLBACK_PRESET = {
-  color: 0x4f6170,
-  opacity: 0.96,
-  roughness: 0.52,
-  metalness: 0,
-  transmission: 0,
-  ior: 1.5,
-};
+import { createResinMaterial, FALLBACK_PRESET } from './viewer-material';
+export { createResinMaterial };
+
 const STATIC_CAP = 1.5;
 const INTERACTIVE_CAP = 1.25;
-
-export function createResinMaterial(
-  preset: Record<string, unknown> = FALLBACK_PRESET,
-): THREE.MeshPhysicalMaterial {
-  const o = (preset.opacity as number) ?? 1;
-  const t = (preset.transmission as number) ?? 0;
-  return new THREE.MeshPhysicalMaterial({
-    color: (preset.color as number) ?? 0x888888,
-    roughness: (preset.roughness as number) ?? 0.5,
-    metalness: (preset.metalness as number) ?? 0,
-    transparent: o < 1,
-    opacity: o,
-    depthWrite: o >= 0.55,
-    transmission: t,
-    thickness: t > 0 ? 0.8 : 0,
-    ior: (preset.ior as number) ?? 1.5,
-  });
-}
 
 export class ViewerCore {
   canvas: HTMLCanvasElement;

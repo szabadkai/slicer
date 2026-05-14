@@ -24,12 +24,13 @@ Right-click delete  <--  panel.ts  <--  viewer-core-selection.ts (raycast)
 
 | File | Role |
 |---|---|
-| `src/supports.ts` | Orchestrates auto-generation: overhang detection, contact sampling, route planning. Returns `Pillar[]` + settings. |
+| `src/supports.ts` | Orchestrates auto-generation: builds BVH, calls all detectors, deduplicates contact points, plans routes, returns `Pillar[]` + settings. |
+| `src/supports-detect.ts` | **Three new contact-point detectors:** `detectMinima`, `detectStabilization`, `detectReinforcements`. Each returns `ContactPoint[]` tagged with a `reason` field. |
 | `src/supports-geometry.ts` | Geometry building (`buildSupportGeometry`), collision detection (`segmentCollides`, `routeCollides`), cross-bracing, merging. |
-| `src/supports-base-pan.ts` | Base pan geometry + convex hull (extracted from supports-geometry.ts). |
+| `src/supports-base-pan.ts` | Base pan geometry + exported `convexHull2D` helper (reused by `supports-detect.ts`). |
 | `src/supports-utils.ts` | Pure math helpers: Halton sequences, deduplication, direction offsets. |
 | `src/features/support-generation/pillar-store.ts` | **Source of truth.** Pillar records, CRUD operations, `rebuildSupportsMesh`. |
-| `src/features/support-generation/panel.ts` | UI panel: generate/clear buttons, settings inputs, right-click delete handler, overhang overlay. |
+| `src/features/support-generation/panel.ts` | UI panel: generate/clear buttons, settings inputs, right-click delete handler, overhang overlay. Basic section shows overhang angle and density only; all other options are in the collapsible Advanced section. |
 | `src/features/support-generation/manual-pillar.ts` | Click-to-place manual pillar: route planning, store insertion, rebuild. |
 | `src/features/support-generation/manual-support.ts` | Pointer event handling for manual placement mode (hover preview, click dispatch). |
 | `src/features/support-generation/explanation-inspector.ts` | Support-click popup showing why a pillar was placed. |
@@ -66,6 +67,18 @@ interface ModelPillarSet {
 }
 ```
 
+### ContactPoint (supports-geometry.ts)
+
+```typescript
+interface ContactPoint {
+  position: THREE.Vector3;
+  normal: THREE.Vector3;
+  reason?: 'overhang' | 'minima' | 'stabilization' | 'reinforcement';
+}
+```
+
+The `reason` field is set by whichever detector emitted the point. It is used in the routing loop to apply per-reason pillar sizing (reinforcement contacts get a 40% larger tip diameter).
+
 ### RouteWaypoint (supports-geometry.ts)
 
 ```typescript
@@ -78,12 +91,25 @@ interface RouteWaypoint {
 ## How auto-generation works
 
 1. **`generateSupports(geometry, options)`** in `supports.ts`:
-   - Computes BVH for the model geometry (fast raycasting)
-   - Detects overhang faces below the angle threshold
-   - Samples contact points based on density
+   - Builds BVH for the model geometry upfront (shared by all detectors and the route planner)
+   - Runs all enabled detectors in sequence, merging results into one `ContactPoint[]`
+   - Deduplicates across all detectors with `deduplicatePoints(points, spacing * 0.5)`
    - Filters to exterior-only contacts (unless internal supports enabled)
-   - For each contact: calls `planSupportRoute` to find a collision-free path
+   - For each contact: calls `planSupportRoute` to find a collision-free path; applies per-reason pillar sizing
    - Returns `{ pillars: Pillar[], settings: PillarSetSettings }`
+
+### Detection pipeline order
+
+The BVH must be built **before** calling any detector. `generateSupports` now builds it first, then calls detectors. Do not move the `geometry.computeBoundsTree()` call after the detector calls.
+
+The four detectors and their defaults:
+
+| Detector | Option flag | Default | Algorithm summary |
+|---|---|---|---|
+| Overhangs | always on | — | Triangle normals with angle threshold; Halton-sampled contact points |
+| Minima | `detectMinima` | `true` | Vertex Y-minima (lower than all neighbours + at least one higher neighbour); also catches downward-pointing tips via accumulated normal |
+| Stabilization | `detectStabilization` | `true` | CoM XZ vs. footprint convex hull signed distance; also tall/narrow aspect ratio (height/footprintDiameter > 3) |
+| Reinforcements | `detectReinforcements` | `false` | Per-triangle ray cast in −normal direction; hit within `reinforcementThreshold` mm = thin section |
 
 2. **`panel.ts: handleGenerate()`**:
    - Dispatches `pillar-edit-undo-save` event (for undo)
@@ -184,10 +210,44 @@ These settings in `PillarSetSettings` apply across the entire union of auto + ma
 
 All are applied during `rebuildSupportsMesh`, not during route planning.
 
+## SupportOptions reference
+
+All options are optional; `generateSupports` destructures with defaults.
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `overhangAngle` | `number` | `30` | Degrees from horizontal; faces more horizontal than this get support |
+| `density` | `number` | `5` | Contact point density (1–9); spacing = `12 - density` mm |
+| `autoDensity` | `boolean` | `false` | Compute density from model dimensions |
+| `tipDiameter` | `number` | `0.4` | Tip sphere diameter in mm |
+| `supportThickness` | `number` | `0.8` | Shaft diameter in mm |
+| `autoThickness` | `boolean` | `true` | Compute thickness from model dimensions |
+| `detectMinima` | `boolean` | `true` | Enable local-minima detector |
+| `detectStabilization` | `boolean` | `true` | Enable stabilization detector |
+| `detectReinforcements` | `boolean` | `false` | Enable thin-section detector (slow — O(triCount) ray casts) |
+| `stabilizationDensity` | `number` | `4` | Contact density for stabilization perimeter supports (1–9) |
+| `reinforcementThreshold` | `number` | `2.0` | Sections thinner than this (mm) get reinforcement supports |
+| `supportScope` | `'all' \| 'outside-only'` | `'outside-only'` | Whether to support internal cavities |
+| `maxPillarAngle` | `number` | `45` | Max angle from vertical for angled routes |
+| `modelClearance` | `number` | `1.5` | Min distance between pillar shaft and model surface |
+| `maxContactOffset` | `number` | `18` | Max horizontal offset when routing around obstructions |
+| `crossBracing` | `boolean` | `false` | Diagonal struts between adjacent pillars |
+| `basePanEnabled` | `boolean` | `false` | Flat raft under all pillar bases |
+| `sphericalConnection` | `boolean` | `false` | Ball joint at contact point |
+
+## Pitfalls specific to the detector system
+
+- **`reinforcementThreshold` near self**: The reinforcement detector casts a ray from a triangle's centroid in the `-normal` direction with `raycaster.near = 0.05`. This skips self-intersections from the same triangle's back face (DoubleSide). Do not set `near` lower than 0.05 or thick walls will get false positives.
+- **Dependent controls need a `change` listener on their parent**: `syncUi()` handles enable/disable state for all dependent inputs, but it only runs when a parent checkbox fires a `change` event. If you add a new checkbox that gates another control, you must add `listen(parentCheckbox, 'change', syncUi)` in the event-wiring section — the DOM reference alone is not enough.
+- **`detectMinima` on flat base**: The minima detector requires a strictly higher neighbour to avoid flagging flat regions. A vertex whose entire neighbourhood shares the same Y is not emitted. Bottom-face vertices of a box resting on the build plate are filtered by `minSupportHeight` and will not be emitted.
+- **Stabilization CoM formula**: CoM is computed as the average of all vertex positions (uniform vertex mass). This is an approximation — non-uniformly meshed models may have a slightly biased CoM estimate.
+- **BVH must be built first**: The reinforcement detector reuses `context.mesh` (the BVH-accelerated temp mesh). The `generateSupports` function builds the BVH before calling any detector. If you call detectors standalone (e.g. in tests), build the BVH on the context mesh manually or provide a non-BVH mesh — raycasting will still work, just slower.
+
 ## Testing
 
 - `pillar-store.test.ts` — store CRUD, `findPillarNear`, vertex count growth
 - `supports-geometry.test.ts` — pierce-regression test (offset sample catches geometry that center ray misses)
+- `supports-detect.test.ts` — all three new detectors: spike tip minima, tall-narrow stabilization, thin-wall reinforcement
 - `support-generation.test.ts` — overhang detection, contact sampling
 - `store.test.ts` — legacy signal store
 

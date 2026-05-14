@@ -66,6 +66,7 @@ export function mountSupportPanel(ctx: AppContext): void {
     'stabilization-density',
   ) as HTMLInputElement | null;
   const stabilizationDensityVal = document.getElementById('stabilization-density-val');
+  const stabilizationDensityGroup = document.getElementById('stabilization-density-group');
   const detectReinforcements = document.getElementById(
     'detect-reinforcements',
   ) as HTMLInputElement | null;
@@ -147,6 +148,9 @@ export function mountSupportPanel(ctx: AppContext): void {
     if (stabilizationDensityVal && stabilizationDensityInput) {
       stabilizationDensityVal.textContent = stabilizationDensityInput.value;
     }
+    const stabEnabled = detectStabilization?.checked;
+    if (stabilizationDensityInput) stabilizationDensityInput.disabled = !stabEnabled;
+    setGroupOpacity(stabilizationDensityGroup, !!stabEnabled);
     const reinEnabled = detectReinforcements?.checked;
     if (reinforcementThreshold) reinforcementThreshold.disabled = !reinEnabled;
     setGroupOpacity(reinforcementThresholdGroup, !!reinEnabled);
@@ -278,6 +282,7 @@ export function mountSupportPanel(ctx: AppContext): void {
   listen(basePanEnabled, 'change', syncUi);
   listen(sphericalConnection, 'change', syncUi);
   listen(detectReinforcements, 'change', syncUi);
+  listen(detectStabilization, 'change', syncUi);
   listen(stabilizationDensityInput, 'input', syncUi);
   listen(generateBtn, 'click', () => {
     handleGenerate();

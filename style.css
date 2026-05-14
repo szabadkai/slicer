@@ -367,19 +367,14 @@ body {
 }
 
 #plate-strip {
-  position: absolute;
-  left: 50%;
-  right: auto;
-  bottom: 16px;
   min-height: 44px;
-  width: max-content;
-  max-width: calc(100% - 180px);
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 0;
-  z-index: 6;
-  transform: translateX(-50%);
+  pointer-events: auto;
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 #plate-tabs {
@@ -2787,14 +2782,24 @@ button:disabled {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
-/* ─── Pattern 1: Tool HUD ────────────────────────────────── */
-#tool-hud {
+/* ─── Bottom Bar: shared row for HUD + plate strip ──────── */
+#bottom-bar {
   position: absolute;
   left: 50%;
-  bottom: 76px;
+  bottom: 16px;
   z-index: 20;
   transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
   pointer-events: none;
+  max-width: calc(100% - 40px);
+}
+
+/* ─── Pattern 1: Tool HUD ────────────────────────────────── */
+#tool-hud {
+  pointer-events: none;
+  flex-shrink: 0;
 }
 .tool-hud-section {
   display: none;
@@ -2818,18 +2823,19 @@ button:disabled {
   display: flex;
 }
 .hud-btn {
+  width: 30px;
   height: 30px;
   border: 1px solid transparent;
   border-radius: 5px;
   background: transparent;
   color: var(--text);
   cursor: pointer;
-  padding: 0 10px;
-  font-size: 12px;
+  padding: 0;
+  font-size: 14px;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
   white-space: nowrap;
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }

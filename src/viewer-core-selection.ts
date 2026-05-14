@@ -136,6 +136,7 @@ export function handleSupportContextMenu(core: ViewerCore, e: MouseEvent): boole
 
 export function attachTransformControls(core: ViewerCore): void {
   if (isCutterGizmoActive()) return;
+  if (core.paintToolEnabled) return;
   if (core.selected.length === 1) {
     core.transformControl.attach(core.selected[0].mesh);
     core.transformControl.setMode('translate');

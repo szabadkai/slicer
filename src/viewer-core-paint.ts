@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import type { ViewerCore, SceneObject } from './viewer-core';
 import type { PrimitiveParams, PrimitiveTransform } from '@core/primitives';
 import { trianglesInsidePrimitive, filterExteriorTriangles } from '@core/primitives';
+import { attachTransformControls } from './viewer-core-selection';
 
 const MAX_SHADER_PAINT_STROKES = 64;
 
@@ -12,7 +13,12 @@ export function setPaintToolEnabled(core: ViewerCore, enabled: boolean): void {
   core.paintToolEnabled = enabled;
   core.canvas.classList.toggle('paint-mode', enabled);
   core.controls.enabled = !enabled || !core.isPainting;
-  if (!enabled) hidePaintPreview(core);
+  if (enabled) {
+    core.transformControl.detach();
+  } else {
+    hidePaintPreview(core);
+    attachTransformControls(core);
+  }
 }
 
 export function setPaintBrush(

@@ -86,58 +86,61 @@
             <span>Slice</span>
           </button>
         </div>
+        <div class="toolbar-group">
+          <button class="tool-btn" id="one-click-prepare-btn" title="One-Click Prepare (P)">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M7.5 5.6L10 7 8.6 4.5 10 2 7.5 3.4 5 2l1.4 2.5L5 7zm12 9.8L17 14l1.4 2.5L17 19l2.5-1.4L22 19l-1.4-2.5L22 14zM22 2l-2.5 1.4L17 2l1.4 2.5L17 7l2.5-1.4L22 7l-1.4-2.5zm-7.63 5.29a.996.996 0 0 0-1.41 0L1.29 18.96a.996.996 0 0 0 0 1.41l2.34 2.34c.39.39 1.02.39 1.41 0L16.71 11.04a.996.996 0 0 0 0-1.41l-2.34-2.34zM5.21 19.89l-1.1-1.1 8.59-8.59 1.1 1.1-8.59 8.59z"/>
+            </svg>
+            <span>Prepare</span>
+          </button>
+        </div>
       </aside>
 
       <div id="viewport-container">
         <canvas id="viewport"></canvas>
         <div id="fps-counter">FPS --</div>
         <div id="model-info" class="floating-panel"></div>
-        <!-- ═══ Tool HUD — persistent per-tool floating toolbar ═══ -->
+        <!-- ═══ Bottom Bar — HUD + plate strip in one row ═══ -->
+        <div id="bottom-bar">
         <div id="tool-hud">
 
           <!-- Plate HUD: transform mode + quick layout actions -->
           <div class="tool-hud-section" id="hud-plate">
-            <button type="button" class="hud-btn active" id="hud-mode-translate" data-hud-mode="translate" title="Move (T)">
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 2 8 6h3v5H6V8l-4 4 4 4v-3h5v5H8l4 4 4-4h-3v-5h5v3l4-4-4-4v3h-5V6h3l-4-4z"/></svg>
-              Move
+            <button type="button" class="hud-btn active" id="hud-mode-translate" data-hud-mode="translate" title="Move (T)" aria-label="Move">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M12 2 8 6h3v5H6V8l-4 4 4 4v-3h5v5H8l4 4 4-4h-3v-5h5v3l4-4-4-4v3h-5V6h3l-4-4z"/></svg>
             </button>
-            <button type="button" class="hud-btn" id="hud-mode-rotate" data-hud-mode="rotate" title="Rotate (R)">
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.96-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm-6 6c0-1.01.25-1.96.7-2.8L5.24 5.74A7.93 7.93 0 0 0 4 10c0 4.42 3.58 8 8 8v3l4-4-4-4v3c-3.31 0-6-2.69-6-6z"/></svg>
-              Rotate
+            <button type="button" class="hud-btn" id="hud-mode-rotate" data-hud-mode="rotate" title="Rotate (R)" aria-label="Rotate">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.96-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm-6 6c0-1.01.25-1.96.7-2.8L5.24 5.74A7.93 7.93 0 0 0 4 10c0 4.42 3.58 8 8 8v3l4-4-4-4v3c-3.31 0-6-2.69-6-6z"/></svg>
             </button>
-            <button type="button" class="hud-btn" id="hud-mode-scale" data-hud-mode="scale" title="Scale (S)">
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z"/></svg>
-              Scale
+            <button type="button" class="hud-btn" id="hud-mode-scale" data-hud-mode="scale" title="Scale (S)" aria-label="Scale">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z"/></svg>
             </button>
             <div class="hud-sep"></div>
-            <button type="button" class="hud-btn" id="hud-drop-bed" title="Drop to build plate">
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 2l-5.5 5.5 1.41 1.41L11 5.83V16h2V5.83l3.09 3.09 1.41-1.42L12 2zM4 20h16v2H4v-2z"/></svg>
-              Drop to Bed
+            <button type="button" class="hud-btn" id="hud-drop-bed" title="Drop to build plate" aria-label="Drop to bed">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M12 2l-5.5 5.5 1.41 1.41L11 5.83V16h2V5.83l3.09 3.09 1.41-1.42L12 2zM4 20h16v2H4v-2z"/></svg>
             </button>
-            <button type="button" class="hud-btn" id="hud-duplicate" title="Duplicate selected">
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
-              Duplicate
+            <button type="button" class="hud-btn" id="hud-duplicate" title="Duplicate selected" aria-label="Duplicate">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
             </button>
-            <button type="button" class="hud-btn" id="hud-delete" title="Delete selected">
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-              Delete
+            <button type="button" class="hud-btn" id="hud-delete" title="Delete selected" aria-label="Delete">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
             </button>
           </div>
 
           <!-- Orient HUD: preset + orient-selected -->
           <div class="tool-hud-section" id="hud-orient">
-            <button type="button" class="hud-btn" id="hud-orient-fastest" title="Minimize print time">
-              ⚡ Fastest
+            <button type="button" class="hud-btn" id="hud-orient-fastest" title="Fastest (minimize print time)" aria-label="Fastest">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>
             </button>
-            <button type="button" class="hud-btn" id="hud-orient-balanced" title="Reduce support material">
-              ◆ Least Support
+            <button type="button" class="hud-btn" id="hud-orient-balanced" title="Least Support (reduce support material)" aria-label="Least Support">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M12 3L1 9l11 6 9-4.91V17h2V9L12 3zM5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82z"/></svg>
             </button>
-            <button type="button" class="hud-btn" id="hud-orient-quality" title="Best surface finish">
-              ✦ Best Quality
+            <button type="button" class="hud-btn" id="hud-orient-quality" title="Best Quality (best surface finish)" aria-label="Best Quality">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
             </button>
             <div class="hud-sep"></div>
-            <button type="button" class="hud-btn hud-btn-primary" id="hud-orient-selected" title="Orient selected models">
-              Orient Selected
+            <button type="button" class="hud-btn hud-btn-primary" id="hud-orient-selected" title="Orient selected models" aria-label="Orient Selected">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M12 5.83L15.17 9l1.41-1.41L12 3 7.41 7.59 8.83 9 12 5.83zm0 12.34L8.83 15l-1.41 1.41L12 21l4.59-4.59L15.17 15 12 18.17z"/></svg>
             </button>
           </div>
 
@@ -203,45 +206,44 @@
 
           <!-- Supports HUD -->
           <div class="tool-hud-section" id="hud-supports">
-            <button type="button" class="hud-btn" id="hud-overhangs-toggle" title="Show/hide unsupported areas">
-              Show Overhangs
+            <button type="button" class="hud-btn" id="hud-overhangs-toggle" title="Show/hide unsupported areas" aria-label="Show Overhangs">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
             </button>
             <div class="hud-sep"></div>
-            <button type="button" class="hud-btn hud-btn-primary" id="hud-generate-supports" title="Generate supports for selected models">
-              Generate Selected
+            <button type="button" class="hud-btn hud-btn-primary" id="hud-generate-supports" title="Generate supports for selected models" aria-label="Generate Supports">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
             </button>
-            <button type="button" class="hud-btn" id="hud-clear-supports" title="Clear all supports">
-              Clear Supports
+            <button type="button" class="hud-btn" id="hud-clear-supports" title="Clear all supports" aria-label="Clear Supports">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
             </button>
           </div>
 
           <!-- Surface HUD: paint toggle + pattern quick-select + brush -->
           <div class="tool-hud-section" id="hud-surface">
-            <button type="button" class="hud-btn" id="hud-paint-toggle" title="Start/stop brush painting">
-              Start Painting
+            <button type="button" class="hud-btn" id="hud-paint-toggle" title="Start/stop brush painting" aria-label="Start Painting">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M7 14c-1.66 0-3 1.34-3 3 0 1.31-1.16 2-2 2 .92 1.22 2.49 2 4 2 2.21 0 4-1.79 4-4 0-1.66-1.34-3-3-3zm13.71-9.37l-1.34-1.34a1 1 0 0 0-1.41 0L9 12.25 11.75 15l8.96-8.96a1 1 0 0 0 0-1.41z"/></svg>
             </button>
             <div class="hud-sep"></div>
-            <button type="button" class="hud-btn hud-pattern-btn" data-pattern="0" title="Solid">● Solid</button>
-            <button type="button" class="hud-btn hud-pattern-btn" data-pattern="1" title="Carbon Fiber">⧲ Carbon</button>
-            <button type="button" class="hud-btn hud-pattern-btn" data-pattern="2" title="Knurl">⚙ Knurl</button>
-            <button type="button" class="hud-btn hud-pattern-btn" data-pattern="3" title="Ribbed">≡ Ribbed</button>
-            <button type="button" class="hud-btn hud-pattern-btn" data-pattern="4" title="Noise">≈ Noise</button>
-            <button type="button" class="hud-btn hud-pattern-btn" data-pattern="5" title="Bumps">∷ Bumps</button>
+            <button type="button" class="hud-btn hud-pattern-btn" data-pattern="0" title="Solid" aria-label="Solid">●</button>
+            <button type="button" class="hud-btn hud-pattern-btn" data-pattern="1" title="Carbon Fiber" aria-label="Carbon Fiber">⧲</button>
+            <button type="button" class="hud-btn hud-pattern-btn" data-pattern="2" title="Knurl" aria-label="Knurl">⚙</button>
+            <button type="button" class="hud-btn hud-pattern-btn" data-pattern="3" title="Ribbed" aria-label="Ribbed">≡</button>
+            <button type="button" class="hud-btn hud-pattern-btn" data-pattern="4" title="Noise" aria-label="Noise">≈</button>
+            <button type="button" class="hud-btn hud-pattern-btn" data-pattern="5" title="Bumps" aria-label="Bumps">∷</button>
             <div class="hud-sep"></div>
             <label class="hud-label" title="Brush size">
-              Brush
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M7 14c-1.66 0-3 1.34-3 3 0 1.31-1.16 2-2 2 .92 1.22 2.49 2 4 2 2.21 0 4-1.79 4-4 0-1.66-1.34-3-3-3zm13.71-9.37l-1.34-1.34a1 1 0 0 0-1.41 0L9 12.25 11.75 15l8.96-8.96a1 1 0 0 0 0-1.41z"/></svg>
               <input type="range" id="hud-brush-size" min="2" max="50" value="10">
             </label>
           </div>
 
           <!-- Slice HUD: slice + export + live layer count -->
           <div class="tool-hud-section" id="hud-slice">
-            <button type="button" class="hud-btn hud-btn-primary" id="hud-slice-btn" title="Slice active plate (Ctrl+S)">
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M4 5h16v2H4V5zm2 4h12v2H6V9zm2 4h8v2H8v-2zm2 4h4v2h-4v-2z"/></svg>
-              Slice Plate
+            <button type="button" class="hud-btn hud-btn-primary" id="hud-slice-btn" title="Slice active plate (Ctrl+S)" aria-label="Slice Plate">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M4 5h16v2H4V5zm2 4h12v2H6V9zm2 4h8v2H8v-2zm2 4h4v2h-4v-2z"/></svg>
             </button>
-            <button type="button" class="hud-btn" id="hud-export-btn" title="Export sliced file (Ctrl+E)">
-              Export&hellip;
+            <button type="button" class="hud-btn" id="hud-export-btn" title="Export sliced file (Ctrl+E)" aria-label="Export">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
             </button>
             <div class="hud-sep"></div>
             <span class="hud-layer-count" id="hud-layer-count" title="Sliced layer count">— layers</span>
@@ -253,6 +255,7 @@
           <button type="button" id="add-plate-btn" class="plate-add-btn" title="Add plate">+</button>
           <button type="button" id="remove-plate-btn" class="plate-remove-btn" title="Remove active plate" aria-label="Remove active plate">−</button>
         </div>
+        </div><!-- /#bottom-bar -->
       </div>
 
       <button type="button" id="toggle-sidebar-btn" class="sidebar-collapse-btn" title="Hide panel" aria-label="Hide panel" aria-controls="sidebar" aria-expanded="true">
@@ -660,88 +663,88 @@
               <span id="support-density-val" class="val-box">5</span>
             </div>
           </div>
-          <div class="control-group">
-            <label>Auto Thickness
-              <input type="checkbox" id="auto-thickness" checked class="val-box">
-            </label>
-          </div>
-          <div class="control-group" id="tip-diameter-group" style="opacity: 0.5; pointer-events: none;">
-            <label>Tip Diameter (mm)
-              <input type="number" id="tip-diameter" value="0.4" min="0.1" max="2" step="0.1" class="val-box" disabled>
-            </label>
-          </div>
-          <div class="control-group" id="support-thickness-group" style="opacity: 0.5; pointer-events: none;">
-            <label>Support Thickness (mm)
-              <input type="number" id="support-thickness" value="0.8" min="0.2" max="5" step="0.1" class="val-box"
-                disabled>
-            </label>
-          </div>
-          <div class="control-group">
-            <label>Local Minima
-              <input type="checkbox" id="detect-minima" checked class="val-box">
-            </label>
-          </div>
-          <div class="control-group">
-            <label>Stabilization
-              <input type="checkbox" id="detect-stabilization" checked class="val-box">
-            </label>
-          </div>
-          <div class="control-group" id="stabilization-density-group">
-            <label>Stabilization Density</label>
-            <div class="flex-row">
-              <input type="range" id="stabilization-density" min="1" max="9" value="4" class="val-box">
-              <span id="stabilization-density-val" class="val-box">4</span>
-            </div>
-          </div>
-          <div class="control-group">
-            <label>Reinforcements
-              <input type="checkbox" id="detect-reinforcements" class="val-box">
-            </label>
-          </div>
-          <div class="control-group" id="reinforcement-threshold-group" style="opacity: 0.5; pointer-events: none;">
-            <label>Reinforcement Threshold (mm)
-              <input type="number" id="reinforcement-threshold" value="2.0" min="0.5" max="8" step="0.5" class="val-box" disabled>
-            </label>
-          </div>
-          <div class="control-group">
-            <label>Spherical Connection
-              <input type="checkbox" id="spherical-connection" class="val-box">
-            </label>
-          </div>
-          <div class="control-group" id="sphere-connection-diameter-group" style="opacity: 0.5; pointer-events: none;">
-            <label>Sphere Diameter (mm)
-              <input type="number" id="sphere-connection-diameter" value="0.3" min="0.1" max="1" step="0.05" class="val-box" disabled>
-            </label>
-          </div>
-          <div class="control-group">
-            <label>Solid Base Pan
-              <input type="checkbox" id="base-pan-enabled" class="val-box">
-            </label>
-          </div>
-          <div id="base-pan-options" style="opacity: 0.5; pointer-events: none;">
-            <div class="control-group">
-              <label>Pan Margin (mm)
-                <input type="number" id="base-pan-margin" value="4" min="0" max="30" step="0.5" class="val-box" disabled>
-              </label>
-            </div>
-            <div class="control-group">
-              <label>Pan Thickness (mm)
-                <input type="number" id="base-pan-thickness" value="0.8" min="0.2" max="5" step="0.1" class="val-box" disabled>
-              </label>
-            </div>
-            <div class="control-group">
-              <label>Lip Width (mm)
-                <input type="number" id="base-pan-lip-width" value="1.2" min="0.4" max="5" step="0.1" class="val-box" disabled>
-              </label>
-            </div>
-            <div class="control-group">
-              <label>Lip Height (mm)
-                <input type="number" id="base-pan-lip-height" value="1" min="0.2" max="6" step="0.1" class="val-box" disabled>
-              </label>
-            </div>
-          </div>
           <details class="advanced-group">
-            <summary>Advanced Support Routing</summary>
+            <summary>Advanced</summary>
+            <div class="control-group">
+              <label>Auto Thickness
+                <input type="checkbox" id="auto-thickness" checked class="val-box">
+              </label>
+            </div>
+            <div class="control-group" id="tip-diameter-group" style="opacity: 0.5; pointer-events: none;">
+              <label>Tip Diameter (mm)
+                <input type="number" id="tip-diameter" value="0.4" min="0.1" max="2" step="0.1" class="val-box" disabled>
+              </label>
+            </div>
+            <div class="control-group" id="support-thickness-group" style="opacity: 0.5; pointer-events: none;">
+              <label>Support Thickness (mm)
+                <input type="number" id="support-thickness" value="0.8" min="0.2" max="5" step="0.1" class="val-box"
+                  disabled>
+              </label>
+            </div>
+            <div class="control-group">
+              <label>Local Minima
+                <input type="checkbox" id="detect-minima" checked class="val-box">
+              </label>
+            </div>
+            <div class="control-group">
+              <label>Stabilization
+                <input type="checkbox" id="detect-stabilization" checked class="val-box">
+              </label>
+            </div>
+            <div class="control-group" id="stabilization-density-group">
+              <label>Stabilization Density</label>
+              <div class="flex-row">
+                <input type="range" id="stabilization-density" min="1" max="9" value="4" class="val-box">
+                <span id="stabilization-density-val" class="val-box">4</span>
+              </div>
+            </div>
+            <div class="control-group">
+              <label>Reinforcements
+                <input type="checkbox" id="detect-reinforcements" class="val-box">
+              </label>
+            </div>
+            <div class="control-group" id="reinforcement-threshold-group" style="opacity: 0.5; pointer-events: none;">
+              <label>Reinforcement Threshold (mm)
+                <input type="number" id="reinforcement-threshold" value="2.0" min="0.5" max="8" step="0.5" class="val-box" disabled>
+              </label>
+            </div>
+            <div class="control-group">
+              <label>Spherical Connection
+                <input type="checkbox" id="spherical-connection" class="val-box">
+              </label>
+            </div>
+            <div class="control-group" id="sphere-connection-diameter-group" style="opacity: 0.5; pointer-events: none;">
+              <label>Sphere Diameter (mm)
+                <input type="number" id="sphere-connection-diameter" value="0.3" min="0.1" max="1" step="0.05" class="val-box" disabled>
+              </label>
+            </div>
+            <div class="control-group">
+              <label>Solid Base Pan
+                <input type="checkbox" id="base-pan-enabled" class="val-box">
+              </label>
+            </div>
+            <div id="base-pan-options" style="opacity: 0.5; pointer-events: none;">
+              <div class="control-group">
+                <label>Pan Margin (mm)
+                  <input type="number" id="base-pan-margin" value="4" min="0" max="30" step="0.5" class="val-box" disabled>
+                </label>
+              </div>
+              <div class="control-group">
+                <label>Pan Thickness (mm)
+                  <input type="number" id="base-pan-thickness" value="0.8" min="0.2" max="5" step="0.1" class="val-box" disabled>
+                </label>
+              </div>
+              <div class="control-group">
+                <label>Lip Width (mm)
+                  <input type="number" id="base-pan-lip-width" value="1.2" min="0.4" max="5" step="0.1" class="val-box" disabled>
+                </label>
+              </div>
+              <div class="control-group">
+                <label>Lip Height (mm)
+                  <input type="number" id="base-pan-lip-height" value="1" min="0.2" max="6" step="0.1" class="val-box" disabled>
+                </label>
+              </div>
+            </div>
             <div class="control-group">
               <label>Support Scope
                 <select id="support-scope" class="val-box">

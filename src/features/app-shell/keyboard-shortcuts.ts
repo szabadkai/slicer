@@ -59,6 +59,7 @@ const MOD_BINDINGS: ShortcutBinding[] = [
 ];
 
 const SIMPLE_BINDINGS: ShortcutBinding[] = [
+  { key: 'p', action: () => document.dispatchEvent(new CustomEvent('one-click-prepare')) },
   { key: 'g', action: ({ viewer }) => viewer.autoArrange() },
   { key: 'f', action: ({ viewer }) => viewer.fillPlatform() },
   {

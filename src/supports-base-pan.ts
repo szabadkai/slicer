@@ -45,8 +45,12 @@ export function createBasePanGeometry(
       );
     }
   }
-  const outline = convexHull2D(outlineSamples);
-  if (outline.length < 3) return new THREE.BufferGeometry();
+  const convex = convexHull2D(outlineSamples);
+  if (convex.length < 3) return new THREE.BufferGeometry();
+
+  // Dent the convex hull inward wherever it's far from any support base,
+  // so the pan follows the support footprint (e.g. horseshoe shape).
+  const outline = dentConvexHull(convex, basePoints, sampleRadius);
 
   const center = new THREE.Vector3();
   modelBounds.getCenter(center);
@@ -112,14 +116,22 @@ export function createBasePanGeometry(
     indices.push(layer2 + next, layer1 + i, layer1 + next);
   }
 
-  // Bottom face: triangulated fan at Y=0 (layer 0, normal down)
-  for (let i = 1; i < n - 1; i++) {
-    indices.push(0, i, i + 1);
+  // Bottom face: concave-safe triangulation at Y=0 (normal down)
+  const bottomTris = THREE.ShapeUtils.triangulateShape(
+    outline.map((p) => new THREE.Vector2(p.x, p.y)),
+    [],
+  );
+  for (const [a, b, c] of bottomTris) {
+    indices.push(a, b, c);
   }
 
-  // Floor face: triangulated fan at Y=safeThickness (layer 2, normal up)
-  for (let i = 1; i < n - 1; i++) {
-    indices.push(layer2, layer2 + i + 1, layer2 + i);
+  // Floor face: concave-safe triangulation at Y=safeThickness (normal up)
+  const floorTris = THREE.ShapeUtils.triangulateShape(
+    innerOutline.map((p) => new THREE.Vector2(p.x, p.y)),
+    [],
+  );
+  for (const [a, b, c] of floorTris) {
+    indices.push(layer2 + a, layer2 + c, layer2 + b);
   }
 
   const geometry = new THREE.BufferGeometry();
@@ -127,6 +139,85 @@ export function createBasePanGeometry(
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
   geometry.computeVertexNormals();
   return geometry;
+}
+
+/**
+ * Walk the convex hull and recursively pull midpoints inward wherever the
+ * hull edge is far from any support base point. This carves concavities
+ * (e.g. the open center of a horseshoe) while keeping the outline convex
+ * near actual supports.
+ */
+function dentConvexHull(
+  hull: THREE.Vector2[],
+  basePoints: THREE.Vector2[],
+  sampleRadius: number,
+): THREE.Vector2[] {
+  const threshold = sampleRadius * 1.8;
+  const result: THREE.Vector2[] = [];
+
+  for (let i = 0; i < hull.length; i++) {
+    const a = hull[i];
+    const b = hull[(i + 1) % hull.length];
+    result.push(a);
+    subdivideEdge(a, b, basePoints, threshold, sampleRadius, result, 0);
+  }
+
+  return result;
+}
+
+function subdivideEdge(
+  a: THREE.Vector2,
+  b: THREE.Vector2,
+  basePoints: THREE.Vector2[],
+  threshold: number,
+  sampleRadius: number,
+  out: THREE.Vector2[],
+  depth: number,
+): void {
+  if (depth > 6) return;
+  const mid = new THREE.Vector2((a.x + b.x) / 2, (a.y + b.y) / 2);
+  const distToNearest = nearestDist(mid, basePoints);
+  if (distToNearest <= threshold) return;
+
+  // Pull midpoint toward the nearest base point, stopping at sampleRadius
+  const nearest = nearestPoint(mid, basePoints);
+  const dx = mid.x - nearest.x;
+  const dy = mid.y - nearest.y;
+  const d = Math.sqrt(dx * dx + dy * dy);
+  const pulled = new THREE.Vector2(
+    nearest.x + (dx / d) * sampleRadius,
+    nearest.y + (dy / d) * sampleRadius,
+  );
+
+  subdivideEdge(a, pulled, basePoints, threshold, sampleRadius, out, depth + 1);
+  out.push(pulled);
+  subdivideEdge(pulled, b, basePoints, threshold, sampleRadius, out, depth + 1);
+}
+
+function nearestDist(p: THREE.Vector2, points: THREE.Vector2[]): number {
+  let min = Infinity;
+  for (const q of points) {
+    const dx = p.x - q.x;
+    const dy = p.y - q.y;
+    const d = dx * dx + dy * dy;
+    if (d < min) min = d;
+  }
+  return Math.sqrt(min);
+}
+
+function nearestPoint(p: THREE.Vector2, points: THREE.Vector2[]): THREE.Vector2 {
+  let min = Infinity;
+  let best = points[0];
+  for (const q of points) {
+    const dx = p.x - q.x;
+    const dy = p.y - q.y;
+    const d = dx * dx + dy * dy;
+    if (d < min) {
+      min = d;
+      best = q;
+    }
+  }
+  return best;
 }
 
 export function convexHull2D(points: THREE.Vector2[]): THREE.Vector2[] {

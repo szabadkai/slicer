@@ -20,13 +20,32 @@ Click **Auto-Generate** in the Supports panel. The engine:
 1. Detects all faces below the overhang angle threshold
 2. Places contact points based on the **density** setting
 3. Routes support pillars from each contact point down to the build plate (or to the model surface below it)
-4. Optionally adds **cross-bracing** between adjacent pillars for stability
-5. Optionally adds a **base pan** (raft-like pad) at the bottom of the support tree
+4. Optionally adds cross-bracing, a base pan, and other options from the **Advanced** section
 
 ### Density
 
 - **Auto density** (default) scales point count to surface area — you rarely need to change this
 - Manual density lets you specify support points per cm²
+
+## Advanced options
+
+Expand the **Advanced** section in the panel for full control over how supports are generated and what they look like.
+
+### Thickness
+
+- **Auto Thickness** (default) sizes tip and shaft diameters to suit the model — leave it on unless you need precise control
+- **Tip Diameter** — the sphere at the contact point; smaller tips snap off more cleanly but are weaker (0.3–0.5 mm for cosmetic parts)
+- **Support Thickness** — shaft diameter; thicker shafts are more rigid but use more resin
+
+### Detection
+
+- **Local Minima** — adds supports at hanging low points (tips, dangles) even if the angle isn't steep enough to trigger the overhang detector
+- **Stabilization** — adds perimeter supports around tall or narrow models to prevent tip-over during peel; the **Stabilization Density** slider controls how many are placed
+- **Reinforcements** — adds supports where the model wall is thinner than the **Reinforcement Threshold**; useful for fragile thin sections but slow on high-polygon models
+
+### Spherical Connection
+
+Adds a small ball joint at the contact point between the tip and the model surface. Makes supports easier to remove cleanly. Set **Sphere Diameter** to match your tip diameter.
 
 ### Cross-bracing
 
@@ -35,6 +54,14 @@ Adds diagonal struts between support pillars. Useful for tall, thin support tree
 ### Base pan
 
 A flat pad at the bottom of the support cluster that improves build plate adhesion for models with many small support contact points. Configure the **margin** (how far the pan extends beyond the outermost support foot), **thickness**, and **lip** (raised edge to catch the pad during removal).
+
+### Routing
+
+- **Support Scope** — *Outside only* (default) skips internal cavities; switch to *Include cavities* if you need to support internal overhangs
+- **Approach** — controls whether pillars prefer angled or vertical routes around obstructions
+- **Max Pillar Angle** — the steepest angle (from vertical) a pillar can lean to reach its contact point
+- **Model Clearance** — minimum gap between a pillar shaft and the model surface
+- **Max Contact Offset** — how far a pillar can shift horizontally to find a clear path
 
 ## Checking coverage
 

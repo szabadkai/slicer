@@ -286,7 +286,6 @@ export function mountShell(ctx: AppContext): {
     const hudBtn = document.getElementById('hud-paint-toggle');
     if (hudBtn && sidebarBtn) {
       const isActive = sidebarBtn.classList.contains('active');
-      hudBtn.textContent = isActive ? 'Start Painting' : 'Stop Painting';
       hudBtn.classList.toggle('active', !isActive);
     }
   });

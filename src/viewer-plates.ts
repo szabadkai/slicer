@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import type { Viewer } from './viewer';
 import type { SceneObject, PlateState } from './viewer-core';
+
+export const DEFAULT_ARRANGE_ELEVATION = 10;
+
 import {
   gaArrange,
   computeFillLayout,
@@ -212,7 +215,11 @@ function moveObjectToPlate(viewer: Viewer, obj: SceneObject, target: PlateState)
 
 // ---- arrangement ----------------------------------------------------------
 
-export function autoArrange(viewer: Viewer, padding = 0.5, elevation = 10): boolean {
+export function autoArrange(
+  viewer: Viewer,
+  padding = 0.5,
+  elevation = DEFAULT_ARRANGE_ELEVATION,
+): boolean {
   if (!viewer.printer) return false;
   if (viewer.plates.length > 1) {
     return distributeAcrossPlates(viewer, viewer.plates, padding, elevation);
@@ -277,7 +284,7 @@ export function distributeAcrossPlates(
   viewer: Viewer,
   plates: PlateState[],
   padding = 0.5,
-  elevation = 10,
+  elevation = DEFAULT_ARRANGE_ELEVATION,
 ): boolean {
   if (!plates?.length || !viewer.printer) return false;
   const p = viewer.printer as { buildWidthMM: number; buildDepthMM: number };

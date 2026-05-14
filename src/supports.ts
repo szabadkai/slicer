@@ -21,14 +21,19 @@ import {
 } from './features/support-generation/pillar-store';
 import {
   ROUTE_DIRECTIONS,
-  halton,
   deduplicatePoints,
   uniqueSortedNumbers,
   directionOffset,
   normalizedAngleDelta,
   yieldThread,
 } from './supports-utils';
-import { detectMinima, detectStabilization, detectReinforcements } from './supports-detect';
+import {
+  findContactPoints,
+  detectMinima,
+  detectStabilization,
+  detectReinforcements,
+} from './supports-detect';
+import { isExteriorContact } from './supports-exterior';
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
@@ -38,16 +43,7 @@ export type { RouteWaypoint, ContactPoint, RouteContext, RouteOptions };
 
 export { planSupportRoute };
 
-const UP = new THREE.Vector3(0, 1, 0);
 const DOWN = new THREE.Vector3(0, -1, 0);
-const EXTERIOR_RAY_DIRECTIONS = [
-  new THREE.Vector3(1, 0, 0),
-  new THREE.Vector3(-1, 0, 0),
-  new THREE.Vector3(0, 1, 0),
-  new THREE.Vector3(0, -1, 0),
-  new THREE.Vector3(0, 0, 1),
-  new THREE.Vector3(0, 0, -1),
-];
 
 interface SupportOptions {
   overhangAngle?: number;
@@ -541,135 +537,4 @@ function findAngledRoute(
   }
   candidates.sort((a, b) => a.score - b.score);
   return candidates[0]?.route ?? null;
-}
-
-// ---------------------------------------------------------------------------
-// Exterior detection
-// ---------------------------------------------------------------------------
-
-function isExteriorContact(point: ContactPoint, context: RouteContext, clearance: number): boolean {
-  const normal = point.normal?.clone().normalize() ?? DOWN.clone();
-  if (!isOutwardFacingSurface(point.position, normal, context.modelCenter)) return false;
-  const start = point.position.clone().addScaledVector(normal, Math.max(0.05, clearance * 0.1));
-  return [normal, ...EXTERIOR_RAY_DIRECTIONS].some((dir) => rayEscapesModel(start, dir, context));
-}
-
-function isOutwardFacingSurface(
-  position: THREE.Vector3,
-  normal: THREE.Vector3,
-  modelCenter: THREE.Vector3,
-): boolean {
-  const radial = new THREE.Vector3().subVectors(position, modelCenter);
-  if (radial.lengthSq() < 1e-6) return true;
-  radial.normalize();
-  return normal.dot(radial) > -0.1;
-}
-
-function rayEscapesModel(
-  start: THREE.Vector3,
-  direction: THREE.Vector3,
-  context: RouteContext,
-): boolean {
-  const dir = direction.clone().normalize();
-  if (dir.lengthSq() === 0) return false;
-  const far = rayDistancePastBounds(start, dir, context.modelBounds);
-  if (far <= 0) return true;
-  context.raycaster.set(start, dir);
-  context.raycaster.far = far;
-  return context.raycaster.intersectObject(context.mesh).every((hit) => hit.distance < 0.05);
-}
-
-function rayDistancePastBounds(
-  start: THREE.Vector3,
-  direction: THREE.Vector3,
-  bounds: THREE.Box3,
-): number {
-  const expanded = bounds.clone().expandByScalar(1);
-  const boxHit = new THREE.Vector3();
-  const ray = new THREE.Ray(start, direction);
-  if (!ray.intersectBox(expanded, boxHit)) return 0;
-  return start.distanceTo(boxHit) + 1;
-}
-
-// ---------------------------------------------------------------------------
-// Contact point detection
-// ---------------------------------------------------------------------------
-
-async function findContactPoints(
-  geometry: THREE.BufferGeometry,
-  overhangAngleDeg: number,
-  density: number,
-  onProgress: (text: string) => void,
-): Promise<ContactPoint[]> {
-  const pos = geometry.attributes.position;
-  const normals = geometry.attributes.normal;
-  const index = geometry.index;
-  const triCount = index ? index.count / 3 : pos.count / 3;
-  const overhangThreshold = Math.cos(THREE.MathUtils.degToRad(90 - overhangAngleDeg));
-  const spacing = 12 - density;
-  const points: ContactPoint[] = [];
-
-  const a = new THREE.Vector3(),
-    b = new THREE.Vector3(),
-    c = new THREE.Vector3();
-  const n = new THREE.Vector3(),
-    edge1 = new THREE.Vector3(),
-    edge2 = new THREE.Vector3(),
-    cross = new THREE.Vector3();
-
-  for (let i = 0; i < triCount; i++) {
-    if (i % 50000 === 0 && i !== 0) {
-      onProgress(`Finding contact points... ${Math.round((i / triCount) * 100)}%`);
-      await yieldThread();
-    }
-
-    const [idxA, idxB, idxC] = index
-      ? [index.getX(i * 3), index.getX(i * 3 + 1), index.getX(i * 3 + 2)]
-      : [i * 3, i * 3 + 1, i * 3 + 2];
-
-    a.set(pos.getX(idxA), pos.getY(idxA), pos.getZ(idxA));
-    b.set(pos.getX(idxB), pos.getY(idxB), pos.getZ(idxB));
-    c.set(pos.getX(idxC), pos.getY(idxC), pos.getZ(idxC));
-    edge1.subVectors(b, a);
-    edge2.subVectors(c, a);
-    cross.crossVectors(edge1, edge2);
-    n.copy(cross).normalize();
-
-    if (
-      normals &&
-      n.dot(new THREE.Vector3(normals.getX(idxA), normals.getY(idxA), normals.getZ(idxA))) < 0
-    ) {
-      n.multiplyScalar(-1);
-      cross.multiplyScalar(-1);
-    }
-    if (n.dot(UP) >= -overhangThreshold) continue;
-
-    const area = cross.length() * 0.5;
-    const numSamples = Math.max(1, Math.round(area / (spacing * spacing)));
-    for (let s = 0; s < numSamples; s++) {
-      let u: number, v: number;
-      if (numSamples === 1) {
-        u = 1 / 3;
-        v = 1 / 3;
-      } else {
-        u = halton(i * 31 + s + 1, 2);
-        v = halton(i * 31 + s + 1, 3);
-      }
-      if (u + v > 1) {
-        u = 1 - u;
-        v = 1 - v;
-      }
-      const w = 1 - u - v;
-      points.push({
-        position: new THREE.Vector3(
-          a.x * u + b.x * v + c.x * w,
-          a.y * u + b.y * v + c.y * w,
-          a.z * u + b.z * v + c.z * w,
-        ),
-        normal: n.clone(),
-        reason: 'overhang',
-      });
-    }
-  }
-  return deduplicatePoints(points, spacing * 0.5);
 }
