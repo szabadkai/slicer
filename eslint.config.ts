@@ -75,6 +75,7 @@ export default tseslint.config(
       'src/viewer-plates.ts',
       'src/viewer-geometry.ts',
       'src/viewer-serialize.ts',
+      'src/viewer-serialize.test.ts',
       'src/viewer-scene.ts',
       'src/repairer.ts',
       'src/supports.ts',
