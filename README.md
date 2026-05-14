@@ -52,36 +52,36 @@ This is a personal testbed for exploring SLA slicing workflows: orientation algo
 | `Esc` | Close dialogs / cancel active tool |
 | `?` | Show shortcuts |
 
-### Selection
+### Selection & editing
 | Key | Action |
 |---|---|
 | `Ctrl+A` | Select all |
 | `Ctrl+D` | Duplicate selected |
 | `Ctrl+C` / `Ctrl+V` | Copy / Paste |
 | `Ctrl+Z` | Undo |
-| `Del` | Delete selected |
+| `Ctrl+Shift+Z` | Redo |
+| `Del` / `Backspace` | Delete selected |
 
 ### Arrangement
 | Key | Action |
 |---|---|
-| `G` | Auto-arrange (single) / Distribute (multi) |
-| `Ctrl+Shift+A` | Auto-arrange / Distribute |
+| `G` | Auto-arrange |
+| `Ctrl+Shift+A` | Auto-arrange |
 | `F` | Fill platform with copies |
+| `D` | Drop selection to platform |
+| `P` | One-click prepare |
 
 ### Tool panels
 | Key | Action |
 |---|---|
-| `1` | Layout panel |
-| `2` | Transform panel |
-| `3` | Orient panel |
-| `4` | Hollow panel |
-| `5` | Supports panel |
-| `6` | Materials panel |
-| `7` | Paint panel |
-| `8` | Inspect panel |
-| `9` | Slice panel |
-| `Tab` | Next panel |
-| `Space` | Cycle transform mode |
+| `1` | Plate panel |
+| `2` | Orient panel |
+| `3` | Modify panel |
+| `4` | Supports panel |
+| `5` | Surface panel |
+| `6` | Slice panel |
+| `Tab` / `Shift+Tab` | Next / previous panel |
+| `Space` | Show plate panel |
 
 ### Slicing & export
 | Key | Action |
@@ -91,12 +91,10 @@ This is a personal testbed for exploring SLA slicing workflows: orientation algo
 | `Ctrl+E` | Export active plate |
 | `Ctrl+Shift+E` | Export all plates |
 
-### Layer inspector
+### Layer navigation (when sliced)
 | Key | Action |
 |---|---|
 | `←` / `→` | Previous / next layer |
-| `PgUp` / `PgDn` | Skip 10 layers |
-| `Home` / `End` | First / last layer |
 
 ---
 
@@ -122,7 +120,7 @@ User-facing how-to guides live in [`docs/guides/`](docs/guides/README.md):
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
+npm run dev        # http://localhost:3000
 npm test           # run Vitest once
 npm run typecheck  # tsc --noEmit
 npm run lint       # ESLint
@@ -146,16 +144,19 @@ src/
     hollow-drain/
     layer-preview/
     material-and-printer-profiles/
+    material-selection/
     mesh-health/
     model-io/
     model-transform/
     multi-plate-project/
+    onboarding/
+    one-click-prepare/
+    paint-slicing/
     paint-tool/
     primitive-boolean/
     scene-viewer/
     support-generation/
     surface-intent/
-    onboarding/
   main.ts          ≤ 100 lines — bootstrap only
 ```
 
@@ -165,7 +166,7 @@ src/
 - No `any` — use `unknown` + type guards; explicit return types on all exports
 - Files ≤ 600 lines; split by concern: `panel.ts` (UI), `engine.ts` / `ops.ts` (logic), `worker.ts` (async)
 - Path aliases: `@core/*`, `@features/*`
-- `three` imports only inside `src/core/viewer-service.ts` and `src/features/gpu-slicing/`
+- `three` imports confined to viewer files, geometry processing, and support/hollow modules — feature UI panels should not import THREE directly
 
 See `CONTRIBUTING.md` for the progress bar / thread-yielding directive.
 
