@@ -300,7 +300,7 @@ export function mountSupportPanel(ctx: AppContext): void {
   });
 
   // Wire support-click → explanation popup
-  const canvas = document.getElementById('viewer-canvas');
+  const canvas = viewer.canvas;
   listen(canvas, 'support-clicked', ((
     e: CustomEvent<{ x: number; y: number; z: number; screenX: number; screenY: number }>,
   ) => {

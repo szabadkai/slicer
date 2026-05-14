@@ -76,10 +76,12 @@ export function handleClick(core: ViewerCore, e: PointerEvent): void {
   );
   const allObjects = core.getAllObjects();
 
-  // Check support meshes first — support click takes priority
+  // Check support meshes — fire event for pillar inspection, but also select the owning model
   const supportMeshes = allObjects
     .map((o) => o.supportsMesh)
     .filter((m): m is THREE.Mesh => m !== null);
+
+  let supportOwner: SceneObject | null = null;
   if (supportMeshes.length > 0) {
     const supportHits = core.raycaster.intersectObjects(supportMeshes, false);
     if (supportHits.length > 0) {
@@ -90,20 +92,31 @@ export function handleClick(core: ViewerCore, e: PointerEvent): void {
           detail: { x: p.x, y: p.y, z: p.z, screenX: e.clientX, screenY: e.clientY },
         }),
       );
-      return;
+      supportOwner = allObjects.find((o) => o.supportsMesh === hit.object) ?? null;
     }
   }
 
+  const multi = e.shiftKey || e.ctrlKey || e.metaKey;
+
+  if (supportOwner) {
+    const id = supportOwner.id;
+    const hitPlate = core.getPlateForObject(id);
+    if (hitPlate && hitPlate !== core.activePlate)
+      (core as unknown as { setActivePlate(p: PlateState): void }).setActivePlate(hitPlate);
+    if (multi) toggleSelection(core, id);
+    else selectObject(core, id);
+    return;
+  }
+
+  // No support hit — fall through to model mesh selection
   const meshes = allObjects.map((o: SceneObject) => o.mesh);
   const intersects = core.raycaster.intersectObjects(meshes, false);
-  const multi = e.shiftKey || e.ctrlKey || e.metaKey;
   if (intersects.length > 0) {
     const hit = intersects[0];
     const id = hit.object.userData.id as string;
     const hitPlate = core.getPlateForObject(id);
     if (hitPlate && hitPlate !== core.activePlate)
       (core as unknown as { setActivePlate(p: PlateState): void }).setActivePlate(hitPlate);
-
     if (multi) toggleSelection(core, id);
     else selectObject(core, id);
   } else if (!multi) clearSelection(core);
