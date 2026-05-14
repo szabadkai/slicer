@@ -74,6 +74,11 @@ export function mountSupportPanel(ctx: AppContext): void {
   const reinforcementThreshold = document.getElementById(
     'reinforcement-threshold',
   ) as HTMLInputElement | null;
+  const bridgeSupports = document.getElementById('bridge-supports') as HTMLInputElement | null;
+  const bridgeSearchRadius = document.getElementById(
+    'bridge-search-radius',
+  ) as HTMLInputElement | null;
+  const bridgeSearchRadiusGroup = document.getElementById('bridge-search-radius-group');
 
   function refreshOverhangOverlay(): void {
     if (!overhangOverlayVisible.value) {
@@ -154,6 +159,9 @@ export function mountSupportPanel(ctx: AppContext): void {
     const reinEnabled = detectReinforcements?.checked;
     if (reinforcementThreshold) reinforcementThreshold.disabled = !reinEnabled;
     setGroupOpacity(reinforcementThresholdGroup, !!reinEnabled);
+    const bridgeEnabled = bridgeSupports?.checked;
+    if (bridgeSearchRadius) bridgeSearchRadius.disabled = !bridgeEnabled;
+    setGroupOpacity(bridgeSearchRadiusGroup, !!bridgeEnabled);
   }
 
   function setGroupOpacity(el: HTMLElement | null, enabled: boolean): void {
@@ -200,6 +208,8 @@ export function mountSupportPanel(ctx: AppContext): void {
       detectReinforcements: detectReinforcements?.checked ?? false,
       stabilizationDensity: parseInt(stabilizationDensityInput?.value ?? '4', 10),
       reinforcementThreshold: parseFloat(reinforcementThreshold?.value ?? '2.0'),
+      bridgeSupports: bridgeSupports?.checked ?? false,
+      maxBridgeSearchRadius: parseFloat(bridgeSearchRadius?.value ?? '30'),
       onProgress,
       intentParams,
     };
@@ -283,6 +293,7 @@ export function mountSupportPanel(ctx: AppContext): void {
   listen(sphericalConnection, 'change', syncUi);
   listen(detectReinforcements, 'change', syncUi);
   listen(detectStabilization, 'change', syncUi);
+  listen(bridgeSupports, 'change', syncUi);
   listen(stabilizationDensityInput, 'input', syncUi);
   listen(generateBtn, 'click', () => {
     handleGenerate();

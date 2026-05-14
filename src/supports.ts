@@ -34,6 +34,7 @@ import {
   detectReinforcements,
 } from './supports-detect';
 import { isExteriorContact } from './supports-exterior';
+import { findBridgeRoute } from './supports-bridge';
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
@@ -71,6 +72,8 @@ interface SupportOptions {
   detectReinforcements?: boolean;
   stabilizationDensity?: number;
   reinforcementThreshold?: number;
+  bridgeSupports?: boolean;
+  maxBridgeSearchRadius?: number;
   onProgress?: (fraction: number, text: string) => void;
 }
 
@@ -114,6 +117,8 @@ export async function generateSupports(
     detectReinforcements: doDetectReinforcements = false,
     stabilizationDensity = 4,
     reinforcementThreshold = 2.0,
+    bridgeSupports = false,
+    maxBridgeSearchRadius = 30,
     onProgress,
   } = options;
 
@@ -176,6 +181,8 @@ export async function generateSupports(
     supportCollisionRadius: Math.max(pillarRadius * 1.1, 0.2),
     supportTipRadius: Math.max((actualTipDiameter / 2) * 1.1, 0.15),
     maxContactOffset,
+    allowBridgeSupports: bridgeSupports ?? false,
+    maxBridgeSearchRadius: maxBridgeSearchRadius ?? 30,
   };
   const ctx: RouteContext = { mesh: tempMesh, raycaster, modelBounds, modelCenter };
 
@@ -283,7 +290,7 @@ export async function generateSupports(
       effectiveTipDiameter = Math.min(actualTipDiameter * 1.4, 1.2);
       effectivePillarRadius = Math.min(pillarRadius * 1.2, 1.0);
     }
-    return buildPillarFromRoute(
+    const pillar = buildPillarFromRoute(
       route,
       {
         tipDiameter: effectiveTipDiameter,
@@ -294,6 +301,11 @@ export async function generateSupports(
       },
       'auto',
     );
+    const lastWp = route[route.length - 1];
+    if (lastWp.internalResting) {
+      pillar.bridgeTarget = { x: lastWp.x, y: lastWp.y, z: lastWp.z };
+    }
+    return pillar;
   });
 
   return {
@@ -395,16 +407,23 @@ function planSupportRoute(
       { x: contactPos.x, y: contactPos.y, z: contactPos.z },
       { x: contactPos.x, y: baseHeight, z: contactPos.z },
     ];
-    return routeCollides(
-      route,
-      context,
-      tipHeight,
-      baseHeight,
-      options.supportCollisionRadius,
-      options.supportTipRadius,
-    )
-      ? null
-      : route;
+    if (
+      !routeCollides(
+        route,
+        context,
+        tipHeight,
+        baseHeight,
+        options.supportCollisionRadius,
+        options.supportTipRadius,
+      )
+    ) {
+      return route;
+    }
+    // Vertical route collides — try bridge as last resort.
+    if (options.allowBridgeSupports) {
+      return findBridgeRoute(contactPos, context, _pillarRadius, tipHeight, baseHeight, options);
+    }
+    return null;
   }
 
   if (options.approachMode === 'vertical') {
@@ -460,6 +479,10 @@ function planSupportRoute(
       { x: contactPos.x, y: contactPos.y, z: contactPos.z },
       { x: contactPos.x, y: obstruction.point.y, z: contactPos.z, internalResting: true },
     ];
+  }
+  // All standard routes failed — try bridge as last resort.
+  if (options.allowBridgeSupports) {
+    return findBridgeRoute(contactPos, context, _pillarRadius, tipHeight, baseHeight, options);
   }
   return null;
 }

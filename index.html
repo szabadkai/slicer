@@ -782,6 +782,16 @@
                 <input type="checkbox" id="cross-bracing" checked class="val-box">
               </label>
             </div>
+            <div class="control-group">
+              <label>Bridge Supports
+                <input type="checkbox" id="bridge-supports" class="val-box">
+              </label>
+            </div>
+            <div id="bridge-search-radius-group" class="control-group">
+              <label>Max Bridge Distance (mm)
+                <input type="number" id="bridge-search-radius" value="30" min="5" max="100" step="5" class="val-box">
+              </label>
+            </div>
           </details>
           <div class="action-buttons">
             <button class="btn btn-secondary" id="clear-supports-btn">Clear</button>
@@ -811,6 +821,7 @@
           </div>
           <div class="action-buttons">
             <button class="btn btn-secondary" id="manual-support-btn">Click to Place</button>
+            <button class="btn btn-secondary" id="manual-bridge-btn">Bridge (2-click)</button>
           </div>
         </section>
 

@@ -81,13 +81,24 @@ function serializePillarSet(set: ModelPillarSet): SerializedPillarSet | null {
     pillars: set.pillars.map((p) => ({
       id: p.id,
       origin: p.origin,
-      route: p.route.map((w) => ({ x: w.x, y: w.y, z: w.z })),
+      route: p.route.map((w) => {
+        const wp: { x: number; y: number; z: number; internalResting?: boolean } = {
+          x: w.x,
+          y: w.y,
+          z: w.z,
+        };
+        if (w.internalResting) wp.internalResting = true;
+        return wp;
+      }),
       tipDiameter: p.tipDiameter,
       pillarRadius: p.pillarRadius,
       baseRadius: p.baseRadius,
       tipHeight: p.tipHeight,
       baseHeight: p.baseHeight,
       contact: { x: p.contact.x, y: p.contact.y, z: p.contact.z },
+      bridgeTarget: p.bridgeTarget
+        ? { x: p.bridgeTarget.x, y: p.bridgeTarget.y, z: p.bridgeTarget.z }
+        : undefined,
     })),
     settings: {
       crossBracing: set.settings.crossBracing,
@@ -150,13 +161,24 @@ export function restoreSerializedObjects(viewer: Viewer, data: SerializedObject[
         pillars: s.pillars.map((p) => ({
           id: p.id,
           origin: p.origin,
-          route: p.route.map((w) => ({ x: w.x, y: w.y, z: w.z })),
+          route: p.route.map((w) => {
+            const wp: { x: number; y: number; z: number; internalResting?: boolean } = {
+              x: w.x,
+              y: w.y,
+              z: w.z,
+            };
+            if (w.internalResting) wp.internalResting = true;
+            return wp;
+          }),
           tipDiameter: p.tipDiameter,
           pillarRadius: p.pillarRadius,
           baseRadius: p.baseRadius,
           tipHeight: p.tipHeight,
           baseHeight: p.baseHeight,
           contact: { x: p.contact.x, y: p.contact.y, z: p.contact.z },
+          bridgeTarget: p.bridgeTarget
+            ? { x: p.bridgeTarget.x, y: p.bridgeTarget.y, z: p.bridgeTarget.z }
+            : undefined,
         })),
         settings: {
           crossBracing: s.settings.crossBracing,

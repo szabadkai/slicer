@@ -84,6 +84,8 @@ export default tseslint.config(
       'src/supports-exterior.ts',
       'src/supports-detect.ts',
       'src/supports-detect.test.ts',
+      'src/supports-bridge.ts',
+      'src/supports-bridge.test.ts',
       'src/viewer-supports.ts',
       'src/viewer-material.ts',
       'src/viewer-face-markers.ts',

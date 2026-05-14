@@ -40,6 +40,11 @@ export interface RouteOptions {
   // when the user picks a fat tip with a thin shaft).
   supportTipRadius: number;
   maxContactOffset: number;
+  // When true and no plate-reaching route is found, search for a nearby
+  // model surface to bridge to instead of returning null.
+  allowBridgeSupports: boolean;
+  // Maximum distance (mm) to search for a bridge target surface.
+  maxBridgeSearchRadius: number;
 }
 
 const UP = new THREE.Vector3(0, 1, 0);

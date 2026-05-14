@@ -62,13 +62,14 @@ export interface SerializedMesh {
 export interface SerializedPillar {
   id: string;
   origin: 'auto' | 'manual';
-  route: { x: number; y: number; z: number }[];
+  route: { x: number; y: number; z: number; internalResting?: boolean }[];
   tipDiameter: number;
   pillarRadius: number;
   baseRadius: number;
   tipHeight: number;
   baseHeight: number;
   contact: { x: number; y: number; z: number };
+  bridgeTarget?: { x: number; y: number; z: number };
 }
 
 export interface SerializedPillarSet {

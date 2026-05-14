@@ -9,6 +9,7 @@ import {
   type RouteContext,
   type RouteOptions,
   type ContactPoint,
+  routeCollides,
 } from '../../supports-geometry';
 import { planSupportRoute } from '../../supports';
 import { addManualPillarRecord, buildPillarFromRoute } from './pillar-store';
@@ -90,6 +91,8 @@ export function addManualPillar(
       supportCollisionRadius: Math.max(pillarRadius * 1.1, 0.2),
       supportTipRadius: Math.max((opts.tipDiameterMM / 2) * 1.1, 0.15),
       maxContactOffset: opts.maxContactOffset,
+      allowBridgeSupports: false,
+      maxBridgeSearchRadius: 30,
     };
 
     const tempMesh = new THREE.Mesh(
@@ -142,6 +145,123 @@ export function addManualPillar(
     },
     'manual',
   );
+  addManualPillarRecord(obj.id, pillar);
+  viewer.rebuildSupportsFromStore(obj.id);
+}
+
+/**
+ * Place a bridge support between two user-picked surface points.
+ * The support has tapered tips at both ends (no flared base).
+ */
+export function addBridgePillar(
+  viewer: PillarViewer,
+  obj: PillarObject,
+  sourceWorld: THREE.Vector3,
+  targetWorld: THREE.Vector3,
+  modelGeometry: THREE.BufferGeometry | null,
+  options?: Partial<ManualPillarOptions>,
+): void {
+  const opts: ManualPillarOptions = { ...DEFAULT_MANUAL_OPTIONS, ...options };
+
+  const originX = viewer.activePlate.originX || 0;
+  const originZ = viewer.activePlate.originZ || 0;
+
+  const sourceLocal = sourceWorld.clone();
+  sourceLocal.x -= originX;
+  sourceLocal.z -= originZ;
+
+  const targetLocal = targetWorld.clone();
+  targetLocal.x -= originX;
+  targetLocal.z -= originZ;
+
+  const tipHeight = Math.max(opts.tipDiameterMM * 1.2, 0.5);
+  const pillarRadius = Math.max(opts.shaftDiameterMM / 2, 0.15);
+  const baseRadius = pillarRadius * 2;
+  const baseHeight = 0.5;
+  const minBridgeLength = tipHeight * 2 + 0.5;
+
+  const distance = sourceLocal.distanceTo(targetLocal);
+  if (distance < minBridgeLength) {
+    document.dispatchEvent(new CustomEvent('manual-bridge-failed'));
+    return;
+  }
+
+  // Ensure source is above target so the route goes "downward".
+  const [top, bottom] =
+    sourceLocal.y >= targetLocal.y ? [sourceLocal, targetLocal] : [targetLocal, sourceLocal];
+
+  let route: RouteWaypoint[] = [
+    { x: top.x, y: top.y, z: top.z },
+    { x: bottom.x, y: bottom.y, z: bottom.z, internalResting: true },
+  ];
+
+  // Validate route against model geometry if available.
+  if (modelGeometry) {
+    if (
+      !(modelGeometry as unknown as { boundsTree: unknown }).boundsTree &&
+      typeof modelGeometry.computeBoundsTree === 'function'
+    ) {
+      modelGeometry.computeBoundsTree();
+    }
+    const tempMesh = new THREE.Mesh(
+      modelGeometry,
+      new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }),
+    );
+    tempMesh.updateMatrixWorld(true);
+    const raycaster = new THREE.Raycaster();
+    raycaster.firstHitOnly = false;
+    const modelBounds = new THREE.Box3().setFromBufferAttribute(
+      modelGeometry.attributes.position as THREE.BufferAttribute,
+    );
+    const modelCenter = new THREE.Vector3();
+    modelBounds.getCenter(modelCenter);
+
+    const ctx: RouteContext = { mesh: tempMesh, raycaster, modelBounds, modelCenter };
+    const collisionRadius = Math.max(pillarRadius * 1.1, 0.2);
+    const tipRadius = Math.max((opts.tipDiameterMM / 2) * 1.1, 0.15);
+
+    if (routeCollides(route, ctx, tipHeight, baseHeight, collisionRadius, tipRadius)) {
+      // Try inserting a midpoint offset outward from model center.
+      const mid = top.clone().add(bottom).multiplyScalar(0.5);
+      const outward = new THREE.Vector3(mid.x - modelCenter.x, 0, mid.z - modelCenter.z);
+      if (outward.lengthSq() > 0.01) outward.normalize();
+      else outward.set(1, 0, 0);
+
+      const offsetMid = mid.clone().addScaledVector(outward, opts.modelClearance * 2);
+      const altRoute: RouteWaypoint[] = [
+        { x: top.x, y: top.y, z: top.z },
+        { x: offsetMid.x, y: offsetMid.y, z: offsetMid.z },
+        { x: bottom.x, y: bottom.y, z: bottom.z, internalResting: true },
+      ];
+
+      if (routeCollides(altRoute, ctx, tipHeight, baseHeight, collisionRadius, tipRadius)) {
+        tempMesh.geometry = new THREE.BufferGeometry();
+        tempMesh.material.dispose();
+        document.dispatchEvent(new CustomEvent('manual-bridge-failed'));
+        return;
+      }
+      route = altRoute;
+    }
+
+    tempMesh.geometry = new THREE.BufferGeometry();
+    tempMesh.material.dispose();
+  }
+
+  document.dispatchEvent(new CustomEvent('pillar-edit-undo-save', { detail: { modelId: obj.id } }));
+
+  const pillar = buildPillarFromRoute(
+    route,
+    {
+      tipDiameter: opts.tipDiameterMM,
+      pillarRadius,
+      baseRadius,
+      tipHeight,
+      baseHeight,
+    },
+    'manual',
+  );
+  const lastWp = route[route.length - 1];
+  pillar.bridgeTarget = { x: lastWp.x, y: lastWp.y, z: lastWp.z };
   addManualPillarRecord(obj.id, pillar);
   viewer.rebuildSupportsFromStore(obj.id);
 }

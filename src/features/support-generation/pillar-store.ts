@@ -34,6 +34,10 @@ export interface Pillar {
   // Retained explicitly so findPillarNear works after the route is
   // rewritten by a future re-route pass.
   contact: { x: number; y: number; z: number };
+  // When set, this pillar bridges to a model surface instead of the
+  // build plate.  The last waypoint will have internalResting: true
+  // and its coordinates match this field.
+  bridgeTarget?: { x: number; y: number; z: number };
 }
 
 export interface BasePanSettings {
