@@ -127,6 +127,7 @@ function serializePillarSet(set: ModelPillarSet): SerializedPillarSet | null {
     })),
     settings: {
       crossBracing: set.settings.crossBracing,
+      baseBracing: set.settings.baseBracing ? { ...set.settings.baseBracing } : null,
       basePan: set.settings.basePan ? { ...set.settings.basePan } : null,
       sphericalConnection: set.settings.sphericalConnection
         ? { ...set.settings.sphericalConnection }
@@ -232,6 +233,7 @@ export function restoreSerializedObjects(viewer: Viewer, data: SerializedObject[
         })),
         settings: {
           crossBracing: s.settings.crossBracing,
+          baseBracing: s.settings.baseBracing ? { ...s.settings.baseBracing } : null,
           basePan: s.settings.basePan ? { ...s.settings.basePan } : null,
           sphericalConnection: s.settings.sphericalConnection
             ? { ...s.settings.sphericalConnection }
@@ -256,6 +258,7 @@ export function restoreSerializedObjects(viewer: Viewer, data: SerializedObject[
         pillars: [],
         settings: {
           crossBracing: false,
+          baseBracing: null,
           basePan: null,
           sphericalConnection: null,
           supportFloorY: 0,

@@ -506,6 +506,7 @@ export function generateCrossBracing(
 // ---------------------------------------------------------------------------
 
 export { createBasePanGeometry } from './supports-base-pan';
+export { createBaseBraceGeometry, estimateBaseBraceVolume } from './supports-base-brace';
 
 // ---------------------------------------------------------------------------
 // Merge

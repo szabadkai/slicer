@@ -110,6 +110,7 @@ export interface SerializedPillarSet {
   supportStructures?: SerializedSupportStructure[];
   settings: {
     crossBracing: boolean;
+    baseBracing?: { radius: number; maxDistance: number; height?: number } | null;
     basePan: { margin: number; thickness: number; lipWidth: number; lipHeight: number } | null;
     sphericalConnection: { radius: number } | null;
     supportFloorY: number;

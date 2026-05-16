@@ -3,6 +3,7 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 import type { Viewer } from './viewer';
 import type { SceneObject } from './viewer-core';
 import { computeMeshVolume } from './volume';
+import { estimateSupportVolume } from './features/support-generation/support-volume-estimate';
 
 export function getModelGeometry(viewer: Viewer): THREE.BufferGeometry | null {
   if (viewer.selected.length !== 1) return null;
@@ -70,8 +71,14 @@ export function getOverallInfo(viewer: Viewer): {
       o._cachedLocalVolume = computeMeshVolume(o.mesh.geometry);
     modelVol += (o._cachedLocalVolume ?? 0) * Math.abs(o.mesh.matrixWorld.determinant());
     if (o.supportsMesh) {
-      if (o._cachedLocalSupportVolume === undefined)
-        o._cachedLocalSupportVolume = computeMeshVolume(o.supportsMesh.geometry);
+      if (o._cachedLocalSupportVolume === undefined) {
+        const estimatedSupportVolume = estimateSupportVolume(
+          o.id,
+          o.mesh.geometry.boundingBox ?? undefined,
+        );
+        o._cachedLocalSupportVolume =
+          estimatedSupportVolume ?? computeMeshVolume(o.supportsMesh.geometry);
+      }
       o.supportsMesh.updateMatrixWorld();
       supVol +=
         (o._cachedLocalSupportVolume ?? 0) * Math.abs(o.supportsMesh.matrixWorld.determinant());

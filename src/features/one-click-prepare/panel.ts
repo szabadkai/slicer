@@ -29,6 +29,7 @@ function readSupportOptions(
     modelClearance: parseFloat(readInput('support-clearance', '0.3')),
     maxContactOffset: parseFloat(readInput('support-max-offset', '5')),
     crossBracing: readChecked('cross-bracing', false),
+    baseBracingEnabled: readChecked('base-bracing-enabled', false),
     basePanEnabled: readChecked('base-pan-enabled', false),
     basePanMargin: parseFloat(readInput('base-pan-margin', '2')),
     basePanThickness: parseFloat(readInput('base-pan-thickness', '2')),

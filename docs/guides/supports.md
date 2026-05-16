@@ -51,6 +51,10 @@ Adds a small ball joint at the contact point between the tip and the model surfa
 
 Adds diagonal struts between support pillars. Useful for tall, thin support trees that could flex during peel. Adds a small amount of resin.
 
+### Base bracing
+
+Adds thick low struts between nearby support feet. Use this when you want more base stability than separate feet provide, but want to save resin compared with a full base pan.
+
 ### Base pan
 
 A flat pad at the bottom of the support cluster that improves build plate adhesion for models with many small support contact points. Configure the **margin** (how far the pan extends beyond the outermost support foot), **thickness**, and **lip** (raised edge to catch the pad during removal).

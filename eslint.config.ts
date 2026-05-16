@@ -81,6 +81,7 @@ export default tseslint.config(
       'src/supports.ts',
       'src/supports-geometry.ts',
       'src/supports-geometry.test.ts',
+      'src/supports-base-brace.ts',
       'src/supports-base-pan.ts',
       'src/supports-exterior.ts',
       'src/supports-detect.ts',

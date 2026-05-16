@@ -57,6 +57,7 @@ describe('pillar serialization round-trip', () => {
       ],
       settings: {
         crossBracing: false,
+        baseBracing: { radius: 0.8, maxDistance: 28 },
         basePan: null,
         sphericalConnection: null,
         supportFloorY: 0,
@@ -69,6 +70,7 @@ describe('pillar serialization round-trip', () => {
 
     expect(serialized[0].pillarSet).toBeDefined();
     const sp = serialized[0].pillarSet!;
+    expect(sp.settings.baseBracing).toEqual({ radius: 0.8, maxDistance: 28 });
     expect(sp.pillars[0].route[0].internalResting).toBeUndefined();
     expect(sp.pillars[0].route[1].internalResting).toBeUndefined();
     expect(sp.pillars[0].route[2].internalResting).toBe(true);
@@ -78,6 +80,7 @@ describe('pillar serialization round-trip', () => {
     restoreSerializedObjects(mockViewer() as never, serialized);
 
     const restored = getPillarSet(modelId);
+    expect(restored.settings.baseBracing).toEqual({ radius: 0.8, maxDistance: 28 });
     expect(restored.pillars).toHaveLength(1);
     const route = restored.pillars[0].route;
     expect(route[0].internalResting).toBeUndefined();
@@ -109,6 +112,7 @@ describe('pillar serialization round-trip', () => {
       ],
       settings: {
         crossBracing: false,
+        baseBracing: null,
         basePan: null,
         sphericalConnection: null,
         supportFloorY: 0,
@@ -152,6 +156,7 @@ describe('pillar serialization round-trip', () => {
       ],
       settings: {
         crossBracing: false,
+        baseBracing: null,
         basePan: null,
         sphericalConnection: null,
         supportFloorY: 0,
@@ -198,6 +203,7 @@ describe('pillar serialization round-trip', () => {
       ],
       settings: {
         crossBracing: false,
+        baseBracing: null,
         basePan: null,
         sphericalConnection: null,
         supportFloorY: 0,

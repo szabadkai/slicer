@@ -52,6 +52,9 @@ export function mountSupportPanel(ctx: AppContext): void {
     'sphere-connection-diameter',
   ) as HTMLInputElement | null;
   const basePanEnabled = document.getElementById('base-pan-enabled') as HTMLInputElement | null;
+  const baseBracingEnabled = document.getElementById(
+    'base-bracing-enabled',
+  ) as HTMLInputElement | null;
   const basePanOptions = document.getElementById('base-pan-options');
   const basePanMargin = document.getElementById('base-pan-margin') as HTMLInputElement | null;
   const basePanThickness = document.getElementById('base-pan-thickness') as HTMLInputElement | null;
@@ -150,6 +153,7 @@ export function mountSupportPanel(ctx: AppContext): void {
     setGroupOpacity(supportThicknessGroup, !autoT);
     syncPresetButtons();
     const panEnabled = basePanEnabled?.checked;
+    if (baseBracingEnabled && panEnabled) baseBracingEnabled.checked = false;
     [basePanMargin, basePanThickness, basePanLipWidth, basePanLipHeight].forEach((el) => {
       if (el) el.disabled = !panEnabled;
     });
@@ -260,6 +264,7 @@ export function mountSupportPanel(ctx: AppContext): void {
       modelClearance: parseFloat(supportClearance?.value ?? '0.3'),
       maxContactOffset: parseFloat(supportMaxOffset?.value ?? '5'),
       crossBracing: crossBracing?.checked ?? false,
+      baseBracingEnabled: baseBracingEnabled?.checked ?? false,
       basePanEnabled: basePanEnabled?.checked ?? false,
       basePanMargin: parseFloat(basePanMargin?.value ?? '2'),
       basePanThickness: parseFloat(basePanThickness?.value ?? '2'),
@@ -378,6 +383,10 @@ export function mountSupportPanel(ctx: AppContext): void {
     listen(el, 'input', markPresetCustom);
   });
   listen(basePanEnabled, 'change', syncUi);
+  listen(baseBracingEnabled, 'change', () => {
+    if (baseBracingEnabled?.checked && basePanEnabled) basePanEnabled.checked = false;
+    syncUi();
+  });
   listen(sphericalConnection, 'change', syncUi);
   listen(detectReinforcements, 'change', syncUi);
   listen(detectStabilization, 'change', syncUi);

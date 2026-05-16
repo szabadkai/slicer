@@ -243,6 +243,7 @@ These settings in `PillarSetSettings` apply across the entire union of auto + ma
 | Setting               | Effect                                                                       |
 | --------------------- | ---------------------------------------------------------------------------- |
 | `crossBracing`        | Diagonal struts between adjacent pillar routes                               |
+| `baseBracing`         | Thick low struts between support bases as a resin-saving pan alternative     |
 | `basePan`             | Flat pad geometry at the base of the support cluster                         |
 | `sphericalConnection` | Ball joint at the contact point (configurable radius)                        |
 | `supportFloorY`       | Y coordinate of the build plate (usually 0, offset when base pan is enabled) |
@@ -271,6 +272,7 @@ All options are optional; `generateSupports` destructures with defaults.
 | `modelClearance`                | `number`                  | `1.5`            | Min distance between pillar shaft and model surface                  |
 | `maxContactOffset`              | `number`                  | `18`             | Max horizontal offset when routing around obstructions               |
 | `crossBracing`                  | `boolean`                 | `false`          | Diagonal struts between adjacent pillars                             |
+| `baseBracingEnabled`            | `boolean`                 | `false`          | Thick low struts between support bases                               |
 | `basePanEnabled`                | `boolean`                 | `false`          | Flat raft under all pillar bases                                     |
 | `sphericalConnection`           | `boolean`                 | `false`          | Ball joint at contact point                                          |
 | `bridgeSupports`                | `boolean`                 | `false`          | Allow support routes to terminate on lower model surfaces            |

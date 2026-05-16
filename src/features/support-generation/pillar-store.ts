@@ -15,11 +15,11 @@ import * as THREE from 'three';
 import {
   buildSupportGeometry,
   generateCrossBracing,
-  createBasePanGeometry,
   mergeGeometries,
   type RouteWaypoint,
   type RouteContext,
 } from '../../supports-geometry';
+import { addSupportFoundationGeometry } from './support-foundation';
 import {
   buildSupportGraphGeometry,
   type SupportGraphNode,
@@ -72,8 +72,15 @@ export interface BasePanSettings {
   lipHeight: number;
 }
 
+export interface BaseBracingSettings {
+  radius: number;
+  maxDistance: number;
+  height?: number;
+}
+
 export interface PillarSetSettings {
   crossBracing: boolean;
+  baseBracing: BaseBracingSettings | null;
   basePan: BasePanSettings | null;
   sphericalConnection: { radius: number } | null;
   supportFloorY: number;
@@ -99,6 +106,7 @@ export interface ModelPillarSet {
 
 const DEFAULT_SETTINGS: PillarSetSettings = {
   crossBracing: false,
+  baseBracing: null,
   basePan: null,
   sphericalConnection: null,
   supportFloorY: 0,
@@ -490,9 +498,11 @@ function squaredDistanceToSegment(
 export function rebuildSupportsMesh(
   modelId: string,
   modelBounds?: THREE.Box3,
+  options: { includeFoundation?: boolean } = {},
 ): THREE.BufferGeometry {
   const set = pillarSets.get(modelId);
   if (!set) return new THREE.BufferGeometry();
+  const includeFoundation = options.includeFoundation ?? true;
 
   const geometries: THREE.BufferGeometry[] = [];
   const { settings, pillars } = set;
@@ -537,20 +547,14 @@ export function rebuildSupportsMesh(
     );
   }
 
-  if (settings.basePan && modelBounds) {
-    const routes = [
-      ...pillars.map((p) => p.route),
-      ...supportStructures.flatMap((structure) => routesFromStructure(structure)),
-    ];
-    geometries.push(
-      createBasePanGeometry(
-        modelBounds,
-        routes,
-        settings.basePan.margin,
-        settings.basePan.thickness,
-        settings.basePan.lipWidth,
-        settings.basePan.lipHeight,
-      ),
+  if (includeFoundation) {
+    addSupportFoundationGeometry(
+      geometries,
+      pillars,
+      supportStructures,
+      settings,
+      routesFromStructure,
+      modelBounds,
     );
   }
 
@@ -587,10 +591,7 @@ function activeSupportGraph(
   return { nodes, edges };
 }
 
-// ---------------------------------------------------------------------------
 // Test-only — reset the singleton store
-// ---------------------------------------------------------------------------
-
 export function _resetPillarStoreForTests(): void {
   pillarSets.clear();
   nextId = 0;

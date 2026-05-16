@@ -22,14 +22,25 @@ import {
   type Pillar,
   type SupportStructure,
 } from './pillar-store';
+import { addSupportFoundationGeometry } from './support-foundation';
+import { estimateSupportVolume } from './support-volume-estimate';
+import { computeMeshVolume } from '../../volume';
+import { estimateBaseBraceVolume } from '../../supports-geometry';
 
 function makePillar(
   origin: 'auto' | 'manual',
   contact: { x: number; y: number; z: number },
+  overrides: Partial<Pick<Pillar, 'baseRadius'>> = {},
 ): Pillar {
   return buildPillarFromRoute(
     [contact, { x: contact.x, y: 0, z: contact.z }],
-    { tipDiameter: 0.4, pillarRadius: 0.4, baseRadius: 0.8, tipHeight: 0.5, baseHeight: 0.5 },
+    {
+      tipDiameter: 0.4,
+      pillarRadius: 0.4,
+      baseRadius: overrides.baseRadius ?? 0.8,
+      tipHeight: 0.5,
+      baseHeight: 0.5,
+    },
     origin,
   );
 }
@@ -279,6 +290,121 @@ describe('rebuildSupportsMesh', () => {
     addSupportStructureRecord('m1', makeBranchingStructure());
     const geo = rebuildSupportsMesh('m1');
     expect(geo.attributes.position.count).toBeGreaterThan(0);
+  });
+
+  it('adds base bracing with a peelable outline between nearby support feet', () => {
+    addManualPillarRecord('m1', makePillar('auto', { x: 0, y: 5, z: 0 }));
+    addManualPillarRecord('m1', makePillar('auto', { x: 12, y: 5, z: 0 }));
+    addManualPillarRecord('m1', makePillar('auto', { x: 6, y: 5, z: 8 }));
+    const withoutBracing = rebuildSupportsMesh('m1').attributes.position.count;
+
+    updatePillarSettings('m1', {
+      baseBracing: { radius: 0.8, maxDistance: 28 },
+    });
+    const withBracing = rebuildSupportsMesh('m1').attributes.position.count;
+
+    expect(withBracing).toBeGreaterThan(withoutBracing);
+    expect(withBracing - withoutBracing).toBeGreaterThan(100);
+  });
+
+  it('keeps the base-bracing outline on pillar centers instead of adding an offset perimeter', () => {
+    addManualPillarRecord('m1', makePillar('auto', { x: 0, y: 5, z: 0 }));
+    addManualPillarRecord('m1', makePillar('auto', { x: 12, y: 5, z: 0 }));
+    addManualPillarRecord('m1', makePillar('auto', { x: 6, y: 5, z: 8 }));
+    updatePillarSettings('m1', {
+      baseBracing: { radius: 0.8, maxDistance: 28 },
+    });
+
+    const geo = rebuildSupportsMesh('m1');
+    geo.computeBoundingBox();
+    const box = geo.boundingBox!;
+
+    expect(box.min.x).toBeGreaterThanOrEqual(-0.82);
+    expect(box.max.x).toBeLessThanOrEqual(12.82);
+    expect(box.min.z).toBeGreaterThanOrEqual(-0.82);
+    expect(box.max.z).toBeLessThanOrEqual(8.82);
+  });
+
+  it('makes base bracing at least as thick as the thickest support base', () => {
+    const pillars = [
+      makePillar('auto', { x: 0, y: 5, z: 0 }, { baseRadius: 1.4 }),
+      makePillar('auto', { x: 12, y: 5, z: 0 }, { baseRadius: 0.8 }),
+      makePillar('auto', { x: 6, y: 5, z: 8 }, { baseRadius: 0.9 }),
+    ];
+    const geometries: THREE.BufferGeometry[] = [];
+
+    addSupportFoundationGeometry(
+      geometries,
+      pillars,
+      [],
+      {
+        crossBracing: false,
+        baseBracing: { radius: 0.2, maxDistance: 28 },
+        basePan: null,
+        sphericalConnection: null,
+        supportFloorY: 0,
+        bracingCollisionRadius: 0.4,
+      },
+      () => [],
+    );
+
+    const firstBrace = geometries[0];
+    firstBrace.computeBoundingBox();
+    expect(firstBrace.boundingBox!.min.y).toBeGreaterThanOrEqual(-1e-6);
+    expect(firstBrace.boundingBox!.max.y).toBeLessThanOrEqual(0.16);
+
+    const braceStart = new THREE.Vector2(0, 0);
+    const braceEnd = new THREE.Vector2(12, 0);
+    const braceDelta = new THREE.Vector2().subVectors(braceEnd, braceStart);
+    const braceLen2 = braceDelta.lengthSq();
+    const position = firstBrace.attributes.position;
+    let maxPlanarDistance = 0;
+    for (let i = 0; i < position.count; i++) {
+      const point = new THREE.Vector2(position.getX(i), position.getZ(i));
+      const t = Math.min(1, Math.max(0, point.clone().sub(braceStart).dot(braceDelta) / braceLen2));
+      const closest = braceStart.clone().addScaledVector(braceDelta, t);
+      maxPlanarDistance = Math.max(maxPlanarDistance, closest.distanceTo(point));
+    }
+
+    expect(maxPlanarDistance).toBeGreaterThanOrEqual(1.39);
+  });
+
+  it('estimates brace volume only between support feet, not through their bases', () => {
+    const routes = [
+      [
+        { x: 0, y: 5, z: 0 },
+        { x: 0, y: 0, z: 0 },
+      ],
+      [
+        { x: 12, y: 5, z: 0 },
+        { x: 12, y: 0, z: 0 },
+      ],
+      [
+        { x: 6, y: 5, z: 8 },
+        { x: 6, y: 0, z: 8 },
+      ],
+    ];
+
+    const centerToCenter = estimateBaseBraceVolume(routes, 1, 28);
+    const betweenFeet = estimateBaseBraceVolume(routes, 1, 28, [1, 1, 1]);
+
+    expect(betweenFeet).toBeLessThan(centerToCenter);
+    expect(betweenFeet).toBeCloseTo(centerToCenter - 6 * 2 * 0.15, 5);
+  });
+
+  it('uses the corrected foundation estimate for support volume with base bracing', () => {
+    addManualPillarRecord('m1', makePillar('auto', { x: 0, y: 5, z: 0 }, { baseRadius: 1 }));
+    addManualPillarRecord('m1', makePillar('auto', { x: 12, y: 5, z: 0 }, { baseRadius: 1 }));
+    addManualPillarRecord('m1', makePillar('auto', { x: 6, y: 5, z: 8 }, { baseRadius: 1 }));
+    updatePillarSettings('m1', {
+      baseBracing: { radius: 0.8, maxDistance: 28 },
+    });
+
+    const renderedVolume = computeMeshVolume(rebuildSupportsMesh('m1'));
+    const estimatedVolume = estimateSupportVolume('m1');
+
+    expect(estimatedVolume).not.toBeNull();
+    expect(estimatedVolume!).toBeLessThan(renderedVolume);
   });
 
   it('omits disabled touchpoint branches from graph geometry', () => {

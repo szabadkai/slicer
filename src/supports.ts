@@ -62,6 +62,7 @@ interface SupportOptions {
   modelClearance?: number;
   maxContactOffset?: number;
   crossBracing?: boolean;
+  baseBracingEnabled?: boolean;
   basePanEnabled?: boolean;
   basePanMargin?: number;
   basePanThickness?: number;
@@ -111,6 +112,7 @@ export async function generateSupports(
     modelClearance = 1.5,
     maxContactOffset = 18,
     crossBracing = false,
+    baseBracingEnabled = false,
     basePanEnabled = false,
     basePanMargin = 4,
     basePanThickness = 0.8,
@@ -240,6 +242,7 @@ export async function generateSupports(
       supportStructures: [],
       settings: buildSettings({
         basePanEnabled,
+        baseBracingEnabled,
         basePanMargin,
         basePanThickness,
         basePanLipWidth,
@@ -332,6 +335,7 @@ export async function generateSupports(
     supportStructures: branchResult.supportStructures,
     settings: buildSettings({
       basePanEnabled,
+      baseBracingEnabled,
       basePanMargin,
       basePanThickness,
       basePanLipWidth,
@@ -349,6 +353,7 @@ export async function generateSupports(
 
 interface SettingsInput {
   basePanEnabled: boolean;
+  baseBracingEnabled: boolean;
   basePanMargin: number;
   basePanThickness: number;
   basePanLipWidth: number;
@@ -364,6 +369,13 @@ interface SettingsInput {
 function buildSettings(input: SettingsInput): PillarSetSettings {
   return {
     crossBracing: input.crossBracing,
+    baseBracing: input.baseBracingEnabled
+      ? {
+          radius: 0.8,
+          maxDistance: 28,
+          height: 0.15,
+        }
+      : null,
     basePan: input.basePanEnabled
       ? {
           margin: input.basePanMargin,
