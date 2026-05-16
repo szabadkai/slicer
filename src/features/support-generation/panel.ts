@@ -16,7 +16,9 @@ import {
   clearStoredPillars,
 } from './explanation-inspector';
 import { overhangOverlayVisible } from './store';
+import { collectSupportContacts, mountSupportIslandNavigator } from './support-island-panel';
 import { mountSupportEditGizmo } from './support-edit-gizmo';
+import { getSupportPreset, SUPPORT_PRESETS, type SupportPresetId } from './support-presets';
 
 export function mountSupportPanel(ctx: AppContext): void {
   const { viewer } = ctx;
@@ -28,6 +30,9 @@ export function mountSupportPanel(ctx: AppContext): void {
   const supportDensity = document.getElementById('support-density') as HTMLInputElement | null;
   const supportDensityVal = document.getElementById('support-density-val');
   const supportDensityGroup = document.getElementById('support-density-group');
+  const presetButtons = Array.from(
+    document.querySelectorAll<HTMLButtonElement>('[data-support-preset]'),
+  );
   const tipDiameter = document.getElementById('tip-diameter') as HTMLInputElement | null;
   const tipDiameterGroup = document.getElementById('tip-diameter-group');
   const supportThickness = document.getElementById('support-thickness') as HTMLInputElement | null;
@@ -89,6 +94,8 @@ export function mountSupportPanel(ctx: AppContext): void {
   ) as HTMLInputElement | null;
   const branchMaxTips = document.getElementById('branch-max-tips') as HTMLInputElement | null;
 
+  let activePresetId: SupportPresetId | 'custom' = 'light';
+
   function refreshOverhangOverlay(): void {
     if (!overhangOverlayVisible.value) {
       viewer.clearOverhangOverlay();
@@ -127,7 +134,7 @@ export function mountSupportPanel(ctx: AppContext): void {
     }
 
     const angleDeg = parseFloat(overhangAngle?.value ?? '30');
-    viewer.showOverhangOverlay(obj.id, contacts, { angleDeg });
+    viewer.showOverhangOverlay(obj.id, collectSupportContacts(obj.id, contacts), { angleDeg });
   }
 
   function syncUi(): void {
@@ -141,6 +148,7 @@ export function mountSupportPanel(ctx: AppContext): void {
     if (supportThickness) supportThickness.disabled = !!autoT;
     setGroupOpacity(tipDiameterGroup, !autoT);
     setGroupOpacity(supportThicknessGroup, !autoT);
+    syncPresetButtons();
     const panEnabled = basePanEnabled?.checked;
     [basePanMargin, basePanThickness, basePanLipWidth, basePanLipHeight].forEach((el) => {
       if (el) el.disabled = !panEnabled;
@@ -178,6 +186,15 @@ export function mountSupportPanel(ctx: AppContext): void {
     setGroupOpacity(branchingOptions, !!branchingEnabled);
   }
 
+  function syncPresetButtons(): void {
+    for (const button of presetButtons) {
+      button.classList.toggle(
+        'active',
+        activePresetId !== 'custom' && button.dataset.supportPreset === activePresetId,
+      );
+    }
+  }
+
   function setGroupOpacity(el: HTMLElement | null, enabled: boolean): void {
     if (!el) return;
     el.style.opacity = enabled ? '1' : '0.5';
@@ -185,6 +202,37 @@ export function mountSupportPanel(ctx: AppContext): void {
   }
 
   const supportEditGizmo = mountSupportEditGizmo(ctx, { refreshOverhangOverlay });
+  const supportIslandNavigator = mountSupportIslandNavigator(ctx, {
+    overhangAngle,
+    showOverhangsCb,
+    refreshOverhangOverlay,
+  });
+
+  function applyPreset(id: SupportPresetId): void {
+    const preset = getSupportPreset(id);
+    if (!preset) return;
+    activePresetId = preset.id;
+
+    if (autoThickness) autoThickness.checked = false;
+    if (autoDensity) autoDensity.checked = false;
+    if (supportDensity) supportDensity.value = String(preset.density);
+    if (tipDiameter) tipDiameter.value = preset.tipDiameter.toFixed(2);
+    if (supportThickness) supportThickness.value = preset.shaftDiameter.toFixed(2);
+    if (sphereConnectionDiameter) sphereConnectionDiameter.value = preset.sphereDiameter.toFixed(2);
+
+    const manualTip = document.getElementById('manual-support-tip') as HTMLInputElement | null;
+    const manualShaft = document.getElementById('manual-support-shaft') as HTMLInputElement | null;
+    if (manualTip) manualTip.value = preset.tipDiameter.toFixed(2);
+    if (manualShaft) manualShaft.value = preset.shaftDiameter.toFixed(2);
+
+    syncUi();
+    ctx.scheduleSavePreferences();
+  }
+
+  function markPresetCustom(): void {
+    activePresetId = 'custom';
+    syncPresetButtons();
+  }
 
   function getSupportOptions(
     onProgress: (fraction: number, text: string) => void,
@@ -303,13 +351,32 @@ export function mountSupportPanel(ctx: AppContext): void {
     }
     ctx.hideProgress();
     refreshOverhangOverlay();
+    supportIslandNavigator.reset();
   }
 
   // Wire events
+  for (const button of presetButtons) {
+    listen(button, 'click', () => {
+      const id = button.dataset.supportPreset as SupportPresetId | undefined;
+      if (id && SUPPORT_PRESETS.some((preset) => preset.id === id)) applyPreset(id);
+    });
+  }
   listen(overhangAngle, 'input', syncUi);
-  listen(supportDensity, 'input', syncUi);
-  listen(autoDensity, 'change', syncUi);
-  listen(autoThickness, 'change', syncUi);
+  listen(supportDensity, 'input', () => {
+    markPresetCustom();
+    syncUi();
+  });
+  listen(autoDensity, 'change', () => {
+    markPresetCustom();
+    syncUi();
+  });
+  listen(autoThickness, 'change', () => {
+    markPresetCustom();
+    syncUi();
+  });
+  [tipDiameter, supportThickness, sphereConnectionDiameter].forEach((el) => {
+    listen(el, 'input', markPresetCustom);
+  });
   listen(basePanEnabled, 'change', syncUi);
   listen(sphericalConnection, 'change', syncUi);
   listen(detectReinforcements, 'change', syncUi);
@@ -333,6 +400,7 @@ export function mountSupportPanel(ctx: AppContext): void {
     ctx.updateEstimate();
     ctx.scheduleProjectAutosave();
     refreshOverhangOverlay();
+    supportIslandNavigator.reset();
   });
 
   // Wire support-click → explanation popup
@@ -388,10 +456,12 @@ export function mountSupportPanel(ctx: AppContext): void {
   // Refresh overlay after manual support placement
   document.addEventListener('manual-support-placed', () => {
     refreshOverhangOverlay();
+    supportIslandNavigator.reset();
   });
 
   // Refresh overlay on overhang angle change
   listen(overhangAngle, 'input', () => {
+    supportIslandNavigator.reset();
     refreshOverhangOverlay();
   });
 

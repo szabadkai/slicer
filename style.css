@@ -871,6 +871,59 @@ body {
   text-align: left;
 }
 
+.support-preset-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+}
+.support-preset-btn {
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.support-preset-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.support-preset-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.support-island-nav {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.support-island-nav-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.support-island-count {
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 500;
+}
+.support-island-detail {
+  margin-top: 6px;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .paint-pattern-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -2598,6 +2651,55 @@ button:disabled {
 .island-warn { color: #d93025; font-size: 12px; font-weight: 600; padding: 4px 0; }
 .island-detail { color: var(--text-secondary); font-size: 11px; padding: 2px 0; }
 .island-goto-btn { margin-top: 4px; }
+.qa-results {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.qa-issue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.qa-issue,
+.inspector-issue-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.qa-issue:hover,
+.inspector-issue-item:hover,
+.inspector-issue-item.active {
+  border-color: var(--accent);
+}
+.qa-issue-title,
+.inspector-issue-item span {
+  font-size: 12px;
+  font-weight: 600;
+}
+.qa-issue-detail,
+.inspector-issue-item small {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.qa-issue-error {
+  border-left-color: #ef4444;
+}
+.qa-issue-warning {
+  border-left-color: #f59e0b;
+}
+.qa-issue-info {
+  border-left-color: #3b82f6;
+}
 
 /* Load panel — sample model cards */
 .load-browse-btn {

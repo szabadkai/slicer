@@ -42,6 +42,10 @@ decision:
    This is the fastest way to make manual and automatic support work feel less
    numerical. Keep the current custom controls as overrides.
 
+   **Status:** Implemented. SliceLab now exposes Nano, Micro, Light, Medium, and
+   Heavy preset buttons in the Supports panel. Presets apply auto and manual
+   support dimensions plus density, while still allowing custom numeric edits.
+
 2. **Support island navigator**
 
    Add a Supports-panel island workflow: Detect, Previous, Next, Focus, Mark
@@ -50,6 +54,15 @@ decision:
 
    This should use SliceLab's existing support/overhang architecture rather than
    creating a separate validator mode.
+
+   **Status:** Implemented as a geometry-based v1. The Supports panel can scan
+   the selected model for uncovered overhang clusters, navigate between detected
+   regions, focus the camera, enable the unsupported-area overlay, and mark
+   regions resolved for the current scan.
+
+   **Deferred:** Slice-based island navigation, persistent resolved state,
+   per-region support suggestions, and automatic placement from a selected
+   region are intentionally left for later milestones.
 
 3. **Post-slice QA summary**
 
@@ -60,11 +73,22 @@ decision:
    The output should be navigable, not just informational. Clicking an issue
    should move the layer slider and zoom the layer inspector to the region.
 
+   **Status:** Implemented. The Layer Preview QA check aggregates slice islands,
+   empty layers, touching-bounds warnings, and peel-force peaks/spikes into one
+   navigable issue list. QA issues also populate the layer inspector issue list.
+
+   **Deferred:** Suction cup detection, layer-level resin trap detection,
+   before/after repair highlighting, and pixel-level repair are not included in
+   this first QA pass.
+
 4. **Empty layer and touching-bounds detection**
 
    Add simple layer-level checks before tackling harder slice repair problems.
    Empty layers in the middle of a print and pixels touching the printable bounds
    are cheap to detect and high-signal for users.
+
+   **Status:** Implemented as part of the post-slice QA summary because the QA
+   list needed more than islands and peel-force data to be useful.
 
 5. **UI cleanup and dark mode polish**
 

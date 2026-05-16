@@ -656,6 +656,16 @@
               <input type="checkbox" id="auto-density" checked class="val-box">
             </label>
           </div>
+          <div class="control-group">
+            <label>Support Preset</label>
+            <div class="support-preset-row" role="group" aria-label="Support preset">
+              <button type="button" class="support-preset-btn" data-support-preset="nano">Nano</button>
+              <button type="button" class="support-preset-btn" data-support-preset="micro">Micro</button>
+              <button type="button" class="support-preset-btn active" data-support-preset="light">Light</button>
+              <button type="button" class="support-preset-btn" data-support-preset="medium">Medium</button>
+              <button type="button" class="support-preset-btn" data-support-preset="heavy">Heavy</button>
+            </div>
+          </div>
           <div class="control-group" id="support-density-group" style="opacity: 0.5; pointer-events: none;">
             <label>Support Density</label>
             <div class="flex-row">
@@ -825,6 +835,19 @@
               Show unsupported areas
               <input type="checkbox" id="show-overhangs-cb"  class="val-box">
             </label>
+          </div>
+          <div class="support-island-nav" id="support-island-nav">
+            <div class="support-island-nav-header">
+              <span>Unsupported regions</span>
+              <span id="support-island-count" class="support-island-count">Not scanned</span>
+            </div>
+            <div class="action-buttons">
+              <button class="btn btn-secondary btn-small" id="support-island-detect-btn">Detect</button>
+              <button class="btn btn-secondary btn-small" id="support-island-prev-btn" disabled>&#9664;</button>
+              <button class="btn btn-secondary btn-small" id="support-island-next-btn" disabled>&#9654;</button>
+              <button class="btn btn-secondary btn-small" id="support-island-resolve-btn" disabled>Mark Resolved</button>
+            </div>
+            <div id="support-island-detail" class="support-island-detail">Scan the selected model to navigate unsupported overhang clusters.</div>
           </div>
           <div class="panel-divider"></div>
           <h3>Manual Placement</h3>
@@ -1117,9 +1140,9 @@
             <span id="layer-info" class="val-box">0 / 0</span>
           </div>
           <div class="action-buttons" style="margin-top: 4px;">
-            <button class="btn btn-secondary" id="island-detect-btn" style="width: 100%;">Detect Islands</button>
+            <button class="btn btn-secondary" id="island-detect-btn" style="width: 100%;">Run QA Check</button>
           </div>
-          <div id="island-results" class="island-results"></div>
+          <div id="island-results" class="island-results qa-results"></div>
           <div id="peel-force-section" class="peel-force-section" hidden>
             <div class="peel-force-header">
               <span>Peel Force Profile</span>
