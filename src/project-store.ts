@@ -72,8 +72,41 @@ export interface SerializedPillar {
   bridgeTarget?: { x: number; y: number; z: number };
 }
 
+export interface SerializedSupportTouchpoint {
+  id: string;
+  position: { x: number; y: number; z: number };
+  normal: { x: number; y: number; z: number };
+  diameter: number;
+  shape: 'point' | 'ball' | 'cone' | 'pad';
+  priority: 'light' | 'normal' | 'heavy';
+  enabled: boolean;
+}
+
+export interface SerializedSupportGraphNode {
+  id: string;
+  position: { x: number; y: number; z: number };
+  radius: number;
+  kind: 'tip' | 'branch' | 'trunk' | 'base';
+}
+
+export interface SerializedSupportGraphEdge {
+  from: string;
+  to: string;
+  radius: number;
+}
+
+export interface SerializedSupportStructure {
+  id: string;
+  origin: 'auto' | 'manual' | 'paint';
+  kind: 'pillar' | 'branching' | 'bridge';
+  touchpoints: SerializedSupportTouchpoint[];
+  nodes: SerializedSupportGraphNode[];
+  edges: SerializedSupportGraphEdge[];
+}
+
 export interface SerializedPillarSet {
   pillars: SerializedPillar[];
+  supportStructures?: SerializedSupportStructure[];
   settings: {
     crossBracing: boolean;
     basePan: { margin: number; thickness: number; lipWidth: number; lipHeight: number } | null;

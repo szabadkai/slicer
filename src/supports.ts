@@ -18,6 +18,7 @@ import {
   buildPillarFromRoute,
   type Pillar,
   type PillarSetSettings,
+  type SupportStructure,
 } from './features/support-generation/pillar-store';
 import {
   ROUTE_DIRECTIONS,
@@ -35,6 +36,7 @@ import {
 } from './supports-detect';
 import { isExteriorContact } from './supports-exterior';
 import { findBridgeRoute } from './supports-bridge';
+import { clusterPillarsIntoBranchStructures } from './supports-branching';
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
@@ -74,6 +76,9 @@ interface SupportOptions {
   reinforcementThreshold?: number;
   bridgeSupports?: boolean;
   maxBridgeSearchRadius?: number;
+  experimentalBranchingSupports?: boolean;
+  branchClusterRadius?: number;
+  branchMaxTips?: number;
   onProgress?: (fraction: number, text: string) => void;
 }
 
@@ -83,6 +88,7 @@ interface SupportOptions {
 
 export interface GenerateSupportsResult {
   pillars: Pillar[];
+  supportStructures: SupportStructure[];
   settings: PillarSetSettings;
   modelBounds: THREE.Box3;
 }
@@ -119,6 +125,9 @@ export async function generateSupports(
     reinforcementThreshold = 2.0,
     bridgeSupports = false,
     maxBridgeSearchRadius = 30,
+    experimentalBranchingSupports = false,
+    branchClusterRadius = 10,
+    branchMaxTips = 5,
     onProgress,
   } = options;
 
@@ -228,6 +237,7 @@ export async function generateSupports(
   if (allContactPoints.length === 0) {
     return {
       pillars: [],
+      supportStructures: [],
       settings: buildSettings({
         basePanEnabled,
         basePanMargin,
@@ -307,9 +317,19 @@ export async function generateSupports(
     }
     return pillar;
   });
+  const branchResult = experimentalBranchingSupports
+    ? clusterPillarsIntoBranchStructures(pillars, {
+        clusterRadius: branchClusterRadius,
+        maxTips: branchMaxTips,
+        supportFloorY,
+        routeContext: ctx,
+        collisionRadius: routeOpts.supportCollisionRadius,
+      })
+    : { pillars, supportStructures: [] };
 
   return {
-    pillars,
+    pillars: branchResult.pillars,
+    supportStructures: branchResult.supportStructures,
     settings: buildSettings({
       basePanEnabled,
       basePanMargin,

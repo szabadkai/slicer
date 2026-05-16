@@ -792,6 +792,25 @@
                 <input type="number" id="bridge-search-radius" value="30" min="5" max="100" step="5" class="val-box">
               </label>
             </div>
+            <div class="panel-divider"></div>
+            <h3>Branching</h3>
+            <div class="control-group">
+              <label>Experimental Branching
+                <input type="checkbox" id="experimental-branching-supports" class="val-box">
+              </label>
+            </div>
+            <div id="branching-options" style="opacity: 0.5; pointer-events: none;">
+              <div class="control-group">
+                <label>Cluster Radius (mm)
+                  <input type="number" id="branch-cluster-radius" value="10" min="2" max="50" step="1" class="val-box" disabled>
+                </label>
+              </div>
+              <div class="control-group">
+                <label>Max Tips per Branch
+                  <input type="number" id="branch-max-tips" value="5" min="2" max="12" step="1" class="val-box" disabled>
+                </label>
+              </div>
+            </div>
           </details>
           <div class="action-buttons">
             <button class="btn btn-secondary" id="clear-supports-btn">Clear</button>
@@ -822,6 +841,10 @@
           <div class="action-buttons">
             <button class="btn btn-secondary" id="manual-support-btn">Click to Place</button>
             <button class="btn btn-secondary" id="manual-bridge-btn">Bridge (2-click)</button>
+          </div>
+          <div class="action-buttons" style="margin-top: 4px;">
+            <button class="btn btn-secondary" id="manual-branch-btn">Branch Points</button>
+            <button class="btn btn-primary" id="manual-branch-finish-btn" disabled>Create Branch</button>
           </div>
         </section>
 

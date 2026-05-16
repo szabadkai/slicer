@@ -98,12 +98,20 @@ export function mountPreferences(
       'base-pan-thickness',
       'base-pan-lip-width',
       'base-pan-lip-height',
+      'branch-cluster-radius',
+      'branch-max-tips',
     ];
     for (const id of inputs) {
       const el = document.getElementById(id) as HTMLInputElement | null;
       if (el) result[id] = el.value;
     }
-    const checks = ['auto-density', 'auto-thickness', 'cross-bracing', 'base-pan-enabled'];
+    const checks = [
+      'auto-density',
+      'auto-thickness',
+      'cross-bracing',
+      'base-pan-enabled',
+      'experimental-branching-supports',
+    ];
     for (const id of checks) {
       const el = document.getElementById(id) as HTMLInputElement | null;
       if (el) result[id] = el.checked;
@@ -215,10 +223,13 @@ export function mountPreferences(
     'support-max-offset',
     'cross-bracing',
     'base-pan-enabled',
+    'experimental-branching-supports',
     'base-pan-margin',
     'base-pan-thickness',
     'base-pan-lip-width',
     'base-pan-lip-height',
+    'branch-cluster-radius',
+    'branch-max-tips',
   ];
   for (const id of persistedIds) {
     const el = document.getElementById(id);

@@ -76,7 +76,10 @@ function restoreMesh(
 }
 
 function serializePillarSet(set: ModelPillarSet): SerializedPillarSet | null {
-  if (set.legacyOpaque || set.pillars.length === 0) return null;
+  const supportStructures = set.supportStructures ?? [];
+  if (set.legacyOpaque || (set.pillars.length === 0 && supportStructures.length === 0)) {
+    return null;
+  }
   return {
     pillars: set.pillars.map((p) => ({
       id: p.id,
@@ -99,6 +102,27 @@ function serializePillarSet(set: ModelPillarSet): SerializedPillarSet | null {
       bridgeTarget: p.bridgeTarget
         ? { x: p.bridgeTarget.x, y: p.bridgeTarget.y, z: p.bridgeTarget.z }
         : undefined,
+    })),
+    supportStructures: supportStructures.map((structure) => ({
+      id: structure.id,
+      origin: structure.origin,
+      kind: structure.kind,
+      touchpoints: structure.touchpoints.map((touchpoint) => ({
+        id: touchpoint.id,
+        position: { ...touchpoint.position },
+        normal: { ...touchpoint.normal },
+        diameter: touchpoint.diameter,
+        shape: touchpoint.shape,
+        priority: touchpoint.priority,
+        enabled: touchpoint.enabled,
+      })),
+      nodes: structure.nodes.map((node) => ({
+        id: node.id,
+        position: { ...node.position },
+        radius: node.radius,
+        kind: node.kind,
+      })),
+      edges: structure.edges.map((edge) => ({ ...edge })),
     })),
     settings: {
       crossBracing: set.settings.crossBracing,
@@ -136,7 +160,7 @@ export function serializeObjects(viewer: Viewer, objects?: SceneObject[]): Seria
 export function rebuildPillarSetsAfterRestore(viewer: Viewer, ids: string[]): void {
   for (const id of ids) {
     const set = getPillarSet(id);
-    if (!set.legacyOpaque && set.pillars.length > 0) {
+    if (!set.legacyOpaque && (set.pillars.length > 0 || (set.supportStructures?.length ?? 0) > 0)) {
       viewer.rebuildSupportsFromStore(id);
     }
   }
@@ -152,7 +176,10 @@ export function restoreSerializedObjects(viewer: Viewer, data: SerializedObject[
 
     let supportsMesh: THREE.Mesh | null = null;
 
-    if (item.pillarSet && item.pillarSet.pillars.length > 0) {
+    if (
+      item.pillarSet &&
+      (item.pillarSet.pillars.length > 0 || (item.pillarSet.supportStructures?.length ?? 0) > 0)
+    ) {
       // Rework-era project: restore per-pillar data. Mesh is rebuilt below
       // after the object is added to the plate (rebuildSupportsFromStore
       // needs findObjectAnywhere to succeed).
@@ -179,6 +206,27 @@ export function restoreSerializedObjects(viewer: Viewer, data: SerializedObject[
           bridgeTarget: p.bridgeTarget
             ? { x: p.bridgeTarget.x, y: p.bridgeTarget.y, z: p.bridgeTarget.z }
             : undefined,
+        })),
+        supportStructures: s.supportStructures?.map((structure) => ({
+          id: structure.id,
+          origin: structure.origin,
+          kind: structure.kind,
+          touchpoints: structure.touchpoints.map((touchpoint) => ({
+            id: touchpoint.id,
+            position: { ...touchpoint.position },
+            normal: { ...touchpoint.normal },
+            diameter: touchpoint.diameter,
+            shape: touchpoint.shape,
+            priority: touchpoint.priority,
+            enabled: touchpoint.enabled,
+          })),
+          nodes: structure.nodes.map((node) => ({
+            id: node.id,
+            position: { ...node.position },
+            radius: node.radius,
+            kind: node.kind,
+          })),
+          edges: structure.edges.map((edge) => ({ ...edge })),
         })),
         settings: {
           crossBracing: s.settings.crossBracing,
@@ -238,7 +286,9 @@ export function restoreSerializedObjects(viewer: Viewer, data: SerializedObject[
   const idsToRebuild = objects
     .filter((o) => {
       const set = getPillarSet(o.id);
-      return !set.legacyOpaque && set.pillars.length > 0;
+      return (
+        !set.legacyOpaque && (set.pillars.length > 0 || (set.supportStructures?.length ?? 0) > 0)
+      );
     })
     .map((o) => o.id);
   if (idsToRebuild.length > 0) {

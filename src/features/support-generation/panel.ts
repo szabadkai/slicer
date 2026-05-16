@@ -16,6 +16,7 @@ import {
   clearStoredPillars,
 } from './explanation-inspector';
 import { overhangOverlayVisible } from './store';
+import { mountSupportEditGizmo } from './support-edit-gizmo';
 
 export function mountSupportPanel(ctx: AppContext): void {
   const { viewer } = ctx;
@@ -79,6 +80,14 @@ export function mountSupportPanel(ctx: AppContext): void {
     'bridge-search-radius',
   ) as HTMLInputElement | null;
   const bridgeSearchRadiusGroup = document.getElementById('bridge-search-radius-group');
+  const experimentalBranchingSupports = document.getElementById(
+    'experimental-branching-supports',
+  ) as HTMLInputElement | null;
+  const branchingOptions = document.getElementById('branching-options');
+  const branchClusterRadius = document.getElementById(
+    'branch-cluster-radius',
+  ) as HTMLInputElement | null;
+  const branchMaxTips = document.getElementById('branch-max-tips') as HTMLInputElement | null;
 
   function refreshOverhangOverlay(): void {
     if (!overhangOverlayVisible.value) {
@@ -162,6 +171,11 @@ export function mountSupportPanel(ctx: AppContext): void {
     const bridgeEnabled = bridgeSupports?.checked;
     if (bridgeSearchRadius) bridgeSearchRadius.disabled = !bridgeEnabled;
     setGroupOpacity(bridgeSearchRadiusGroup, !!bridgeEnabled);
+    const branchingEnabled = experimentalBranchingSupports?.checked;
+    [branchClusterRadius, branchMaxTips].forEach((el) => {
+      if (el) el.disabled = !branchingEnabled;
+    });
+    setGroupOpacity(branchingOptions, !!branchingEnabled);
   }
 
   function setGroupOpacity(el: HTMLElement | null, enabled: boolean): void {
@@ -169,6 +183,8 @@ export function mountSupportPanel(ctx: AppContext): void {
     el.style.opacity = enabled ? '1' : '0.5';
     el.style.pointerEvents = enabled ? 'auto' : 'none';
   }
+
+  const supportEditGizmo = mountSupportEditGizmo(ctx, { refreshOverhangOverlay });
 
   function getSupportOptions(
     onProgress: (fraction: number, text: string) => void,
@@ -210,6 +226,9 @@ export function mountSupportPanel(ctx: AppContext): void {
       reinforcementThreshold: parseFloat(reinforcementThreshold?.value ?? '2.0'),
       bridgeSupports: bridgeSupports?.checked ?? false,
       maxBridgeSearchRadius: parseFloat(bridgeSearchRadius?.value ?? '30'),
+      experimentalBranchingSupports: experimentalBranchingSupports?.checked ?? false,
+      branchClusterRadius: parseFloat(branchClusterRadius?.value ?? '10'),
+      branchMaxTips: parseInt(branchMaxTips?.value ?? '5', 10),
       onProgress,
       intentParams,
     };
@@ -221,7 +240,8 @@ export function mountSupportPanel(ctx: AppContext): void {
     const originalIds = targets.map((o) => o.id);
 
     const { generateSupports } = await import('../../supports');
-    const { replaceAutoPillars, updatePillarSettings } = await import('./pillar-store');
+    const { replaceAutoPillars, replaceAutoSupportStructures, updatePillarSettings } =
+      await import('./pillar-store');
 
     ctx.showProgress(
       targets.length === 1
@@ -260,6 +280,7 @@ export function mountSupportPanel(ctx: AppContext): void {
           new CustomEvent('pillar-edit-undo-save', { detail: { modelId: obj.id } }),
         );
         replaceAutoPillars(obj.id, result.pillars);
+        replaceAutoSupportStructures(obj.id, result.supportStructures ?? []);
         updatePillarSettings(obj.id, result.settings);
         viewer.rebuildSupportsFromStore(obj.id);
       } catch (error) {
@@ -294,6 +315,9 @@ export function mountSupportPanel(ctx: AppContext): void {
   listen(detectReinforcements, 'change', syncUi);
   listen(detectStabilization, 'change', syncUi);
   listen(bridgeSupports, 'change', syncUi);
+  listen(experimentalBranchingSupports, 'change', syncUi);
+  listen(branchClusterRadius, 'input', syncUi);
+  listen(branchMaxTips, 'input', syncUi);
   listen(stabilizationDensityInput, 'input', syncUi);
   listen(generateBtn, 'click', () => {
     handleGenerate();
@@ -305,6 +329,7 @@ export function mountSupportPanel(ctx: AppContext): void {
     viewer.clearSupports();
     for (const obj of viewer.objects ?? []) clearStoredPillars(obj.id);
     clearInspection();
+    supportEditGizmo.hide();
     ctx.updateEstimate();
     ctx.scheduleProjectAutosave();
     refreshOverhangOverlay();
@@ -316,6 +341,15 @@ export function mountSupportPanel(ctx: AppContext): void {
     e: CustomEvent<{ x: number; y: number; z: number; screenX: number; screenY: number }>,
   ) => {
     const { x, y, z, screenX, screenY } = e.detail;
+    if (ctx.getActiveToolPanel() === 'supports' && viewer.findSupportStructureHit) {
+      const structureHit = viewer.findSupportStructureHit({ x, y, z }, 6);
+      if (structureHit) {
+        clearInspection();
+        supportEditGizmo.show(structureHit.modelId, structureHit.structureId, screenX, screenY);
+        return;
+      }
+    }
+    supportEditGizmo.hide();
     const match = findNearestPillar(x, y, z);
     if (match) {
       inspectPillar(match.pillar, match.explanation, screenX, screenY);
@@ -334,6 +368,7 @@ export function mountSupportPanel(ctx: AppContext): void {
     if (!hit) return;
     viewer.removePillarAndRebuild(hit.modelId, hit.pillarId);
     clearInspection();
+    supportEditGizmo.hide();
     ctx.updateEstimate();
     ctx.scheduleProjectAutosave();
     refreshOverhangOverlay();
@@ -363,6 +398,7 @@ export function mountSupportPanel(ctx: AppContext): void {
   // Clear overlay on panel switch
   document.addEventListener('tool-panel-changed', () => {
     viewer.clearOverhangOverlay();
+    supportEditGizmo.hide();
   });
 
   syncUi();

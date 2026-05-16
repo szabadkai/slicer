@@ -13,6 +13,7 @@ import {
   clearPillarSet,
   getPillarSet,
   findPillarNear,
+  findSupportStructureNear,
   removePillar as removePillarFromStore,
   rebuildSupportsMesh,
 } from './features/support-generation/pillar-store';
@@ -120,6 +121,32 @@ export function findPillarHit(
       const pillar = findPillarNear(obj.id, local, bestDist);
       if (pillar) {
         bestHit = { modelId: obj.id, pillarId: pillar.id };
+      }
+    }
+  }
+  return bestHit;
+}
+
+export function findSupportStructureHit(
+  viewer: ViewerLike,
+  point: THREE.Vector3,
+  maxDistMM: number = 5,
+): { modelId: string; structureId: string } | null {
+  const bestDist = maxDistMM;
+  let bestHit: { modelId: string; structureId: string } | null = null;
+  for (const plate of viewer.plates) {
+    for (const obj of plate.objects) {
+      if (!obj.supportsMesh) continue;
+      const set = getPillarSet(obj.id);
+      if (set.legacyOpaque || (set.supportStructures?.length ?? 0) === 0) continue;
+      const local = {
+        x: point.x - obj.supportsMesh.position.x,
+        y: point.y - obj.supportsMesh.position.y,
+        z: point.z - obj.supportsMesh.position.z,
+      };
+      const structure = findSupportStructureNear(obj.id, local, bestDist);
+      if (structure) {
+        bestHit = { modelId: obj.id, structureId: structure.id };
       }
     }
   }

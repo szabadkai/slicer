@@ -24,7 +24,7 @@ export function createBasePanGeometry(
     if (!base || base.internalResting) continue;
     basePoints.push(new THREE.Vector2(base.x, base.z));
   }
-  if (basePoints.length < 3) {
+  if (basePoints.length === 0) {
     basePoints.push(
       new THREE.Vector2(modelBounds.min.x, modelBounds.min.z),
       new THREE.Vector2(modelBounds.max.x, modelBounds.min.z),

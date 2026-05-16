@@ -20,6 +20,11 @@ import {
   type RouteWaypoint,
   type RouteContext,
 } from '../../supports-geometry';
+import {
+  buildSupportGraphGeometry,
+  type SupportGraphNode,
+  type SupportGraphEdge,
+} from '../../supports-graph-geometry';
 
 export interface Pillar {
   id: string;
@@ -38,6 +43,25 @@ export interface Pillar {
   // build plate.  The last waypoint will have internalResting: true
   // and its coordinates match this field.
   bridgeTarget?: { x: number; y: number; z: number };
+}
+
+export interface SupportTouchpoint {
+  id: string;
+  position: { x: number; y: number; z: number };
+  normal: { x: number; y: number; z: number };
+  diameter: number;
+  shape: 'point' | 'ball' | 'cone' | 'pad';
+  priority: 'light' | 'normal' | 'heavy';
+  enabled: boolean;
+}
+
+export interface SupportStructure {
+  id: string;
+  origin: 'auto' | 'manual' | 'paint';
+  kind: 'pillar' | 'branching' | 'bridge';
+  touchpoints: SupportTouchpoint[];
+  nodes: SupportGraphNode[];
+  edges: SupportGraphEdge[];
 }
 
 export interface BasePanSettings {
@@ -62,6 +86,7 @@ export interface PillarSetSettings {
 
 export interface ModelPillarSet {
   pillars: Pillar[];
+  supportStructures?: SupportStructure[];
   settings: PillarSetSettings;
   // True for legacy projects: the mesh was loaded from a pre-rework save
   // and we have no per-pillar data. The mesh stays opaque until the user
@@ -147,6 +172,144 @@ export function replaceAutoPillars(modelId: string, autoPillars: Pillar[]): void
   set.legacyOpaque = false;
 }
 
+export function replaceAutoSupportStructures(
+  modelId: string,
+  autoStructures: SupportStructure[],
+): void {
+  const set = getPillarSet(modelId);
+  const userStructures = (set.supportStructures ?? []).filter((s) => s.origin !== 'auto');
+  set.supportStructures = [...autoStructures, ...userStructures];
+  set.legacyOpaque = false;
+}
+
+export function addSupportStructureRecord(modelId: string, structure: SupportStructure): void {
+  const set = getPillarSet(modelId);
+  set.supportStructures = [...(set.supportStructures ?? []), structure];
+  set.legacyOpaque = false;
+}
+
+export function removeSupportStructure(modelId: string, structureId: string): boolean {
+  const set = pillarSets.get(modelId);
+  if (!set?.supportStructures) return false;
+  const before = set.supportStructures.length;
+  set.supportStructures = set.supportStructures.filter((s) => s.id !== structureId);
+  return set.supportStructures.length !== before;
+}
+
+export interface SupportStructureRadiusUpdate {
+  tipRadius?: number;
+  branchRadius?: number;
+  trunkRadius?: number;
+  baseRadius?: number;
+}
+
+export function updateSupportStructureRadii(
+  modelId: string,
+  structureId: string,
+  update: SupportStructureRadiusUpdate,
+): boolean {
+  const structure = getSupportStructure(modelId, structureId);
+  if (!structure) return false;
+  if (update.tipRadius !== undefined) {
+    const radius = Math.max(update.tipRadius, 0.05);
+    for (const node of structure.nodes) {
+      if (node.kind === 'tip') node.radius = radius;
+    }
+    for (const touchpoint of structure.touchpoints) touchpoint.diameter = radius * 2;
+  }
+  if (update.branchRadius !== undefined) {
+    const radius = Math.max(update.branchRadius, 0.05);
+    for (const node of structure.nodes) {
+      if (node.kind === 'branch') node.radius = radius;
+    }
+    for (const edge of structure.edges) {
+      const from = structure.nodes.find((node) => node.id === edge.from);
+      const to = structure.nodes.find((node) => node.id === edge.to);
+      if (from?.kind === 'tip' || to?.kind === 'tip') edge.radius = radius;
+    }
+  }
+  if (update.trunkRadius !== undefined) {
+    const radius = Math.max(update.trunkRadius, 0.05);
+    for (const node of structure.nodes) {
+      if (node.kind === 'trunk') node.radius = radius;
+    }
+    for (const edge of structure.edges) {
+      const from = structure.nodes.find((node) => node.id === edge.from);
+      const to = structure.nodes.find((node) => node.id === edge.to);
+      if (from?.kind === 'branch' && to?.kind === 'base') edge.radius = radius;
+      if (from?.kind === 'base' && to?.kind === 'branch') edge.radius = radius;
+    }
+  }
+  if (update.baseRadius !== undefined) {
+    const radius = Math.max(update.baseRadius, 0.05);
+    for (const node of structure.nodes) {
+      if (node.kind === 'base') node.radius = radius;
+    }
+  }
+  return true;
+}
+
+export function updateSupportStructureNodeRadius(
+  modelId: string,
+  structureId: string,
+  nodeId: string,
+  radiusMM: number,
+): boolean {
+  const structure = getSupportStructure(modelId, structureId);
+  if (!structure) return false;
+  const node = structure.nodes.find((n) => n.id === nodeId);
+  if (!node) return false;
+  const radius = Math.max(radiusMM, 0.05);
+  node.radius = radius;
+
+  if (node.kind === 'tip') {
+    for (const touchpoint of structure.touchpoints) {
+      if (pointsAlmostEqual(touchpoint.position, node.position)) {
+        touchpoint.diameter = radius * 2;
+      }
+    }
+  }
+
+  return true;
+}
+
+export function updateSupportStructureNodePosition(
+  modelId: string,
+  structureId: string,
+  nodeId: string,
+  position: Partial<{ x: number; y: number; z: number }>,
+): boolean {
+  const structure = getSupportStructure(modelId, structureId);
+  if (!structure) return false;
+  const node = structure.nodes.find((n) => n.id === nodeId);
+  if (!node) return false;
+  const previousPosition = { ...node.position };
+  if (position.x !== undefined) node.position.x = position.x;
+  if (position.y !== undefined) node.position.y = position.y;
+  if (position.z !== undefined) node.position.z = position.z;
+
+  if (node.kind === 'tip') {
+    for (const touchpoint of structure.touchpoints) {
+      if (pointsAlmostEqual(touchpoint.position, previousPosition)) {
+        touchpoint.position = { ...node.position };
+      }
+    }
+  }
+  return true;
+}
+
+function pointsAlmostEqual(
+  a: { x: number; y: number; z: number },
+  b: { x: number; y: number; z: number },
+): boolean {
+  return Math.abs(a.x - b.x) < 1e-4 && Math.abs(a.y - b.y) < 1e-4 && Math.abs(a.z - b.z) < 1e-4;
+}
+
+export function getSupportStructure(modelId: string, structureId: string): SupportStructure | null {
+  const set = pillarSets.get(modelId);
+  return set?.supportStructures?.find((structure) => structure.id === structureId) ?? null;
+}
+
 export function addManualPillarRecord(modelId: string, pillar: Pillar): void {
   const set = getPillarSet(modelId);
   set.pillars.push(pillar);
@@ -185,6 +348,50 @@ export function findPillarNear(
       bestDist2 = d2;
       best = p;
     }
+  }
+  return best;
+}
+
+export function findSupportStructureNear(
+  modelId: string,
+  worldPos: { x: number; y: number; z: number },
+  maxDistMM: number,
+): SupportStructure | null {
+  const set = pillarSets.get(modelId);
+  const structures = set?.supportStructures ?? [];
+  if (structures.length === 0) return null;
+  let bestDist2 = maxDistMM * maxDistMM;
+  let best: SupportStructure | null = null;
+  for (const structure of structures) {
+    const d2 = squaredDistanceToStructure(structure, worldPos);
+    if (d2 < bestDist2) {
+      bestDist2 = d2;
+      best = structure;
+    }
+  }
+  return best;
+}
+
+function squaredDistanceToStructure(
+  structure: SupportStructure,
+  q: { x: number; y: number; z: number },
+): number {
+  let best = Infinity;
+  for (const node of structure.nodes) {
+    const dx = q.x - node.position.x;
+    const dy = q.y - node.position.y;
+    const dz = q.z - node.position.z;
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 < best) best = d2;
+  }
+
+  const nodeById = new Map(structure.nodes.map((node) => [node.id, node]));
+  for (const edge of structure.edges) {
+    const from = nodeById.get(edge.from);
+    const to = nodeById.get(edge.to);
+    if (!from || !to) continue;
+    const d2 = squaredDistanceToSegment(from.position, to.position, q);
+    if (d2 < best) best = d2;
   }
   return best;
 }
@@ -241,6 +448,7 @@ export function rebuildSupportsMesh(
 
   const geometries: THREE.BufferGeometry[] = [];
   const { settings, pillars } = set;
+  const supportStructures = set.supportStructures ?? [];
   const sphereRadius = settings.sphericalConnection?.radius ?? 0;
   const floorY = settings.supportFloorY;
 
@@ -256,6 +464,10 @@ export function rebuildSupportsMesh(
       floorY,
       sphereRadius,
     );
+  }
+
+  for (const structure of supportStructures) {
+    buildSupportGraphGeometry(structure.nodes, structure.edges, geometries);
   }
 
   if (settings.crossBracing && pillars.length >= 2 && settings.routeContext) {
@@ -277,10 +489,14 @@ export function rebuildSupportsMesh(
   }
 
   if (settings.basePan && modelBounds) {
+    const routes = [
+      ...pillars.map((p) => p.route),
+      ...supportStructures.flatMap((structure) => routesFromStructure(structure)),
+    ];
     geometries.push(
       createBasePanGeometry(
         modelBounds,
-        pillars.map((p) => p.route),
+        routes,
         settings.basePan.margin,
         settings.basePan.thickness,
         settings.basePan.lipWidth,
@@ -291,6 +507,16 @@ export function rebuildSupportsMesh(
 
   if (geometries.length === 0) return new THREE.BufferGeometry();
   return mergeGeometries(geometries);
+}
+
+function routesFromStructure(structure: SupportStructure): RouteWaypoint[][] {
+  const nodeById = new Map(structure.nodes.map((node) => [node.id, node]));
+  return structure.edges.flatMap((edge) => {
+    const from = nodeById.get(edge.from);
+    const to = nodeById.get(edge.to);
+    if (!from || !to) return [];
+    return [[{ ...from.position }, { ...to.position, internalResting: to.kind !== 'base' }]];
+  });
 }
 
 // ---------------------------------------------------------------------------

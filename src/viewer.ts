@@ -28,6 +28,7 @@ import {
   removePillarAndRebuild as removePillarAndRebuildImpl,
   rebuildSupportsFromStore as rebuildSupportsFromStoreImpl,
   findPillarHit as findPillarHitImpl,
+  findSupportStructureHit as findSupportStructureHitImpl,
   findObjectAnywhere,
 } from './viewer-supports';
 import {
@@ -371,6 +372,12 @@ export class Viewer extends ViewerCore {
   }
   findPillarHit(point: THREE.Vector3, maxDistMM = 5): { modelId: string; pillarId: string } | null {
     return findPillarHitImpl(this, point, maxDistMM);
+  }
+  findSupportStructureHit(
+    point: THREE.Vector3,
+    maxDistMM = 5,
+  ): { modelId: string; structureId: string } | null {
+    return findSupportStructureHitImpl(this, point, maxDistMM);
   }
   getSupportsMesh(): THREE.Mesh | null {
     return this.selected.length === 1 ? this.selected[0].supportsMesh : null;

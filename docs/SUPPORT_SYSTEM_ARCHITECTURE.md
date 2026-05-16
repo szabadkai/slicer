@@ -22,22 +22,22 @@ Right-click delete  <--  panel.ts  <--  viewer-core-selection.ts (raycast)
 
 ## File map
 
-| File | Role |
-|---|---|
-| `src/supports.ts` | Orchestrates auto-generation: builds BVH, calls all detectors, deduplicates contact points, plans routes, returns `Pillar[]` + settings. |
-| `src/supports-detect.ts` | **Three new contact-point detectors:** `detectMinima`, `detectStabilization`, `detectReinforcements`. Each returns `ContactPoint[]` tagged with a `reason` field. |
-| `src/supports-geometry.ts` | Geometry building (`buildSupportGeometry`), collision detection (`segmentCollides`, `routeCollides`), cross-bracing, merging. |
-| `src/supports-base-pan.ts` | Base pan geometry + exported `convexHull2D` helper (reused by `supports-detect.ts`). |
-| `src/supports-utils.ts` | Pure math helpers: Halton sequences, deduplication, direction offsets. |
-| `src/features/support-generation/pillar-store.ts` | **Source of truth.** Pillar records, CRUD operations, `rebuildSupportsMesh`. |
-| `src/features/support-generation/panel.ts` | UI panel: generate/clear buttons, settings inputs, right-click delete handler, overhang overlay. Basic section shows overhang angle and density only; all other options are in the collapsible Advanced section. |
-| `src/features/support-generation/manual-pillar.ts` | Click-to-place manual pillar: route planning, store insertion, rebuild. |
-| `src/features/support-generation/manual-support.ts` | Pointer event handling for manual placement mode (hover preview, click dispatch). |
-| `src/features/support-generation/explanation-inspector.ts` | Support-click popup showing why a pillar was placed. |
-| `src/features/support-generation/store.ts` | Legacy signal-based store (UI cache layer). May be retired. |
-| `src/viewer-supports.ts` | Viewer delegate: `setSupportsMesh`, `clearSupports`, `rebuildSupportsFromStore`, `removePillarAndRebuild`, `findPillarHit`. |
-| `src/viewer-undo.ts` | Undo/redo with `pillar-edit` entry type for support operations. |
-| `src/viewer-serialize.ts` | Serializes/restores `ModelPillarSet` alongside model data for project persistence. |
+| File                                                       | Role                                                                                                                                                                                                             |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/supports.ts`                                          | Orchestrates auto-generation: builds BVH, calls all detectors, deduplicates contact points, plans routes, returns `Pillar[]` + settings.                                                                         |
+| `src/supports-detect.ts`                                   | **Three new contact-point detectors:** `detectMinima`, `detectStabilization`, `detectReinforcements`. Each returns `ContactPoint[]` tagged with a `reason` field.                                                |
+| `src/supports-geometry.ts`                                 | Geometry building (`buildSupportGeometry`), collision detection (`segmentCollides`, `routeCollides`), cross-bracing, merging.                                                                                    |
+| `src/supports-base-pan.ts`                                 | Base pan geometry + exported `convexHull2D` helper (reused by `supports-detect.ts`).                                                                                                                             |
+| `src/supports-utils.ts`                                    | Pure math helpers: Halton sequences, deduplication, direction offsets.                                                                                                                                           |
+| `src/features/support-generation/pillar-store.ts`          | **Source of truth.** Pillar records, CRUD operations, `rebuildSupportsMesh`.                                                                                                                                     |
+| `src/features/support-generation/panel.ts`                 | UI panel: generate/clear buttons, settings inputs, right-click delete handler, overhang overlay. Basic section shows overhang angle and density only; all other options are in the collapsible Advanced section. |
+| `src/features/support-generation/manual-pillar.ts`         | Click-to-place manual pillar: route planning, store insertion, rebuild.                                                                                                                                          |
+| `src/features/support-generation/manual-support.ts`        | Pointer event handling for manual placement mode (hover preview, click dispatch).                                                                                                                                |
+| `src/features/support-generation/explanation-inspector.ts` | Support-click popup showing why a pillar was placed.                                                                                                                                                             |
+| `src/features/support-generation/store.ts`                 | Legacy signal-based store (UI cache layer). May be retired.                                                                                                                                                      |
+| `src/viewer-supports.ts`                                   | Viewer delegate: `setSupportsMesh`, `clearSupports`, `rebuildSupportsFromStore`, `removePillarAndRebuild`, `findPillarHit`.                                                                                      |
+| `src/viewer-undo.ts`                                       | Undo/redo with `pillar-edit` entry type for support operations.                                                                                                                                                  |
+| `src/viewer-serialize.ts`                                  | Serializes/restores `ModelPillarSet` alongside model data for project persistence.                                                                                                                               |
 
 ## Key types
 
@@ -47,13 +47,13 @@ Right-click delete  <--  panel.ts  <--  viewer-core-selection.ts (raycast)
 interface Pillar {
   id: string;
   origin: 'auto' | 'manual';
-  route: RouteWaypoint[];    // waypoints from contact point down to base
+  route: RouteWaypoint[]; // waypoints from contact point down to base
   tipDiameter: number;
   pillarRadius: number;
   baseRadius: number;
   tipHeight: number;
   baseHeight: number;
-  contact: { x: number; y: number; z: number };  // plate-local coords
+  contact: { x: number; y: number; z: number }; // plate-local coords
 }
 ```
 
@@ -62,10 +62,34 @@ interface Pillar {
 ```typescript
 interface ModelPillarSet {
   pillars: Pillar[];
-  settings: PillarSetSettings;  // cross-bracing, base-pan, spherical connection, etc.
-  legacyOpaque?: boolean;       // true for pre-rework saved projects
+  supportStructures?: SupportStructure[]; // experimental graph supports
+  settings: PillarSetSettings; // cross-bracing, base-pan, spherical connection, etc.
+  legacyOpaque?: boolean; // true for pre-rework saved projects
 }
 ```
+
+### SupportStructure (pillar-store.ts)
+
+Experimental branching supports are represented as graph structures that
+coexist with legacy linear pillars:
+
+```typescript
+interface SupportStructure {
+  id: string;
+  origin: 'auto' | 'manual' | 'paint';
+  kind: 'pillar' | 'branching' | 'bridge';
+  touchpoints: SupportTouchpoint[];
+  nodes: SupportGraphNode[];
+  edges: SupportGraphEdge[];
+}
+```
+
+The graph path is intentionally separate from `Pillar.route`. A `Pillar` is a
+single top-to-base route; a `SupportStructure` can fan multiple editable
+touchpoints into shared branch/trunk nodes. `rebuildSupportsMesh` renders both
+collections into the derived support mesh, so existing generation remains
+stable while experimental branching and manual multi-touchpoint editing can be
+added incrementally.
 
 ### ContactPoint (supports-geometry.ts)
 
@@ -83,8 +107,10 @@ The `reason` field is set by whichever detector emitted the point. It is used in
 
 ```typescript
 interface RouteWaypoint {
-  x: number; y: number; z: number;
-  internalResting?: boolean;  // pillar rests on model surface instead of build plate
+  x: number;
+  y: number;
+  z: number;
+  internalResting?: boolean; // pillar rests on model surface instead of build plate
 }
 ```
 
@@ -96,7 +122,9 @@ interface RouteWaypoint {
    - Deduplicates across all detectors with `deduplicatePoints(points, spacing * 0.5)`
    - Filters to exterior-only contacts (unless internal supports enabled)
    - For each contact: calls `planSupportRoute` to find a collision-free path; applies per-reason pillar sizing
-   - Returns `{ pillars: Pillar[], settings: PillarSetSettings }`
+
+- If `experimentalBranchingSupports` is enabled, clusters nearby routed pillars into branching `SupportStructure` graphs and leaves unclustered pillars linear
+- Returns `{ pillars: Pillar[], supportStructures: SupportStructure[], settings: PillarSetSettings }`
 
 ### Detection pipeline order
 
@@ -104,25 +132,35 @@ The BVH must be built **before** calling any detector. `generateSupports` now bu
 
 The four detectors and their defaults:
 
-| Detector | Option flag | Default | Algorithm summary |
-|---|---|---|---|
-| Overhangs | always on | — | Triangle normals with angle threshold; Halton-sampled contact points |
-| Minima | `detectMinima` | `true` | Vertex Y-minima (lower than all neighbours + at least one higher neighbour); also catches downward-pointing tips via accumulated normal |
-| Stabilization | `detectStabilization` | `true` | CoM XZ vs. footprint convex hull signed distance; also tall/narrow aspect ratio (height/footprintDiameter > 3) |
-| Reinforcements | `detectReinforcements` | `false` | Per-triangle ray cast in −normal direction; hit within `reinforcementThreshold` mm = thin section |
+| Detector       | Option flag            | Default | Algorithm summary                                                                                                                       |
+| -------------- | ---------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Overhangs      | always on              | —       | Triangle normals with angle threshold; Halton-sampled contact points                                                                    |
+| Minima         | `detectMinima`         | `true`  | Vertex Y-minima (lower than all neighbours + at least one higher neighbour); also catches downward-pointing tips via accumulated normal |
+| Stabilization  | `detectStabilization`  | `true`  | CoM XZ vs. footprint convex hull signed distance; also tall/narrow aspect ratio (height/footprintDiameter > 3)                          |
+| Reinforcements | `detectReinforcements` | `false` | Per-triangle ray cast in −normal direction; hit within `reinforcementThreshold` mm = thin section                                       |
 
 2. **`panel.ts: handleGenerate()`**:
    - Dispatches `pillar-edit-undo-save` event (for undo)
    - Calls `replaceAutoPillars(modelId, autoPillars)` — keeps manual, replaces auto
-   - Calls `updatePillarSettings(modelId, settings)`
-   - Calls `viewer.rebuildSupportsFromStore(modelId)` — rebuilds visible mesh
+
+- Calls `replaceAutoSupportStructures(modelId, autoStructures)` — keeps manual/paint structures, replaces auto
+- Calls `updatePillarSettings(modelId, settings)`
+- Calls `viewer.rebuildSupportsFromStore(modelId)` — rebuilds visible mesh
 
 3. **`rebuildSupportsMesh(modelId)`** in `pillar-store.ts`:
    - Iterates ALL pillars (auto + manual)
-   - Calls `buildSupportGeometry` per pillar
-   - Applies cross-bracing if enabled (union of all routes)
-   - Applies base pan if enabled (union of all routes)
-   - Merges into single `THREE.BufferGeometry`
+
+- Calls `buildSupportGeometry` per pillar
+- Calls `buildSupportGraphGeometry` per experimental support structure
+- Applies cross-bracing if enabled (union of all routes)
+- Applies base pan if enabled (union of all routes)
+- Merges into single `THREE.BufferGeometry`
+
+### Experimental auto branching
+
+`clusterPillarsIntoBranchStructures` runs after route planning, so only contacts with valid collision-checked pillar routes are eligible. It greedily groups nearby non-bridge pillars by XZ distance and similar height, converts each group into one `SupportStructure`, and returns any unclustered pillars unchanged. Bridge pillars stay linear because they already terminate on model surfaces.
+
+This first pass is a topology post-process, not full organic pathfinding. The branch graph geometry does not yet collision-route each branch edge around model obstacles, so the UI toggle is explicitly experimental.
 
 ## How manual placement works
 
@@ -183,6 +221,7 @@ interface PillarEditEntry {
 ```
 
 **How to add undo to a new support operation:**
+
 1. Before mutating the pillar store, dispatch: `document.dispatchEvent(new CustomEvent('pillar-edit-undo-save', { detail: { modelId } }))`
 2. The viewer's constructor wires a listener that calls `savePillarEditUndoState(viewer, modelId)`
 3. This snapshots the current `ModelPillarSet` (deep clone) and pushes it onto `viewer.undoStack`
@@ -201,12 +240,12 @@ The `undo()` and `redo()` functions in `viewer-undo.ts` check for `type === 'pil
 
 These settings in `PillarSetSettings` apply across the entire union of auto + manual pillars:
 
-| Setting | Effect |
-|---|---|
-| `crossBracing` | Diagonal struts between adjacent pillar routes |
-| `basePan` | Flat pad geometry at the base of the support cluster |
-| `sphericalConnection` | Ball joint at the contact point (configurable radius) |
-| `supportFloorY` | Y coordinate of the build plate (usually 0, offset when base pan is enabled) |
+| Setting               | Effect                                                                       |
+| --------------------- | ---------------------------------------------------------------------------- |
+| `crossBracing`        | Diagonal struts between adjacent pillar routes                               |
+| `basePan`             | Flat pad geometry at the base of the support cluster                         |
+| `sphericalConnection` | Ball joint at the contact point (configurable radius)                        |
+| `supportFloorY`       | Y coordinate of the build plate (usually 0, offset when base pan is enabled) |
 
 All are applied during `rebuildSupportsMesh`, not during route planning.
 
@@ -214,26 +253,31 @@ All are applied during `rebuildSupportsMesh`, not during route planning.
 
 All options are optional; `generateSupports` destructures with defaults.
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `overhangAngle` | `number` | `30` | Degrees from horizontal; faces more horizontal than this get support |
-| `density` | `number` | `5` | Contact point density (1–9); spacing = `12 - density` mm |
-| `autoDensity` | `boolean` | `false` | Compute density from model dimensions |
-| `tipDiameter` | `number` | `0.4` | Tip sphere diameter in mm |
-| `supportThickness` | `number` | `0.8` | Shaft diameter in mm |
-| `autoThickness` | `boolean` | `true` | Compute thickness from model dimensions |
-| `detectMinima` | `boolean` | `true` | Enable local-minima detector |
-| `detectStabilization` | `boolean` | `true` | Enable stabilization detector |
-| `detectReinforcements` | `boolean` | `false` | Enable thin-section detector (slow — O(triCount) ray casts) |
-| `stabilizationDensity` | `number` | `4` | Contact density for stabilization perimeter supports (1–9) |
-| `reinforcementThreshold` | `number` | `2.0` | Sections thinner than this (mm) get reinforcement supports |
-| `supportScope` | `'all' \| 'outside-only'` | `'outside-only'` | Whether to support internal cavities |
-| `maxPillarAngle` | `number` | `45` | Max angle from vertical for angled routes |
-| `modelClearance` | `number` | `1.5` | Min distance between pillar shaft and model surface |
-| `maxContactOffset` | `number` | `18` | Max horizontal offset when routing around obstructions |
-| `crossBracing` | `boolean` | `false` | Diagonal struts between adjacent pillars |
-| `basePanEnabled` | `boolean` | `false` | Flat raft under all pillar bases |
-| `sphericalConnection` | `boolean` | `false` | Ball joint at contact point |
+| Option                          | Type                      | Default          | Description                                                          |
+| ------------------------------- | ------------------------- | ---------------- | -------------------------------------------------------------------- |
+| `overhangAngle`                 | `number`                  | `30`             | Degrees from horizontal; faces more horizontal than this get support |
+| `density`                       | `number`                  | `5`              | Contact point density (1–9); spacing = `12 - density` mm             |
+| `autoDensity`                   | `boolean`                 | `false`          | Compute density from model dimensions                                |
+| `tipDiameter`                   | `number`                  | `0.4`            | Tip sphere diameter in mm                                            |
+| `supportThickness`              | `number`                  | `0.8`            | Shaft diameter in mm                                                 |
+| `autoThickness`                 | `boolean`                 | `true`           | Compute thickness from model dimensions                              |
+| `detectMinima`                  | `boolean`                 | `true`           | Enable local-minima detector                                         |
+| `detectStabilization`           | `boolean`                 | `true`           | Enable stabilization detector                                        |
+| `detectReinforcements`          | `boolean`                 | `false`          | Enable thin-section detector (slow — O(triCount) ray casts)          |
+| `stabilizationDensity`          | `number`                  | `4`              | Contact density for stabilization perimeter supports (1–9)           |
+| `reinforcementThreshold`        | `number`                  | `2.0`            | Sections thinner than this (mm) get reinforcement supports           |
+| `supportScope`                  | `'all' \| 'outside-only'` | `'outside-only'` | Whether to support internal cavities                                 |
+| `maxPillarAngle`                | `number`                  | `45`             | Max angle from vertical for angled routes                            |
+| `modelClearance`                | `number`                  | `1.5`            | Min distance between pillar shaft and model surface                  |
+| `maxContactOffset`              | `number`                  | `18`             | Max horizontal offset when routing around obstructions               |
+| `crossBracing`                  | `boolean`                 | `false`          | Diagonal struts between adjacent pillars                             |
+| `basePanEnabled`                | `boolean`                 | `false`          | Flat raft under all pillar bases                                     |
+| `sphericalConnection`           | `boolean`                 | `false`          | Ball joint at contact point                                          |
+| `bridgeSupports`                | `boolean`                 | `false`          | Allow support routes to terminate on lower model surfaces            |
+| `maxBridgeSearchRadius`         | `number`                  | `30`             | Maximum bridge target search distance                                |
+| `experimentalBranchingSupports` | `boolean`                 | `false`          | Cluster nearby routed pillars into graph-based branching structures  |
+| `branchClusterRadius`           | `number`                  | `10`             | Maximum XZ/height distance for experimental branch clustering        |
+| `branchMaxTips`                 | `number`                  | `5`              | Maximum touchpoints per generated branch structure                   |
 
 ## Pitfalls specific to the detector system
 

@@ -12,7 +12,12 @@ import {
   routeCollides,
 } from '../../supports-geometry';
 import { planSupportRoute } from '../../supports';
-import { addManualPillarRecord, buildPillarFromRoute } from './pillar-store';
+import {
+  addManualPillarRecord,
+  addSupportStructureRecord,
+  buildPillarFromRoute,
+  type SupportStructure,
+} from './pillar-store';
 
 interface PillarViewer {
   activePlate: { originX?: number; originZ?: number };
@@ -33,6 +38,11 @@ export interface ManualPillarOptions {
   maxContactOffset: number;
 }
 
+export interface BranchTouchpointInput {
+  position: { x: number; y: number; z: number };
+  normal: { x: number; y: number; z: number };
+}
+
 const DEFAULT_MANUAL_OPTIONS: ManualPillarOptions = {
   tipDiameterMM: 0.4,
   shaftDiameterMM: 0.8,
@@ -40,6 +50,90 @@ const DEFAULT_MANUAL_OPTIONS: ManualPillarOptions = {
   modelClearance: 1.5,
   maxContactOffset: 18,
 };
+
+let nextBranchId = 0;
+function genBranchId(prefix: string): string {
+  nextBranchId += 1;
+  return `${prefix}_${Date.now().toString(36)}_${nextBranchId.toString(36)}`;
+}
+
+export function buildBranchSupportStructure(
+  touchpoints: BranchTouchpointInput[],
+  options?: Partial<ManualPillarOptions>,
+): SupportStructure | null {
+  if (touchpoints.length < 2) return null;
+  const opts: ManualPillarOptions = { ...DEFAULT_MANUAL_OPTIONS, ...options };
+  const tipRadius = Math.max(opts.tipDiameterMM / 2, 0.05);
+  const shaftRadius = Math.max(opts.shaftDiameterMM / 2, 0.15);
+  const branchRadius = Math.max(shaftRadius * 1.15, tipRadius);
+  const baseRadius = Math.max(shaftRadius * 2, branchRadius * 1.4);
+
+  const avg = touchpoints.reduce(
+    (sum, point) => {
+      sum.x += point.position.x;
+      sum.y += point.position.y;
+      sum.z += point.position.z;
+      return sum;
+    },
+    { x: 0, y: 0, z: 0 },
+  );
+  avg.x /= touchpoints.length;
+  avg.y /= touchpoints.length;
+  avg.z /= touchpoints.length;
+  const minTipY = Math.min(...touchpoints.map((point) => point.position.y));
+  const branchDrop = Math.max(opts.shaftDiameterMM * 4, 3);
+  const branchY = Math.max(shaftRadius + 0.5, minTipY - branchDrop);
+  const structureId = genBranchId('branch');
+  const branchNodeId = `${structureId}_junction`;
+  const baseNodeId = `${structureId}_base`;
+
+  return {
+    id: structureId,
+    origin: 'manual',
+    kind: 'branching',
+    touchpoints: touchpoints.map((point, index) => ({
+      id: `${structureId}_touch_${index}`,
+      position: { x: point.position.x, y: point.position.y, z: point.position.z },
+      normal: { x: point.normal.x, y: point.normal.y, z: point.normal.z },
+      diameter: opts.tipDiameterMM,
+      shape: 'ball',
+      priority: 'normal',
+      enabled: true,
+    })),
+    nodes: [
+      ...touchpoints.map((point, index) => ({
+        id: `${structureId}_tip_${index}`,
+        position: { x: point.position.x, y: point.position.y, z: point.position.z },
+        radius: tipRadius,
+        kind: 'tip' as const,
+      })),
+      {
+        id: branchNodeId,
+        position: { x: avg.x, y: branchY, z: avg.z },
+        radius: branchRadius,
+        kind: 'branch',
+      },
+      {
+        id: baseNodeId,
+        position: { x: avg.x, y: 0, z: avg.z },
+        radius: baseRadius,
+        kind: 'base',
+      },
+    ],
+    edges: [
+      ...touchpoints.map((_, index) => ({
+        from: `${structureId}_tip_${index}`,
+        to: branchNodeId,
+        radius: Math.max(tipRadius * 0.8, shaftRadius * 0.55),
+      })),
+      {
+        from: branchNodeId,
+        to: baseNodeId,
+        radius: shaftRadius,
+      },
+    ],
+  };
+}
 
 export function addManualPillar(
   viewer: PillarViewer,
@@ -264,4 +358,38 @@ export function addBridgePillar(
   pillar.bridgeTarget = { x: lastWp.x, y: lastWp.y, z: lastWp.z };
   addManualPillarRecord(obj.id, pillar);
   viewer.rebuildSupportsFromStore(obj.id);
+}
+
+export function addBranchSupportStructure(
+  viewer: PillarViewer,
+  obj: PillarObject,
+  worldTouchpoints: { position: THREE.Vector3; normal: THREE.Vector3 }[],
+  options?: Partial<ManualPillarOptions>,
+): boolean {
+  if (worldTouchpoints.length < 2) {
+    document.dispatchEvent(new CustomEvent('manual-branch-failed'));
+    return false;
+  }
+
+  const originX = viewer.activePlate.originX || 0;
+  const originZ = viewer.activePlate.originZ || 0;
+  const localTouchpoints = worldTouchpoints.map((point) => {
+    const localPosition = point.position.clone();
+    localPosition.x -= originX;
+    localPosition.z -= originZ;
+    return {
+      position: localPosition,
+      normal: point.normal.clone().normalize(),
+    };
+  });
+  const structure = buildBranchSupportStructure(localTouchpoints, options);
+  if (!structure) {
+    document.dispatchEvent(new CustomEvent('manual-branch-failed'));
+    return false;
+  }
+
+  document.dispatchEvent(new CustomEvent('pillar-edit-undo-save', { detail: { modelId: obj.id } }));
+  addSupportStructureRecord(obj.id, structure);
+  viewer.rebuildSupportsFromStore(obj.id);
+  return true;
 }

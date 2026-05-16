@@ -41,6 +41,11 @@ function readSupportOptions(
     detectReinforcements: readChecked('detect-reinforcements', false),
     stabilizationDensity: parseInt(readInput('stabilization-density', '4'), 10),
     reinforcementThreshold: parseFloat(readInput('reinforcement-threshold', '2.0')),
+    bridgeSupports: readChecked('bridge-supports', false),
+    maxBridgeSearchRadius: parseFloat(readInput('bridge-search-radius', '30')),
+    experimentalBranchingSupports: readChecked('experimental-branching-supports', false),
+    branchClusterRadius: parseFloat(readInput('branch-cluster-radius', '10')),
+    branchMaxTips: parseInt(readInput('branch-max-tips', '5'), 10),
     onProgress,
   };
 }
@@ -127,7 +132,7 @@ export function mountOneClickPreparePanel(ctx: AppContext): void {
     // ── Phase 3: Support (progress 0.55 → 1.0) ────────────────
     try {
       const { generateSupports } = await import('../../supports');
-      const { replaceAutoPillars, updatePillarSettings } =
+      const { replaceAutoPillars, replaceAutoSupportStructures, updatePillarSettings } =
         await import('../support-generation/pillar-store');
 
       for (let i = 0; i < targets.length; i++) {
@@ -157,6 +162,7 @@ export function mountOneClickPreparePanel(ctx: AppContext): void {
             new CustomEvent('pillar-edit-undo-save', { detail: { modelId: obj.id } }),
           );
           replaceAutoPillars(obj.id, result.pillars);
+          replaceAutoSupportStructures(obj.id, result.supportStructures ?? []);
           updatePillarSettings(obj.id, result.settings);
           viewer.rebuildSupportsFromStore(obj.id);
         } catch (err) {

@@ -185,6 +185,10 @@ export interface LegacyViewer {
   rebuildSupportsFromStore(modelId: string): void;
   removePillarAndRebuild(modelId: string, pillarId: string): boolean;
   findPillarHit(point: Vec3, maxDistMM?: number): { modelId: string; pillarId: string } | null;
+  findSupportStructureHit?(
+    point: Vec3,
+    maxDistMM?: number,
+  ): { modelId: string; structureId: string } | null;
 
   // Support heatmap
   buildSupportHeatmapGeometry?(

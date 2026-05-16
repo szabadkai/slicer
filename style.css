@@ -701,6 +701,95 @@ body {
   margin: 12px 0;
 }
 
+.support-edit-gizmo {
+  position: fixed;
+  z-index: 1200;
+  width: 236px;
+  padding: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.28);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.3);
+  color: #202124;
+}
+
+[data-theme="dark"] .support-edit-gizmo {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: #25262b;
+  color: #f1f3f5;
+}
+
+.support-edit-gizmo[hidden] {
+  display: none;
+}
+
+.support-edit-gizmo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.support-edit-gizmo-context {
+  margin: -3px 0 8px;
+  color: #5f6368;
+  font-size: 11px;
+}
+
+[data-theme="dark"] .support-edit-gizmo-context {
+  color: #c1c2c5;
+}
+
+.support-edit-gizmo-close {
+  border: none;
+  background: transparent;
+  color: #5f6368;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+[data-theme="dark"] .support-edit-gizmo-close {
+  color: #c1c2c5;
+}
+
+.support-edit-gizmo label {
+  display: grid;
+  grid-template-columns: 54px 1fr 36px;
+  align-items: center;
+  gap: 8px;
+  margin: 7px 0;
+  color: #4d5156;
+  font-size: 11px;
+}
+
+.support-edit-gizmo label.disabled {
+  opacity: 0.42;
+}
+
+[data-theme="dark"] .support-edit-gizmo label {
+  color: #c1c2c5;
+}
+
+.support-edit-gizmo input[type="range"] {
+  width: 100%;
+}
+
+.support-edit-gizmo span {
+  color: #202124;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+[data-theme="dark"] .support-edit-gizmo span {
+  color: #f1f3f5;
+}
+
+.support-node-dragging {
+  cursor: ns-resize;
+}
+
 .flex-row {
   display: flex;
   align-items: center;
