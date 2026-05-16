@@ -93,6 +93,7 @@ export function buildBranchSupportStructure(
     kind: 'branching',
     touchpoints: touchpoints.map((point, index) => ({
       id: `${structureId}_touch_${index}`,
+      nodeId: `${structureId}_tip_${index}`,
       position: { x: point.position.x, y: point.position.y, z: point.position.z },
       normal: { x: point.normal.x, y: point.normal.y, z: point.normal.z },
       diameter: opts.tipDiameterMM,

@@ -47,6 +47,7 @@ export interface Pillar {
 
 export interface SupportTouchpoint {
   id: string;
+  nodeId?: string;
   position: { x: number; y: number; z: number };
   normal: { x: number; y: number; z: number };
   diameter: number;
@@ -203,6 +204,13 @@ export interface SupportStructureRadiusUpdate {
   baseRadius?: number;
 }
 
+export interface SupportTouchpointUpdate {
+  diameter?: number;
+  shape?: SupportTouchpoint['shape'];
+  priority?: SupportTouchpoint['priority'];
+  enabled?: boolean;
+}
+
 export function updateSupportStructureRadii(
   modelId: string,
   structureId: string,
@@ -263,13 +271,34 @@ export function updateSupportStructureNodeRadius(
   node.radius = radius;
 
   if (node.kind === 'tip') {
-    for (const touchpoint of structure.touchpoints) {
-      if (pointsAlmostEqual(touchpoint.position, node.position)) {
-        touchpoint.diameter = radius * 2;
-      }
-    }
+    const touchpoint = findTouchpointForTipNode(structure, node);
+    if (touchpoint) touchpoint.diameter = radius * 2;
   }
 
+  return true;
+}
+
+export function updateSupportStructureTouchpoint(
+  modelId: string,
+  structureId: string,
+  nodeId: string,
+  update: SupportTouchpointUpdate,
+): boolean {
+  const structure = getSupportStructure(modelId, structureId);
+  if (!structure) return false;
+  const node = structure.nodes.find((n) => n.id === nodeId && n.kind === 'tip');
+  if (!node) return false;
+  const touchpoint = findTouchpointForTipNode(structure, node);
+  if (!touchpoint) return false;
+  touchpoint.nodeId = node.id;
+  if (update.diameter !== undefined) {
+    const diameter = Math.max(update.diameter, 0.1);
+    touchpoint.diameter = diameter;
+    node.radius = diameter / 2;
+  }
+  if (update.shape !== undefined) touchpoint.shape = update.shape;
+  if (update.priority !== undefined) touchpoint.priority = update.priority;
+  if (update.enabled !== undefined) touchpoint.enabled = update.enabled;
   return true;
 }
 
@@ -289,13 +318,32 @@ export function updateSupportStructureNodePosition(
   if (position.z !== undefined) node.position.z = position.z;
 
   if (node.kind === 'tip') {
-    for (const touchpoint of structure.touchpoints) {
-      if (pointsAlmostEqual(touchpoint.position, previousPosition)) {
-        touchpoint.position = { ...node.position };
-      }
+    const touchpoint = findTouchpointByPosition(structure, previousPosition);
+    if (touchpoint) {
+      touchpoint.nodeId = node.id;
+      touchpoint.position = { ...node.position };
     }
   }
   return true;
+}
+
+function findTouchpointForTipNode(
+  structure: SupportStructure,
+  node: SupportGraphNode,
+): SupportTouchpoint | undefined {
+  return (
+    structure.touchpoints.find((touchpoint) => touchpoint.nodeId === node.id) ??
+    findTouchpointByPosition(structure, node.position)
+  );
+}
+
+function findTouchpointByPosition(
+  structure: SupportStructure,
+  position: { x: number; y: number; z: number },
+): SupportTouchpoint | undefined {
+  return structure.touchpoints.find((touchpoint) =>
+    pointsAlmostEqual(touchpoint.position, position),
+  );
 }
 
 function pointsAlmostEqual(
@@ -467,7 +515,8 @@ export function rebuildSupportsMesh(
   }
 
   for (const structure of supportStructures) {
-    buildSupportGraphGeometry(structure.nodes, structure.edges, geometries);
+    const activeGraph = activeSupportGraph(structure);
+    if (activeGraph) buildSupportGraphGeometry(activeGraph.nodes, activeGraph.edges, geometries);
   }
 
   if (settings.crossBracing && pillars.length >= 2 && settings.routeContext) {
@@ -510,13 +559,32 @@ export function rebuildSupportsMesh(
 }
 
 function routesFromStructure(structure: SupportStructure): RouteWaypoint[][] {
-  const nodeById = new Map(structure.nodes.map((node) => [node.id, node]));
-  return structure.edges.flatMap((edge) => {
+  const activeGraph = activeSupportGraph(structure);
+  if (!activeGraph) return [];
+  const nodeById = new Map(activeGraph.nodes.map((node) => [node.id, node]));
+  return activeGraph.edges.flatMap((edge) => {
     const from = nodeById.get(edge.from);
     const to = nodeById.get(edge.to);
     if (!from || !to) return [];
     return [[{ ...from.position }, { ...to.position, internalResting: to.kind !== 'base' }]];
   });
+}
+
+function activeSupportGraph(
+  structure: SupportStructure,
+): { nodes: SupportGraphNode[]; edges: SupportGraphEdge[] } | null {
+  const disabledTipIds = new Set(
+    structure.nodes
+      .filter((node) => node.kind === 'tip')
+      .filter((node) => findTouchpointForTipNode(structure, node)?.enabled === false)
+      .map((node) => node.id),
+  );
+  const nodes = structure.nodes.filter((node) => !disabledTipIds.has(node.id));
+  if (!nodes.some((node) => node.kind === 'tip')) return null;
+  const edges = structure.edges.filter(
+    (edge) => !disabledTipIds.has(edge.from) && !disabledTipIds.has(edge.to),
+  );
+  return { nodes, edges };
 }
 
 // ---------------------------------------------------------------------------

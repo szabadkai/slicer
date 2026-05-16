@@ -74,6 +74,7 @@ export interface SerializedPillar {
 
 export interface SerializedSupportTouchpoint {
   id: string;
+  nodeId?: string;
   position: { x: number; y: number; z: number };
   normal: { x: number; y: number; z: number };
   diameter: number;

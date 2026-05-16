@@ -15,6 +15,7 @@ import {
   updateSupportStructureNodePosition,
   updateSupportStructureNodeRadius,
   updateSupportStructureRadii,
+  updateSupportStructureTouchpoint,
   rebuildSupportsMesh,
   getPillarSet,
   updatePillarSettings,
@@ -41,6 +42,7 @@ function makeBranchingStructure(id = 's1'): SupportStructure {
     touchpoints: [
       {
         id: 't1',
+        nodeId: 'n_tip_1',
         position: { x: -1, y: 6, z: 0 },
         normal: { x: 0, y: -1, z: 0 },
         diameter: 0.4,
@@ -50,6 +52,7 @@ function makeBranchingStructure(id = 's1'): SupportStructure {
       },
       {
         id: 't2',
+        nodeId: 'n_tip_2',
         position: { x: 1, y: 6, z: 0 },
         normal: { x: 0, y: -1, z: 0 },
         diameter: 0.4,
@@ -208,6 +211,30 @@ describe('support structures', () => {
     expect(structure.nodes.find((node) => node.id === 'n_branch')?.position.y).toBe(3.25);
     expect(structure.nodes.find((node) => node.id === 'n_base')?.position.y).toBe(0);
   });
+
+  it('updates selected touchpoint metadata and diameter', () => {
+    addSupportStructureRecord('m1', makeBranchingStructure());
+
+    expect(
+      updateSupportStructureTouchpoint('m1', 's1', 'n_tip_1', {
+        diameter: 0.7,
+        shape: 'pad',
+        priority: 'heavy',
+        enabled: false,
+      }),
+    ).toBe(true);
+
+    const structure = getPillarSet('m1').supportStructures![0];
+    const touchpoint = structure.touchpoints.find((point) => point.id === 't1');
+    expect(touchpoint).toMatchObject({
+      diameter: 0.7,
+      shape: 'pad',
+      priority: 'heavy',
+      enabled: false,
+    });
+    expect(structure.nodes.find((node) => node.id === 'n_tip_1')?.radius).toBe(0.35);
+    expect(structure.touchpoints.find((point) => point.id === 't2')?.enabled).toBe(true);
+  });
 });
 
 describe('findPillarNear', () => {
@@ -252,6 +279,18 @@ describe('rebuildSupportsMesh', () => {
     addSupportStructureRecord('m1', makeBranchingStructure());
     const geo = rebuildSupportsMesh('m1');
     expect(geo.attributes.position.count).toBeGreaterThan(0);
+  });
+
+  it('omits disabled touchpoint branches from graph geometry', () => {
+    const structure = makeBranchingStructure();
+    addSupportStructureRecord('m1', structure);
+    const fullCount = rebuildSupportsMesh('m1').attributes.position.count;
+
+    updateSupportStructureTouchpoint('m1', 's1', 'n_tip_1', { enabled: false });
+    const reducedCount = rebuildSupportsMesh('m1').attributes.position.count;
+
+    expect(reducedCount).toBeGreaterThan(0);
+    expect(reducedCount).toBeLessThan(fullCount);
   });
 
   it('includes raised branch bases when building a base pan', () => {

@@ -37,6 +37,14 @@ The floating gizmo edits graph radii:
 - Trunk
 - Base
 
+Clicking a visible tip handle focuses one touchpoint. In that state, the gizmo
+also edits touchpoint-level settings:
+
+- Shape: point, ball, cone, or pad
+- Load: light, normal, or heavy
+- Enabled: disabled touchpoints remain editable as handles but no longer emit
+  their tip branch geometry
+
 Changes rebuild the support mesh immediately and autosave the project.
 
 ## Architecture added so far
@@ -47,6 +55,7 @@ Changes rebuild the support mesh immediately and autosave the project.
 - Save/restore support for graph structures.
 - Graph hit testing for selecting branch structures.
 - Radius update helpers for gizmo edits.
+- Per-touchpoint metadata edits for selected tip handles.
 
 ## Safety behavior
 
@@ -61,7 +70,10 @@ Auto branching is conservative:
 
 - Branching is still a topology post-process, not full organic routing.
 - Failed branch edges do not yet try alternate junction positions.
-- The edit gizmo changes radii only; it does not move touchpoints or junctions.
+- Touchpoint shape and load are stored and editable, but shape-specific contact
+  geometry is not rendered yet.
+- The edit gizmo changes radii and touchpoint metadata; it does not move
+  touchpoints or junctions.
 - Selected graph handles are visual anchors first, not draggable handles yet.
 - Manual branch placement does not collision-route the generated graph.
 
@@ -69,7 +81,8 @@ Auto branching is conservative:
 
 1. Render visible handles for selected branch tips, junctions, and bases.
 2. Let the gizmo select and edit individual handles.
-3. Add per-touchpoint enable/delete/diameter controls.
-4. Add draggable touchpoints constrained to the model surface.
-5. Add branch validation status in the gizmo.
-6. Try alternate junction positions before falling back to linear pillars.
+3. Render shape-specific touchpoint contact geometry.
+4. Add per-touchpoint delete and restore controls.
+5. Add draggable touchpoints constrained to the model surface.
+6. Add branch validation status in the gizmo.
+7. Try alternate junction positions before falling back to linear pillars.

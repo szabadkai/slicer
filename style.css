@@ -776,6 +776,44 @@ body {
   width: 100%;
 }
 
+.support-edit-gizmo-touchpoint {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.14);
+}
+
+[data-theme="dark"] .support-edit-gizmo-touchpoint {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.support-edit-gizmo label.support-edit-gizmo-select {
+  grid-template-columns: 54px 1fr;
+}
+
+.support-edit-gizmo label.support-edit-gizmo-toggle {
+  grid-template-columns: 54px 1fr;
+}
+
+.support-edit-gizmo select {
+  min-width: 0;
+  height: 26px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 6px;
+  background: #ffffff;
+  color: #202124;
+  font-size: 11px;
+}
+
+[data-theme="dark"] .support-edit-gizmo select {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: #1f2025;
+  color: #f1f3f5;
+}
+
+.support-edit-gizmo input[type="checkbox"] {
+  justify-self: start;
+}
+
 .support-edit-gizmo span {
   color: #202124;
   font-variant-numeric: tabular-nums;

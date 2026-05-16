@@ -7,6 +7,8 @@ import {
   updateSupportStructureNodePosition,
   updateSupportStructureNodeRadius,
   updateSupportStructureRadii,
+  updateSupportStructureTouchpoint,
+  type SupportTouchpoint,
   type SupportStructure,
 } from './pillar-store';
 
@@ -73,12 +75,40 @@ export function mountSupportEditGizmo(
       <label>Trunk <input type="range" data-field="trunkRadius" min="0.05" max="4" step="0.05"><span data-value="trunkRadius"></span></label>
       <label>Base <input type="range" data-field="baseRadius" min="0.1" max="8" step="0.1"><span data-value="baseRadius"></span></label>
       <label>Height <input type="range" data-field="nodeHeight" min="0" max="10" step="0.25"><span data-value="nodeHeight"></span></label>
+      <div class="support-edit-gizmo-touchpoint" data-role="touchpoint-controls" hidden>
+        <label class="support-edit-gizmo-select">Shape <select data-field="touchpointShape">
+          <option value="ball">Ball</option>
+          <option value="point">Point</option>
+          <option value="cone">Cone</option>
+          <option value="pad">Pad</option>
+        </select></label>
+        <label class="support-edit-gizmo-select">Load <select data-field="touchpointPriority">
+          <option value="light">Light</option>
+          <option value="normal">Normal</option>
+          <option value="heavy">Heavy</option>
+        </select></label>
+        <label class="support-edit-gizmo-toggle">Enabled <input type="checkbox" data-field="touchpointEnabled"></label>
+      </div>
     `;
     document.body.appendChild(el);
     listen(el.querySelector('.support-edit-gizmo-close'), 'click', hide);
     for (const input of Array.from(el.querySelectorAll<HTMLInputElement>('input[type="range"]'))) {
       listen(input, 'pointerdown', saveGizmoUndoOnce);
       listen(input, 'input', () => handleGizmoInput(input));
+    }
+    for (const select of Array.from(el.querySelectorAll<HTMLSelectElement>('select'))) {
+      listen(select, 'change', () => {
+        saveGizmoUndoOnce();
+        handleTouchpointInput(select);
+      });
+    }
+    for (const checkbox of Array.from(
+      el.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+    )) {
+      listen(checkbox, 'change', () => {
+        saveGizmoUndoOnce();
+        handleTouchpointInput(checkbox);
+      });
     }
     return el;
   }
@@ -99,6 +129,40 @@ export function mountSupportEditGizmo(
       | keyof Parameters<typeof updateSupportStructureRadii>[2]
       | 'nodeHeight';
     applySupportGizmoValue(field, parseFloat(input.value));
+    viewer.rebuildSupportsFromStore(selectedStructure.modelId);
+    refreshSupportStructureHandles();
+    syncSupportEditGizmoValues();
+    ctx.clearActivePlateSlice();
+    ctx.updateEstimate();
+    ctx.scheduleProjectAutosave();
+    callbacks.refreshOverhangOverlay();
+  }
+
+  function handleTouchpointInput(input: HTMLSelectElement | HTMLInputElement): void {
+    if (!selectedStructure || !selectedHandle || selectedHandle.kind !== 'tip') return;
+    const field = input.dataset.field;
+    if (field === 'touchpointShape') {
+      updateSupportStructureTouchpoint(
+        selectedStructure.modelId,
+        selectedStructure.structureId,
+        selectedHandle.nodeId,
+        { shape: (input as HTMLSelectElement).value as SupportTouchpoint['shape'] },
+      );
+    } else if (field === 'touchpointPriority') {
+      updateSupportStructureTouchpoint(
+        selectedStructure.modelId,
+        selectedStructure.structureId,
+        selectedHandle.nodeId,
+        { priority: (input as HTMLSelectElement).value as SupportTouchpoint['priority'] },
+      );
+    } else if (field === 'touchpointEnabled') {
+      updateSupportStructureTouchpoint(
+        selectedStructure.modelId,
+        selectedStructure.structureId,
+        selectedHandle.nodeId,
+        { enabled: (input as HTMLInputElement).checked },
+      );
+    }
     viewer.rebuildSupportsFromStore(selectedStructure.modelId);
     refreshSupportStructureHandles();
     syncSupportEditGizmoValues();
@@ -153,24 +217,30 @@ export function mountSupportEditGizmo(
     const origin = getSupportMeshOrigin(selectedStructure.modelId);
     selectedHandleGroup.position.set(origin.x, 0, origin.z);
     for (const node of structure.nodes) {
-      addHandleForNode(node);
+      addHandleForNode(structure, node);
     }
     viewer.scene.add(selectedHandleGroup);
     viewer.requestRender();
   }
 
-  function addHandleForNode(node: SupportStructure['nodes'][number]): void {
+  function addHandleForNode(
+    structure: SupportStructure,
+    node: SupportStructure['nodes'][number],
+  ): void {
     if (!selectedHandleGroup) return;
     const radius = node.kind === 'base' ? 0.9 : node.kind === 'branch' ? 0.65 : 0.45;
     const hitRadius = Math.max(radius * 2.8, 2.2);
     const selected = selectedHandle?.nodeId === node.id;
+    const touchpointEnabled = getTouchpointForNode(structure, node)?.enabled ?? true;
     const color = selected
       ? 0xffffff
-      : node.kind === 'tip'
-        ? 0x00d1ff
-        : node.kind === 'branch'
-          ? 0xffd166
-          : 0x66e26f;
+      : !touchpointEnabled
+        ? 0x8a8f98
+        : node.kind === 'tip'
+          ? 0x00d1ff
+          : node.kind === 'branch'
+            ? 0xffd166
+            : 0x66e26f;
     const handle = new THREE.Mesh(
       new THREE.SphereGeometry(selected ? radius * 1.35 : radius, 16, 10),
       new THREE.MeshBasicMaterial({
@@ -178,7 +248,7 @@ export function mountSupportEditGizmo(
         depthTest: false,
         depthWrite: false,
         transparent: true,
-        opacity: 0.95,
+        opacity: touchpointEnabled ? 0.95 : 0.55,
       }),
     );
     configureHandle(handle, node);
@@ -225,7 +295,7 @@ export function mountSupportEditGizmo(
     }
     const values = getStructureRadiusValues(structure);
     const selectedNode = selectedHandle
-      ? structure.nodes.find((node) => node.id === selectedHandle?.nodeId)
+      ? (structure.nodes.find((node) => node.id === selectedHandle?.nodeId) ?? null)
       : null;
     const heightInput = supportEditGizmo.querySelector<HTMLInputElement>(
       'input[data-field="nodeHeight"]',
@@ -236,6 +306,7 @@ export function mountSupportEditGizmo(
       heightInput.max = (Math.max(...ys) + 20).toFixed(2);
     }
     syncSupportEditGizmoContext(structure);
+    syncTouchpointControls(structure, selectedNode);
     for (const [field, value] of Object.entries({
       ...values,
       nodeHeight: selectedNode?.position.y ?? 0,
@@ -247,6 +318,30 @@ export function mountSupportEditGizmo(
       if (input) input.value = value.toFixed(2);
       if (label) label.textContent = value.toFixed(2);
     }
+  }
+
+  function syncTouchpointControls(
+    structure: SupportStructure,
+    selectedNode: SupportStructure['nodes'][number] | null,
+  ): void {
+    const controls = supportEditGizmo.querySelector<HTMLElement>(
+      '[data-role="touchpoint-controls"]',
+    );
+    const touchpoint = selectedNode ? getTouchpointForNode(structure, selectedNode) : undefined;
+    if (!controls) return;
+    controls.hidden = selectedNode?.kind !== 'tip';
+    const shape = supportEditGizmo.querySelector<HTMLSelectElement>(
+      'select[data-field="touchpointShape"]',
+    );
+    const priority = supportEditGizmo.querySelector<HTMLSelectElement>(
+      'select[data-field="touchpointPriority"]',
+    );
+    const enabled = supportEditGizmo.querySelector<HTMLInputElement>(
+      'input[data-field="touchpointEnabled"]',
+    );
+    if (shape && touchpoint) shape.value = touchpoint.shape;
+    if (priority && touchpoint) priority.value = touchpoint.priority;
+    if (enabled) enabled.checked = touchpoint?.enabled ?? true;
   }
 
   function syncSupportEditGizmoContext(structure: SupportStructure): void {
@@ -372,6 +467,22 @@ export function mountSupportEditGizmo(
           (from?.kind === 'base' && to?.kind === 'branch')
         );
       })?.radius ?? fallback
+    );
+  }
+
+  function getTouchpointForNode(
+    structure: SupportStructure,
+    node: SupportStructure['nodes'][number],
+  ): SupportTouchpoint | undefined {
+    if (node.kind !== 'tip') return undefined;
+    return (
+      structure.touchpoints.find((touchpoint) => touchpoint.nodeId === node.id) ??
+      structure.touchpoints.find(
+        (touchpoint) =>
+          Math.abs(touchpoint.position.x - node.position.x) < 1e-4 &&
+          Math.abs(touchpoint.position.y - node.position.y) < 1e-4 &&
+          Math.abs(touchpoint.position.z - node.position.z) < 1e-4,
+      )
     );
   }
 

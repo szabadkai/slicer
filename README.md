@@ -111,6 +111,7 @@ User-facing how-to guides live in [`docs/guides/`](docs/guides/README.md):
 | [Layer Inspection](docs/guides/layer-inspection.md) | Islands, peel-force chart, diff mode, area graph |
 | [Mesh Health](docs/guides/mesh-health.md) | Non-manifold edges, inverted normals, what auto-repair fixes |
 | [Exporting](docs/guides/exporting.md) | PNG-ZIP format, metadata file, mesh export formats |
+| [Roadmap](docs/ROADMAP.md) | Prioritized support, slice QA, export, and calibration improvements |
 
 > The in-product tour links directly to the relevant guide for each workflow step.
 

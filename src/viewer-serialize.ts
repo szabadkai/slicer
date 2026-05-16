@@ -109,6 +109,7 @@ function serializePillarSet(set: ModelPillarSet): SerializedPillarSet | null {
       kind: structure.kind,
       touchpoints: structure.touchpoints.map((touchpoint) => ({
         id: touchpoint.id,
+        nodeId: touchpoint.nodeId,
         position: { ...touchpoint.position },
         normal: { ...touchpoint.normal },
         diameter: touchpoint.diameter,
@@ -213,6 +214,7 @@ export function restoreSerializedObjects(viewer: Viewer, data: SerializedObject[
           kind: structure.kind,
           touchpoints: structure.touchpoints.map((touchpoint) => ({
             id: touchpoint.id,
+            nodeId: touchpoint.nodeId,
             position: { ...touchpoint.position },
             normal: { ...touchpoint.normal },
             diameter: touchpoint.diameter,

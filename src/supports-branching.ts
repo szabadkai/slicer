@@ -132,6 +132,7 @@ function buildBranchStructureFromPillars(
     kind: 'branching',
     touchpoints: pillars.map((pillar, tipIndex) => ({
       id: `${id}_touch_${tipIndex}`,
+      nodeId: `${id}_tip_${tipIndex}`,
       position: { ...pillar.contact },
       normal: { x: 0, y: -1, z: 0 },
       diameter: pillar.tipDiameter,
