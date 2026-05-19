@@ -12,6 +12,8 @@ import { getSharedPngEncodePool } from '../../png-encode-pool';
 import { slicedLayerPngs } from '@features/layer-preview/ops';
 
 const MAX_SLICE_CACHE_ENCODE_BACKLOG = 8;
+const MAX_SLICE_CACHE_LAYER_BYTES = 16 * 1024 * 1024;
+const MAX_SLICE_CACHE_IN_FLIGHT_BYTES = 64 * 1024 * 1024;
 
 export interface SliceResult {
   layerCount: number;
@@ -116,18 +118,21 @@ export async function executeSlice(
   const pxArea =
     (printerSpec.buildWidthMM / printerSpec.resolutionX) *
     (printerSpec.buildDepthMM / printerSpec.resolutionY);
+  const pixelByteCount = printerSpec.resolutionX * printerSpec.resolutionY * 4;
 
   let filledPx = 0;
   const perLayerWhite: number[] = [];
 
   // Encode each layer's pixels to PNG in the worker pool, in parallel with
-  // the next layer's GPU render. The resulting bytes are cached so export
-  // can skip the second slice pass entirely when the encoder keeps up.
-  const pool = getSharedPngEncodePool();
+  // the next layer's GPU render. This cache is optional: large layer buffers
+  // are exported through the on-demand render path to avoid slice-time memory
+  // spikes from raw RGBA copies.
+  let pool: ReturnType<typeof getSharedPngEncodePool> | null = null;
   const pngs: Uint8Array[] = [];
   const encodePromises: Promise<void>[] = [];
   let encodeBacklog = 0;
-  let pngCacheComplete = true;
+  let encodeBytesInFlight = 0;
+  let pngCacheComplete = pixelByteCount <= MAX_SLICE_CACHE_LAYER_BYTES;
   slicedLayerPngs.value = [];
 
   await slicer.slice(
@@ -144,7 +149,10 @@ export async function executeSlice(
 
         if (!pngCacheComplete) return;
 
-        if (encodeBacklog >= MAX_SLICE_CACHE_ENCODE_BACKLOG) {
+        if (
+          encodeBacklog >= MAX_SLICE_CACHE_ENCODE_BACKLOG ||
+          encodeBytesInFlight + pixelByteCount > MAX_SLICE_CACHE_IN_FLIGHT_BYTES
+        ) {
           pngCacheComplete = false;
           return;
         }
@@ -163,7 +171,9 @@ export async function executeSlice(
           }
           throw error;
         }
+        pool ??= getSharedPngEncodePool();
         encodeBacklog++;
+        encodeBytesInFlight += pixelByteCount;
         encodePromises.push(
           pool
             .encode(copy, printerSpec.resolutionX, printerSpec.resolutionY)
@@ -172,6 +182,7 @@ export async function executeSlice(
             })
             .finally(() => {
               encodeBacklog--;
+              encodeBytesInFlight -= pixelByteCount;
             }),
         );
       },
