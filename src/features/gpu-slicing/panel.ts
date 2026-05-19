@@ -68,60 +68,72 @@ export function mountSlicePanel(
   async function handleSlice(): Promise<boolean> {
     const layerHeight = Number.parseFloat(layerHeightInput?.value ?? '0.05');
 
-    const result = await executeSlice(viewer, slicer, layerHeight, {
-      showProgress: ctx.showProgress,
-      updateProgress: ctx.updateProgress,
-    });
+    try {
+      const result = await executeSlice(viewer, slicer, layerHeight, {
+        showProgress: ctx.showProgress,
+        updateProgress: ctx.updateProgress,
+      });
 
-    if (!result) return false;
+      if (!result) return false;
 
-    // Surface intent conflicts detected during pre-slice analysis
-    if (result.conflicts.length > 0) {
-      setConflicts(result.conflicts);
+      // Surface intent conflicts detected during pre-slice analysis
+      if (result.conflicts.length > 0) {
+        setConflicts(result.conflicts);
+      }
+
+      setInspectorAreaData(result.perLayerWhitePixels);
+      setSlicedLayerCount(result.layerCount);
+      setSlicedVolumes(result.volumes);
+      saveSliceRefsToActivePlate();
+      updateEstimate();
+
+      // Emit per-layer data for peel force chart
+      viewer.canvas?.dispatchEvent(
+        new CustomEvent('slice-complete', {
+          detail: {
+            perLayerWhitePixels: result.perLayerWhitePixels,
+            layerCount: result.layerCount,
+          },
+        }),
+      );
+
+      if (layerPreviewPanel) layerPreviewPanel.hidden = false;
+      if (layerSlider) {
+        layerSlider.max = String(result.layerCount - 1);
+        layerSlider.value = '0';
+        layerSlider.dispatchEvent(new Event('input'));
+      }
+      ctx.renderPlateTabs();
+      return true;
+    } catch (error) {
+      console.error('Slice failed:', error);
+      alert(`Slice failed: ${error instanceof Error ? error.message : 'unknown error'}`);
+      return false;
+    } finally {
+      ctx.hideProgress();
     }
-
-    setInspectorAreaData(result.perLayerWhitePixels);
-    setSlicedLayerCount(result.layerCount);
-    setSlicedVolumes(result.volumes);
-    saveSliceRefsToActivePlate();
-    updateEstimate();
-
-    // Emit per-layer data for peel force chart
-    viewer.canvas?.dispatchEvent(
-      new CustomEvent('slice-complete', {
-        detail: { perLayerWhitePixels: result.perLayerWhitePixels, layerCount: result.layerCount },
-      }),
-    );
-
-    ctx.hideProgress();
-
-    if (layerPreviewPanel) layerPreviewPanel.hidden = false;
-    if (layerSlider) {
-      layerSlider.max = String(result.layerCount - 1);
-      layerSlider.value = '0';
-      layerSlider.dispatchEvent(new Event('input'));
-    }
-    ctx.renderPlateTabs();
-    return true;
   }
 
   async function handleSliceAll(): Promise<void> {
     const startId = project.activePlateId;
     const toSlice = project.plates.filter((p) => p.objects.length > 0);
-    for (let i = 0; i < toSlice.length; i++) {
-      const plate = toSlice[i];
-      project.activePlateId = plate.id;
-      viewer.setActivePlate(plate);
-      ctx.showProgress(`Slicing ${plate.name} (${i + 1} / ${toSlice.length})...`);
-      const ok = await handleSlice();
-      if (!ok) break;
+    try {
+      for (let i = 0; i < toSlice.length; i++) {
+        const plate = toSlice[i];
+        project.activePlateId = plate.id;
+        viewer.setActivePlate(plate);
+        ctx.showProgress(`Slicing ${plate.name} (${i + 1} / ${toSlice.length})...`);
+        const ok = await handleSlice();
+        if (!ok) break;
+      }
+    } finally {
+      const startPlate = project.plates.find((p) => p.id === startId);
+      if (startPlate) {
+        project.activePlateId = startPlate.id;
+        viewer.setActivePlate(startPlate);
+      }
+      ctx.renderPlateTabs();
     }
-    const startPlate = project.plates.find((p) => p.id === startId);
-    if (startPlate) {
-      project.activePlateId = startPlate.id;
-      viewer.setActivePlate(startPlate);
-    }
-    ctx.renderPlateTabs();
   }
 
   function updateEstimate(): void {
@@ -173,10 +185,10 @@ export function mountSlicePanel(
 
   // Wire buttons
   listen(sliceBtn, 'click', () => {
-    handleSlice();
+    void handleSlice();
   });
   listen(sliceAllBtn, 'click', () => {
-    handleSliceAll();
+    void handleSliceAll();
   });
 
   // Settings change → update estimate

@@ -1,12 +1,16 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { executeSlice, type SliceProgress } from './ops';
 import { slicedLayerPngs } from '@features/layer-preview/ops';
 import type { LegacyViewer, LegacySlicer } from '@core/legacy-types';
 import type { PrinterSpec } from '@core/types';
 
+const pngEncodeMock = vi.hoisted(() => ({
+  encode: vi.fn(() => Promise.resolve(new Uint8Array(8))),
+}));
+
 vi.mock('../../png-encode-pool', () => ({
   getSharedPngEncodePool: () => ({
-    encode: () => Promise.resolve(new Uint8Array(8)), // stub PNG bytes
+    encode: pngEncodeMock.encode,
   }),
 }));
 
@@ -67,6 +71,12 @@ function makeWhiteLayer(pixelCount: number): Uint8Array {
 }
 
 describe('executeSlice', () => {
+  beforeEach(() => {
+    pngEncodeMock.encode.mockReset();
+    pngEncodeMock.encode.mockResolvedValue(new Uint8Array(8));
+    slicedLayerPngs.value = [];
+  });
+
   it('returns null when no model geometry', async () => {
     const viewer = makeViewer({ getMergedModelGeometry: vi.fn(() => null) });
     const slicer = makeSlicer([]);
@@ -192,5 +202,26 @@ describe('executeSlice', () => {
     await executeSlice(makeViewer(), slicer, 0.05, makeProgress());
     expect(slicedLayerPngs.value).toHaveLength(1);
     expect(slicedLayerPngs.value[0]).toBeInstanceOf(Uint8Array);
+  });
+
+  it('abandons PNG caching when layer encoding falls behind', async () => {
+    const resolvers: Array<(png: Uint8Array<ArrayBuffer>) => void> = [];
+    pngEncodeMock.encode.mockImplementation(
+      () =>
+        new Promise<Uint8Array<ArrayBuffer>>((resolve) => {
+          resolvers.push(resolve);
+        }),
+    );
+
+    const layers = Array.from({ length: 10 }, () => makeWhiteLayer(1));
+    const pendingSlice = executeSlice(makeViewer(), makeSlicer(layers), 0.05, makeProgress());
+    await new Promise((resolve) => setTimeout(resolve, 120));
+
+    expect(pngEncodeMock.encode).toHaveBeenCalledTimes(8);
+    resolvers.forEach((resolve) => resolve(new Uint8Array(new ArrayBuffer(8))));
+
+    const result = await pendingSlice;
+    expect(result!.layerCount).toBe(10);
+    expect(slicedLayerPngs.value).toEqual([]);
   });
 });

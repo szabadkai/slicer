@@ -11,6 +11,8 @@ import { detectOverhangs } from '@features/support-generation/detect';
 import { getSharedPngEncodePool } from '../../png-encode-pool';
 import { slicedLayerPngs } from '@features/layer-preview/ops';
 
+const MAX_SLICE_CACHE_ENCODE_BACKLOG = 8;
+
 export interface SliceResult {
   layerCount: number;
   volumes: SlicedVolumes;
@@ -120,10 +122,12 @@ export async function executeSlice(
 
   // Encode each layer's pixels to PNG in the worker pool, in parallel with
   // the next layer's GPU render. The resulting bytes are cached so export
-  // can skip the second slice pass entirely.
+  // can skip the second slice pass entirely when the encoder keeps up.
   const pool = getSharedPngEncodePool();
   const pngs: Uint8Array[] = [];
   const encodePromises: Promise<void>[] = [];
+  let encodeBacklog = 0;
+  let pngCacheComplete = true;
   slicedLayerPngs.value = [];
 
   await slicer.slice(
@@ -138,12 +142,37 @@ export async function executeSlice(
         filledPx += w;
         perLayerWhite.push(w);
 
+        if (!pngCacheComplete) return;
+
+        if (encodeBacklog >= MAX_SLICE_CACHE_ENCODE_BACKLOG) {
+          pngCacheComplete = false;
+          return;
+        }
+
         // Copy because the slice loop reuses the buffer for the next layer.
-        const copy = new Uint8Array(pixels);
+        let copy: Uint8Array;
+        try {
+          copy = new Uint8Array(pixels);
+        } catch (error) {
+          pngCacheComplete = false;
+          if (error instanceof RangeError) {
+            throw new Error(
+              'Slicing ran out of browser memory while preparing layer previews. Try a lower-resolution printer profile, a thicker layer height, or a smaller model.',
+              { cause: error },
+            );
+          }
+          throw error;
+        }
+        encodeBacklog++;
         encodePromises.push(
-          pool.encode(copy, printerSpec.resolutionX, printerSpec.resolutionY).then((png) => {
-            pngs[layerIndex] = png;
-          }),
+          pool
+            .encode(copy, printerSpec.resolutionX, printerSpec.resolutionY)
+            .then((png) => {
+              pngs[layerIndex] = png;
+            })
+            .finally(() => {
+              encodeBacklog--;
+            }),
         );
       },
     },
@@ -152,7 +181,10 @@ export async function executeSlice(
   // Wait for all PNG encodes to complete before returning so the cache is
   // ready when the user clicks export.
   await Promise.all(encodePromises);
-  slicedLayerPngs.value = pngs;
+  slicedLayerPngs.value =
+    pngCacheComplete && pngs.length === perLayerWhite.length && pngs.every((png) => png.length > 0)
+      ? pngs
+      : [];
 
   const volumes = computeVolumes(filledPx, pxArea, layerHeight, !!mergedSupportGeo, viewer);
 
