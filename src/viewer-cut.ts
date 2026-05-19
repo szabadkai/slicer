@@ -167,6 +167,11 @@ function disposeSceneObject(viewer: Viewer, obj: SceneObject): void {
     obj.supportsMesh.geometry.dispose();
     (obj.supportsMesh.material as THREE.Material).dispose();
   }
+  if (obj.bracingMesh) {
+    viewer.scene.remove(obj.bracingMesh);
+    obj.bracingMesh.geometry.dispose();
+    (obj.bracingMesh.material as THREE.Material).dispose();
+  }
 }
 
 // ---- cut plane preview ----------------------------------------------------

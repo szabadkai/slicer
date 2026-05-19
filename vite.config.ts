@@ -18,6 +18,7 @@ export default defineConfig({
     alias: {
       '@core': resolve(__dirname, 'src/core'),
       '@features': resolve(__dirname, 'src/features'),
+      '@formats': resolve(__dirname, 'src/formats'),
     },
   },
   test: {

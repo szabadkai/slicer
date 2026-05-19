@@ -94,6 +94,10 @@ export function moveSelectedToPlate(
       o.supportsMesh.position.x += dx;
       o.supportsMesh.position.z += dz;
     }
+    if (o.bracingMesh) {
+      o.bracingMesh.position.x += dx;
+      o.bracingMesh.position.z += dz;
+    }
   });
   targetPlate.objects.push(...moving);
   targetPlate.selectedIds = selectMoved ? moving.map((o) => o.id) : [];
@@ -141,10 +145,22 @@ export function duplicateObjectsForPlate(viewer: Viewer, objects?: SceneObject[]
       supportsMesh.scale.copy(src.supportsMesh.scale);
       supportsMesh.updateMatrixWorld(true);
     }
+    let bracingMesh: THREE.Mesh | null = null;
+    if (src.bracingMesh) {
+      bracingMesh = new THREE.Mesh(
+        src.bracingMesh.geometry.clone(),
+        (src.bracingMesh.material as THREE.Material).clone(),
+      );
+      bracingMesh.position.copy(src.bracingMesh.position);
+      bracingMesh.rotation.copy(src.bracingMesh.rotation);
+      bracingMesh.scale.copy(src.bracingMesh.scale);
+      bracingMesh.updateMatrixWorld(true);
+    }
     return {
       id,
       mesh,
       supportsMesh,
+      bracingMesh,
       elevation: src.elevation,
       materialPreset: src.materialPreset || {},
     } as SceneObject;
@@ -359,6 +375,7 @@ function computeBodyFootprints(objects: SceneObject[]): BodyFootprint[] {
     };
     addMeshFootprint(obj.mesh, false);
     if (obj.supportsMesh) addMeshFootprint(obj.supportsMesh, true);
+    if (obj.bracingMesh) addMeshFootprint(obj.bracingMesh, true);
     let cx = 0,
       cz = 0;
     for (const pt of points) {
@@ -401,11 +418,13 @@ function applyBodyPlacement(
   const box = obj.mesh.geometry.boundingBox
     ? obj.mesh.geometry.boundingBox.clone().applyMatrix4(obj.mesh.matrixWorld)
     : new THREE.Box3();
-  if (obj.supportsMesh?.geometry) {
-    obj.supportsMesh.geometry.computeBoundingBox();
-    obj.supportsMesh.updateMatrixWorld(true);
-    const supBB = obj.supportsMesh.geometry.boundingBox;
-    if (supBB) box.union(supBB.clone().applyMatrix4(obj.supportsMesh.matrixWorld));
+  for (const sMesh of [obj.supportsMesh, obj.bracingMesh]) {
+    if (sMesh?.geometry) {
+      sMesh.geometry.computeBoundingBox();
+      sMesh.updateMatrixWorld(true);
+      const supBB = sMesh.geometry.boundingBox;
+      if (supBB) box.union(supBB.clone().applyMatrix4(sMesh.matrixWorld));
+    }
   }
   const center = new THREE.Vector3();
   box.getCenter(center);
@@ -432,10 +451,12 @@ function applyBodyPlacement(
   if (!obj.supportsMesh) obj.elevation = elevation;
   obj.mesh.updateMatrixWorld(true);
 
-  if (obj.supportsMesh) {
-    obj.supportsMesh.position.x += dx;
-    obj.supportsMesh.position.y += dy;
-    obj.supportsMesh.position.z += dz;
-    obj.supportsMesh.updateMatrixWorld(true);
+  for (const sMesh of [obj.supportsMesh, obj.bracingMesh]) {
+    if (sMesh) {
+      sMesh.position.x += dx;
+      sMesh.position.y += dy;
+      sMesh.position.z += dz;
+      sMesh.updateMatrixWorld(true);
+    }
   }
 }

@@ -220,6 +220,26 @@ async function make3mf(triangles: Triangle[], name = 'SliceLab export'): Promise
 }
 
 /**
+ * Build a Blob for mesh geometry in a given format without triggering download.
+ */
+export async function exportMeshToBlob(
+  geometries: GeometryLike[],
+  format: string,
+  baseName = 'slicelab-plate',
+): Promise<Blob> {
+  const cleanFormat = String(format).toLowerCase();
+  const triangles = getGeometryTriangles(geometries);
+  if (triangles.length === 0) {
+    throw new Error('No triangles available to export.');
+  }
+
+  if (cleanFormat === 'stl') return makeBinaryStl(triangles, baseName);
+  if (cleanFormat === 'obj') return makeObj(triangles, baseName);
+  if (cleanFormat === '3mf') return make3mf(triangles, baseName);
+  throw new Error(`Unsupported export format: ${format}`);
+}
+
+/**
  * Export prepared mesh geometry in common interchange formats.
  */
 export async function exportMesh(
@@ -227,23 +247,8 @@ export async function exportMesh(
   format: string,
   baseName = 'slicelab-plate',
 ): Promise<void> {
+  const blob = await exportMeshToBlob(geometries, format, baseName);
   const cleanFormat = String(format).toLowerCase();
-  const triangles = getGeometryTriangles(geometries);
-  if (triangles.length === 0) {
-    throw new Error('No triangles available to export.');
-  }
-
-  let blob: Blob;
-  if (cleanFormat === 'stl') {
-    blob = makeBinaryStl(triangles, baseName);
-  } else if (cleanFormat === 'obj') {
-    blob = makeObj(triangles, baseName);
-  } else if (cleanFormat === '3mf') {
-    blob = await make3mf(triangles, baseName);
-  } else {
-    throw new Error(`Unsupported export format: ${format}`);
-  }
-
   downloadBlob(blob, `${baseName}.${cleanFormat}`);
 }
 
@@ -263,12 +268,12 @@ export type LayerSource =
  * however the layers are produced. If PNG bytes are already cached (from the
  * slice pass), they are zipped directly.
  */
-export async function exportZip(
+export async function exportZipToBlob(
   source: LayerSource,
   settings: SliceSettings,
   printerSpec: PrinterSpecLike,
   onProgress?: ProgressCallback,
-): Promise<void> {
+): Promise<Blob> {
   const zip = new JSZip();
   const { resolutionX, resolutionY } = printerSpec;
   const layerCount = source.kind === 'pixels' ? source.layers.length : source.pngs.length;
@@ -281,7 +286,6 @@ export async function exportZip(
     }
   } else {
     const pool = getSharedPngEncodePool();
-    // Backpressure: cap in-flight encodes so we don't allocate unbounded RGBA buffers.
     const maxInFlight = 8;
     const pngs: Uint8Array[] = new Array(layerCount);
     let dispatched = 0;
@@ -291,8 +295,6 @@ export async function exportZip(
       const dispatch = (): void => {
         while (dispatched < layerCount && dispatched - completed < maxInFlight) {
           const i = dispatched++;
-          // Accessing source.layers[i] triggers the Proxy in handleExport which
-          // renders the layer on demand; the result is already a fresh buffer.
           const rgba = source.layers[i];
           onProgress?.(completed + 1, layerCount, `Encoding layer ${i + 1} / ${layerCount}`);
           pool
@@ -340,8 +342,17 @@ export async function exportZip(
   onProgress?.(layerCount, layerCount, 'Building ZIP archive...');
   await new Promise((r) => setTimeout(r, 0));
 
-  const content = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
+  return zip.generateAsync({ type: 'blob', compression: 'STORE' });
+}
 
+export async function exportZip(
+  source: LayerSource,
+  settings: SliceSettings,
+  printerSpec: PrinterSpecLike,
+  onProgress?: ProgressCallback,
+): Promise<void> {
+  const content = await exportZipToBlob(source, settings, printerSpec, onProgress);
+  const layerCount = source.kind === 'pixels' ? source.layers.length : source.pngs.length;
   const safeName = printerSpec.name.replace(/\s+/g, '-').toLowerCase();
   downloadBlob(content, `${safeName}_${layerCount}layers.zip`);
 }

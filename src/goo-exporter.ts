@@ -127,12 +127,12 @@ function renderPreview(
 
 // ─── Main export function ───────────────────────────────────
 
-export async function exportGoo(
+export async function exportGooToBlob(
   source: LayerSource,
   settings: SliceSettings,
   printerSpec: PrinterSpecLike,
   onProgress?: ProgressCallback,
-): Promise<void> {
+): Promise<Blob> {
   const { resolutionX, resolutionY } = printerSpec;
   const layerCount = source.kind === 'pixels' ? source.layers.length : source.pngs.length;
 
@@ -292,7 +292,17 @@ export async function exportGoo(
     off += part.byteLength;
   }
 
-  const blob = new Blob([finalBuf], { type: 'application/octet-stream' });
+  return new Blob([finalBuf], { type: 'application/octet-stream' });
+}
+
+export async function exportGoo(
+  source: LayerSource,
+  settings: SliceSettings,
+  printerSpec: PrinterSpecLike,
+  onProgress?: ProgressCallback,
+): Promise<void> {
+  const blob = await exportGooToBlob(source, settings, printerSpec, onProgress);
+  const layerCount = source.kind === 'pixels' ? source.layers.length : source.pngs.length;
   const safeName = printerSpec.name.replace(/\s+/g, '-').toLowerCase();
   downloadBlob(blob, `${safeName}_${layerCount}layers.goo`);
 }

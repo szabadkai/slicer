@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mountFileHandling } from './file-handling';
 import type { AppContext } from '@core/types';
+import '../../formats';
 
 function makeCtx(): AppContext {
   return {
     viewer: {
       loadSTL: vi.fn(),
+      loadParsedGeometry: vi.fn(),
     },
     showProgress: vi.fn(),
     hideProgress: vi.fn(),
@@ -61,11 +63,13 @@ describe('mountFileHandling', () => {
     const buffer = new ArrayBuffer(84); // minimal STL header
     const file = new File([buffer], 'model.stl', { type: 'application/octet-stream' });
 
-    // Simulate file selection
     Object.defineProperty(input, 'files', { value: [file], writable: false });
     input.dispatchEvent(new Event('change', { bubbles: true }));
 
-    expect(ctx.showProgress).toHaveBeenCalledWith('Reading STL...');
+    // importFile is async — wait for microtasks to flush
+    await vi.waitFor(() => {
+      expect(ctx.showProgress).toHaveBeenCalledWith('Loading model.stl...');
+    });
   });
 
   it('ignores file input with no file', () => {

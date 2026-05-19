@@ -34,12 +34,18 @@ export function getMergedModelGeometry(viewer: Viewer): THREE.BufferGeometry | n
 
 export function getMergedSupportGeometry(viewer: Viewer): THREE.BufferGeometry | null {
   const gs: THREE.BufferGeometry[] = [];
+  const plateOffset = new THREE.Vector3(
+    -(viewer.activePlate.originX || 0),
+    0,
+    -(viewer.activePlate.originZ || 0),
+  );
   viewer.objects.forEach((o) => {
-    if (o.supportsMesh) {
-      const g = o.supportsMesh.geometry.clone();
-      o.supportsMesh.updateMatrixWorld(true);
-      g.applyMatrix4(o.supportsMesh.matrixWorld);
-      g.translate(-(viewer.activePlate.originX || 0), 0, -(viewer.activePlate.originZ || 0));
+    for (const mesh of [o.supportsMesh, o.bracingMesh]) {
+      if (!mesh) continue;
+      const g = mesh.geometry.clone();
+      mesh.updateMatrixWorld(true);
+      g.applyMatrix4(mesh.matrixWorld);
+      g.translate(plateOffset.x, plateOffset.y, plateOffset.z);
       gs.push(g);
     }
   });
@@ -82,6 +88,12 @@ export function getOverallInfo(viewer: Viewer): {
       o.supportsMesh.updateMatrixWorld();
       supVol +=
         (o._cachedLocalSupportVolume ?? 0) * Math.abs(o.supportsMesh.matrixWorld.determinant());
+    }
+    if (o.bracingMesh) {
+      o.bracingMesh.updateMatrixWorld();
+      supVol +=
+        computeMeshVolume(o.bracingMesh.geometry) *
+        Math.abs(o.bracingMesh.matrixWorld.determinant());
     }
   });
   const size = new THREE.Vector3();

@@ -35,6 +35,15 @@ const SUPPORT_MATERIAL = (): THREE.MeshPhongMaterial =>
     opacity: 0.55,
   });
 
+const BRACING_MATERIAL = (): THREE.MeshPhongMaterial =>
+  new THREE.MeshPhongMaterial({
+    color: 0x2bb5b2,
+    specular: 0x222222,
+    shininess: 30,
+    transparent: true,
+    opacity: 0.55,
+  });
+
 export function findObjectAnywhere(viewer: ViewerLike, modelId: string): SceneObject | null {
   for (const plate of viewer.plates) {
     for (const o of plate.objects) if (o.id === modelId) return o;
@@ -46,6 +55,7 @@ export function setSupportsMesh(
   viewer: ViewerLike,
   modelId: string,
   geo: THREE.BufferGeometry | null,
+  bracingGeo?: THREE.BufferGeometry | null,
 ): void {
   const obj = findObjectAnywhere(viewer, modelId);
   if (!obj) return;
@@ -55,15 +65,30 @@ export function setSupportsMesh(
     (obj.supportsMesh.material as THREE.Material).dispose();
     obj.supportsMesh = null;
   }
-  obj._cachedLocalSupportVolume = undefined;
-  if (!geo || (geo.attributes.position?.count ?? 0) === 0) {
-    viewer.requestRender();
-    return;
+  if (obj.bracingMesh) {
+    viewer.scene.remove(obj.bracingMesh);
+    obj.bracingMesh.geometry.dispose();
+    (obj.bracingMesh.material as THREE.Material).dispose();
+    obj.bracingMesh = null;
   }
-  const mesh = new THREE.Mesh(geo, SUPPORT_MATERIAL());
-  mesh.position.set(viewer.activePlate.originX || 0, 0, viewer.activePlate.originZ || 0);
-  obj.supportsMesh = mesh;
-  viewer.scene.add(mesh);
+  obj._cachedLocalSupportVolume = undefined;
+  const platePos = new THREE.Vector3(
+    viewer.activePlate.originX || 0,
+    0,
+    viewer.activePlate.originZ || 0,
+  );
+  if (geo && (geo.attributes.position?.count ?? 0) > 0) {
+    const mesh = new THREE.Mesh(geo, SUPPORT_MATERIAL());
+    mesh.position.copy(platePos);
+    obj.supportsMesh = mesh;
+    viewer.scene.add(mesh);
+  }
+  if (bracingGeo && (bracingGeo.attributes.position?.count ?? 0) > 0) {
+    const mesh = new THREE.Mesh(bracingGeo, BRACING_MATERIAL());
+    mesh.position.copy(platePos);
+    obj.bracingMesh = mesh;
+    viewer.scene.add(mesh);
+  }
   viewer.requestRender();
 }
 
@@ -74,6 +99,12 @@ export function clearSupports(viewer: ViewerLike): void {
       s.supportsMesh.geometry.dispose();
       (s.supportsMesh.material as THREE.Material).dispose();
       s.supportsMesh = null;
+    }
+    if (s.bracingMesh) {
+      viewer.scene.remove(s.bracingMesh);
+      s.bracingMesh.geometry.dispose();
+      (s.bracingMesh.material as THREE.Material).dispose();
+      s.bracingMesh = null;
     }
     s._cachedLocalSupportVolume = undefined;
     clearPillarSet(s.id);
@@ -86,8 +117,8 @@ export function rebuildSupportsFromStore(viewer: ViewerLike, modelId: string): v
   if (!obj) return;
   if (!obj.mesh.geometry.boundingBox) obj.mesh.geometry.computeBoundingBox();
   const bounds = obj.mesh.geometry.boundingBox?.clone() ?? undefined;
-  const geo = rebuildSupportsMesh(modelId, bounds);
-  setSupportsMesh(viewer, modelId, geo);
+  const result = rebuildSupportsMesh(modelId, bounds, { modelGeometry: obj.mesh.geometry });
+  setSupportsMesh(viewer, modelId, result.supports, result.bracing);
 }
 
 export function removePillarAndRebuild(

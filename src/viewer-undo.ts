@@ -188,6 +188,11 @@ export function undo(viewer: Viewer): void {
         o.supportsMesh.geometry.dispose();
         (o.supportsMesh.material as THREE.Material).dispose();
       }
+      if (o.bracingMesh) {
+        viewer.scene.remove(o.bracingMesh);
+        o.bracingMesh.geometry.dispose();
+        (o.bracingMesh.material as THREE.Material).dispose();
+      }
     });
     viewer.objects = [];
     viewer.activePlate.objects = viewer.objects;
@@ -204,6 +209,7 @@ export function undo(viewer: Viewer): void {
         id,
         mesh,
         supportsMesh: null,
+        bracingMesh: null,
         elevation: s.elevation,
         materialPreset: s.materialPreset,
       } as SceneObject);
@@ -244,6 +250,11 @@ function undoMultiPlate(
         o.supportsMesh.geometry.dispose();
         (o.supportsMesh.material as THREE.Material).dispose();
       }
+      if (o.bracingMesh) {
+        viewer.scene.remove(o.bracingMesh);
+        o.bracingMesh.geometry.dispose();
+        (o.bracingMesh.material as THREE.Material).dispose();
+      }
     }
     pl.objects = [];
   }
@@ -261,6 +272,7 @@ function undoMultiPlate(
         id: s.id,
         mesh,
         supportsMesh: null,
+        bracingMesh: null,
         elevation: s.elevation,
         materialPreset: s.materialPreset,
       } as SceneObject);
@@ -317,6 +329,11 @@ export function redo(viewer: Viewer): void {
         o.supportsMesh.geometry.dispose();
         (o.supportsMesh.material as THREE.Material).dispose();
       }
+      if (o.bracingMesh) {
+        viewer.scene.remove(o.bracingMesh);
+        o.bracingMesh.geometry.dispose();
+        (o.bracingMesh.material as THREE.Material).dispose();
+      }
     });
     viewer.objects = [];
     viewer.activePlate.objects = viewer.objects;
@@ -333,6 +350,7 @@ export function redo(viewer: Viewer): void {
         id,
         mesh,
         supportsMesh: null,
+        bracingMesh: null,
         elevation: s.elevation,
         materialPreset: s.materialPreset,
       } as SceneObject);

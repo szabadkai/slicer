@@ -12,6 +12,7 @@
  */
 
 import * as THREE from 'three';
+import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
 import {
   buildSupportGeometry,
   generateCrossBracing,
@@ -492,19 +493,54 @@ function squaredDistanceToSegment(
 }
 
 // ---------------------------------------------------------------------------
+// RouteContext reconstruction (for cross-bracing after deserialization)
+// ---------------------------------------------------------------------------
+
+function ensureBVHPatched(): void {
+  if (typeof THREE.BufferGeometry.prototype.computeBoundsTree !== 'function') {
+    THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
+    THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
+    THREE.Mesh.prototype.raycast = acceleratedRaycast;
+  }
+}
+
+function buildRouteContextFromGeometry(
+  geometry: THREE.BufferGeometry,
+  bounds: THREE.Box3,
+): RouteContext {
+  ensureBVHPatched();
+  if (!(geometry as unknown as { boundsTree: unknown }).boundsTree) {
+    geometry.computeBoundsTree();
+  }
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+  mesh.updateMatrixWorld(true);
+  const raycaster = new THREE.Raycaster();
+  raycaster.firstHitOnly = false;
+  const modelCenter = new THREE.Vector3();
+  bounds.getCenter(modelCenter);
+  return { mesh, raycaster, modelBounds: bounds, modelCenter };
+}
+
+// ---------------------------------------------------------------------------
 // Geometry rebuild — the single source of truth
 // ---------------------------------------------------------------------------
+
+export interface RebuildSupportsMeshResult {
+  supports: THREE.BufferGeometry;
+  bracing: THREE.BufferGeometry | null;
+}
 
 export function rebuildSupportsMesh(
   modelId: string,
   modelBounds?: THREE.Box3,
-  options: { includeFoundation?: boolean } = {},
-): THREE.BufferGeometry {
+  options: { includeFoundation?: boolean; modelGeometry?: THREE.BufferGeometry } = {},
+): RebuildSupportsMeshResult {
   const set = pillarSets.get(modelId);
-  if (!set) return new THREE.BufferGeometry();
+  if (!set) return { supports: new THREE.BufferGeometry(), bracing: null };
   const includeFoundation = options.includeFoundation ?? true;
 
   const geometries: THREE.BufferGeometry[] = [];
+  const bracingGeometries: THREE.BufferGeometry[] = [];
   const { settings, pillars } = set;
   const supportStructures = set.supportStructures ?? [];
   const sphereRadius = settings.sphericalConnection?.radius ?? 0;
@@ -529,22 +565,26 @@ export function rebuildSupportsMesh(
     if (activeGraph) buildSupportGraphGeometry(activeGraph.nodes, activeGraph.edges, geometries);
   }
 
-  if (settings.crossBracing && pillars.length >= 2 && settings.routeContext) {
-    // Bracing uses the smallest pillar radius among the set as a safe
-    // conservative value — bigger pillars accept thinner braces fine.
-    const minRadius = pillars.reduce((m, p) => Math.min(m, p.pillarRadius), Infinity);
-    const minTipHeight = pillars.reduce((m, p) => Math.min(m, p.tipHeight), Infinity);
-    const minBaseHeight = pillars.reduce((m, p) => Math.min(m, p.baseHeight), Infinity);
-    generateCrossBracing(
-      pillars.map((p) => p.route),
-      geometries,
-      Number.isFinite(minRadius) ? minRadius : 0.4,
-      Number.isFinite(minBaseHeight) ? minBaseHeight : 0.6,
-      Number.isFinite(minTipHeight) ? minTipHeight : 1.2,
-      settings.routeContext,
-      settings.bracingCollisionRadius,
-      floorY,
-    );
+  if (settings.crossBracing && pillars.length >= 2) {
+    let routeCtx = settings.routeContext;
+    if (!routeCtx && options.modelGeometry && modelBounds) {
+      routeCtx = buildRouteContextFromGeometry(options.modelGeometry, modelBounds);
+    }
+    if (routeCtx) {
+      const minRadius = pillars.reduce((m, p) => Math.min(m, p.pillarRadius), Infinity);
+      const minTipHeight = pillars.reduce((m, p) => Math.min(m, p.tipHeight), Infinity);
+      const minBaseHeight = pillars.reduce((m, p) => Math.min(m, p.baseHeight), Infinity);
+      generateCrossBracing(
+        pillars.map((p) => p.route),
+        bracingGeometries,
+        Number.isFinite(minRadius) ? minRadius : 0.4,
+        Number.isFinite(minBaseHeight) ? minBaseHeight : 0.6,
+        Number.isFinite(minTipHeight) ? minTipHeight : 1.2,
+        routeCtx,
+        settings.bracingCollisionRadius,
+        floorY,
+      );
+    }
   }
 
   if (includeFoundation) {
@@ -558,8 +598,10 @@ export function rebuildSupportsMesh(
     );
   }
 
-  if (geometries.length === 0) return new THREE.BufferGeometry();
-  return mergeGeometries(geometries);
+  return {
+    supports: geometries.length === 0 ? new THREE.BufferGeometry() : mergeGeometries(geometries),
+    bracing: bracingGeometries.length === 0 ? null : mergeGeometries(bracingGeometries),
+  };
 }
 
 function routesFromStructure(structure: SupportStructure): RouteWaypoint[][] {

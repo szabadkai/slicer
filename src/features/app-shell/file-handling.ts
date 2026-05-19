@@ -1,17 +1,28 @@
-/**
- * File handling — STL loading via browse button, drag-drop, and sample models.
- */
 import type { AppContext } from '@core/types';
+import type { ParsedGeometry } from '@features/model-io/load';
+import { formatRegistry } from '@core/format-registry';
 import { listen } from './utils';
 
-function loadStlBuffer(ctx: AppContext, buffer: ArrayBuffer): void {
-  ctx.showProgress('Parsing STL...');
-  setTimeout(() => {
-    ctx.viewer.loadSTL(buffer);
-    ctx.clearActivePlateSlice();
-    ctx.updateEstimate();
+function loadParsedGeometry(ctx: AppContext, geometry: ParsedGeometry): void {
+  ctx.viewer.loadParsedGeometry(geometry);
+  ctx.clearActivePlateSlice();
+  ctx.updateEstimate();
+  ctx.hideProgress();
+}
+
+async function importFile(ctx: AppContext, file: File): Promise<void> {
+  const importer = formatRegistry.getImporterForFile(file.name);
+  if (!importer) return;
+
+  ctx.showProgress(`Loading ${file.name}...`);
+  try {
+    const buffer = await file.arrayBuffer();
+    const geometry = await importer.parse(buffer, file.name);
+    loadParsedGeometry(ctx, geometry);
+  } catch (err) {
+    console.error(`Failed to import ${file.name}:`, err);
     ctx.hideProgress();
-  }, 50);
+  }
 }
 
 export function mountFileHandling(ctx: AppContext): void {
@@ -20,7 +31,10 @@ export function mountFileHandling(ctx: AppContext): void {
   const container = document.getElementById('viewport-container');
   const sampleGrid = document.querySelector('.sample-model-grid');
 
-  // Browse button triggers hidden file input
+  if (stlInput) {
+    stlInput.accept = formatRegistry.getImporterAcceptString();
+  }
+
   listen(browseBtn, 'click', () => {
     stlInput?.click();
   });
@@ -29,13 +43,9 @@ export function mountFileHandling(ctx: AppContext): void {
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
-    ctx.showProgress('Reading STL...');
-    file.arrayBuffer().then((buffer) => {
-      loadStlBuffer(ctx, buffer);
-    });
+    importFile(ctx, file);
   });
 
-  // Drag and drop
   listen(container, 'dragover', (e) => {
     e.preventDefault();
     container?.classList.add('drag-over');
@@ -49,15 +59,10 @@ export function mountFileHandling(ctx: AppContext): void {
     const dt = (e as DragEvent).dataTransfer;
     const file = dt?.files[0];
     if (!file) return;
-    const ext = file.name.split('.').pop()?.toLowerCase();
-    if (ext !== 'stl') return;
-    ctx.showProgress('Reading STL...');
-    file.arrayBuffer().then((buffer) => {
-      loadStlBuffer(ctx, buffer);
-    });
+    if (!formatRegistry.getImporterForFile(file.name)) return;
+    importFile(ctx, file);
   });
 
-  // Sample model cards
   listen(sampleGrid, 'click', (e) => {
     const card = (e.target as HTMLElement).closest('[data-model]') as HTMLElement | null;
     if (!card) return;
@@ -71,8 +76,11 @@ export function mountFileHandling(ctx: AppContext): void {
         if (!r.ok) throw new Error(`Failed to fetch ${url}: ${r.status}`);
         return r.arrayBuffer();
       })
-      .then((buffer) => {
-        loadStlBuffer(ctx, buffer);
+      .then(async (buffer) => {
+        const importer = formatRegistry.getImporterForFile(`${modelName}.stl`);
+        if (!importer) return;
+        const geometry = await importer.parse(buffer, `${modelName}.stl`);
+        loadParsedGeometry(ctx, geometry);
       })
       .catch((err) => {
         console.error('Failed to load sample model:', err);

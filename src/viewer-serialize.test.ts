@@ -18,6 +18,7 @@ function makeMinimalObject(id: string): SceneObject {
     id,
     mesh,
     supportsMesh: null,
+    bracingMesh: null,
     elevation: 0,
     materialPreset: {} as Record<string, unknown>,
   } as SceneObject;

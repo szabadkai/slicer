@@ -61,7 +61,12 @@ export function addWorldModel(
 
 export function removeSceneObjectById(viewer: AppContext['viewer'], id: string): void {
   const legacy = viewer as unknown as {
-    objects: Array<{ id: string; mesh: THREE.Mesh; supportsMesh?: THREE.Mesh | null }>;
+    objects: Array<{
+      id: string;
+      mesh: THREE.Mesh;
+      supportsMesh?: THREE.Mesh | null;
+      bracingMesh?: THREE.Mesh | null;
+    }>;
     activePlate: { objects: Array<{ id: string }> };
     scene: THREE.Scene;
     selected: Array<{ id: string }>;
@@ -77,6 +82,11 @@ export function removeSceneObjectById(viewer: AppContext['viewer'], id: string):
     legacy.scene.remove(obj.supportsMesh);
     obj.supportsMesh.geometry.dispose();
     disposeMaterial(obj.supportsMesh.material);
+  }
+  if (obj.bracingMesh) {
+    legacy.scene.remove(obj.bracingMesh);
+    obj.bracingMesh.geometry.dispose();
+    disposeMaterial(obj.bracingMesh.material);
   }
   legacy.objects = legacy.objects.filter((item) => item.id !== id);
   legacy.activePlate.objects = legacy.activePlate.objects.filter((item) => item.id !== id);

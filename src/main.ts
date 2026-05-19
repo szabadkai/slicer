@@ -6,6 +6,7 @@ import type { LegacyViewer, LegacySlicer, LegacyPlate } from '@core/legacy-types
 import type { AppContext, ProjectState } from '@core/types';
 import { showProgress, updateProgress, hideProgress } from '@features/app-shell/progress';
 import { mountApp } from '@features/app-shell/mount';
+import './formats';
 
 async function init(): Promise<void> {
   const canvas = document.getElementById('viewport') as HTMLCanvasElement;

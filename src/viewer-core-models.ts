@@ -72,7 +72,14 @@ export function addModelRaw(
   const id = 'obj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
   mesh.userData.id = id;
   core.scene.add(mesh);
-  const obj: SceneObject = { id, mesh, supportsMesh: null, elevation, materialPreset: preset };
+  const obj: SceneObject = {
+    id,
+    mesh,
+    supportsMesh: null,
+    bracingMesh: null,
+    elevation,
+    materialPreset: preset,
+  };
   core.objects.push(obj);
   return obj;
 }
@@ -120,6 +127,11 @@ export function removeSelected(core: ViewerCore): void {
         o.supportsMesh.geometry.dispose();
         (o.supportsMesh.material as THREE.Material).dispose();
       }
+      if (o.bracingMesh) {
+        core.scene.remove(o.bracingMesh);
+        o.bracingMesh.geometry.dispose();
+        (o.bracingMesh.material as THREE.Material).dispose();
+      }
     }
   });
   core.objects = core.objects.filter((o) => !ids.has(o.id));
@@ -141,6 +153,11 @@ export function clearPlate(core: ViewerCore): void {
       core.scene.remove(o.supportsMesh);
       o.supportsMesh.geometry.dispose();
       (o.supportsMesh.material as THREE.Material).dispose();
+    }
+    if (o.bracingMesh) {
+      core.scene.remove(o.bracingMesh);
+      o.bracingMesh.geometry.dispose();
+      (o.bracingMesh.material as THREE.Material).dispose();
     }
   });
   core.objects = [];

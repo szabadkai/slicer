@@ -35,6 +35,11 @@ export interface LegacyObject {
     material: { dispose(): void };
     parent?: { remove(child: unknown): void } | null;
   } | null;
+  bracingMesh?: {
+    geometry: { dispose(): void };
+    material: { dispose(): void };
+    parent?: { remove(child: unknown): void } | null;
+  } | null;
   elevation: number;
   intentBuffer?: Uint8Array;
   _cachedLocalVolume?: number;

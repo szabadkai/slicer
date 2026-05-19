@@ -78,7 +78,7 @@ export function handleClick(core: ViewerCore, e: PointerEvent): void {
 
   // Check support meshes — fire event for pillar inspection, but also select the owning model
   const supportMeshes = allObjects
-    .map((o) => o.supportsMesh)
+    .flatMap((o) => [o.supportsMesh, o.bracingMesh])
     .filter((m): m is THREE.Mesh => m !== null);
 
   let supportOwner: SceneObject | null = null;
@@ -92,7 +92,9 @@ export function handleClick(core: ViewerCore, e: PointerEvent): void {
           detail: { x: p.x, y: p.y, z: p.z, screenX: e.clientX, screenY: e.clientY },
         }),
       );
-      supportOwner = allObjects.find((o) => o.supportsMesh === hit.object) ?? null;
+      supportOwner =
+        allObjects.find((o) => o.supportsMesh === hit.object || o.bracingMesh === hit.object) ??
+        null;
     }
   }
 
@@ -125,7 +127,7 @@ export function handleClick(core: ViewerCore, e: PointerEvent): void {
 export function handleSupportContextMenu(core: ViewerCore, e: MouseEvent): boolean {
   const allObjects = core.getAllObjects();
   const supportMeshes = allObjects
-    .map((o) => o.supportsMesh)
+    .flatMap((o) => [o.supportsMesh, o.bracingMesh])
     .filter((m): m is THREE.Mesh => m !== null);
   if (supportMeshes.length === 0) return false;
   const rect = core.canvas.getBoundingClientRect();

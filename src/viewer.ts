@@ -162,21 +162,31 @@ export class Viewer extends ViewerCore {
       return;
     }
     const items = this.selected
-      .filter((s) => s.supportsMesh)
+      .filter((s) => s.supportsMesh || s.bracingMesh)
       .map((sel) => ({
         sel,
         meshPosition: sel.mesh.position.clone(),
         supportPosition: sel.supportsMesh?.position.clone() ?? new THREE.Vector3(),
+        bracingPosition: sel.bracingMesh?.position.clone() ?? new THREE.Vector3(),
       }));
     this.transformSupportState = items.length > 0 ? { items } : null;
   }
   protected override _syncSupportsDuringTranslation(): void {
     if (!this.transformSupportState || !this.transformControl.dragging) return;
-    this.transformSupportState.items.forEach(({ sel, meshPosition, supportPosition }) => {
-      if (!sel.supportsMesh) return;
-      sel.supportsMesh.position.x = supportPosition.x + (sel.mesh.position.x - meshPosition.x);
-      sel.supportsMesh.position.z = supportPosition.z + (sel.mesh.position.z - meshPosition.z);
-    });
+    this.transformSupportState.items.forEach(
+      ({ sel, meshPosition, supportPosition, bracingPosition }) => {
+        const dx = sel.mesh.position.x - meshPosition.x;
+        const dz = sel.mesh.position.z - meshPosition.z;
+        if (sel.supportsMesh) {
+          sel.supportsMesh.position.x = supportPosition.x + dx;
+          sel.supportsMesh.position.z = supportPosition.z + dz;
+        }
+        if (sel.bracingMesh) {
+          sel.bracingMesh.position.x = bracingPosition.x + dx;
+          sel.bracingMesh.position.z = bracingPosition.z + dz;
+        }
+      },
+    );
   }
   private _canPreserveSupportsDuringTranslation(): boolean {
     if (!this.transformSupportState || this.transformControl.getMode?.() !== 'translate')
@@ -217,7 +227,7 @@ export class Viewer extends ViewerCore {
       this.selected.length === 1 ? this.selected[0].mesh.position : this.getSelectionWorldCenter();
     if (!cur) return;
     const moves = this.selected
-      .filter((s) => s.supportsMesh)
+      .filter((s) => s.supportsMesh || s.bracingMesh)
       .map((sel) => ({ sel, dx: position.x - cur.x, dz: position.z - cur.z }));
     const preserve = Math.abs(position.y - cur.y) <= 1e-6;
     if (this.selected.length === 1) this.selected[0].mesh.position.copy(position);
@@ -234,6 +244,10 @@ export class Viewer extends ViewerCore {
         if (sel.supportsMesh) {
           sel.supportsMesh.position.x += dx;
           sel.supportsMesh.position.z += dz;
+        }
+        if (sel.bracingMesh) {
+          sel.bracingMesh.position.x += dx;
+          sel.bracingMesh.position.z += dz;
         }
       });
     this._bakeTransform({ preserveSupports: preserve });

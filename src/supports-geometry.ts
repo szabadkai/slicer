@@ -436,11 +436,13 @@ export function generateCrossBracing(
   if (shafts.length < 2) return;
 
   const maxBraceDist = 24;
-  const braceRadius = pillarRadius * 0.7;
-  const zInterval = 12;
+  const braceRadius = pillarRadius * 0.5;
   const maxConns = 2;
   const conns = new Map<number, number>();
   for (let i = 0; i < shafts.length; i++) conns.set(i, 0);
+
+  const pairKey = (a: number, b: number): string => `${Math.min(a, b)}-${Math.max(a, b)}`;
+  const visited = new Set<string>();
 
   for (let i = 0; i < shafts.length; i++) {
     if ((conns.get(i) ?? 0) >= maxConns) continue;
@@ -459,38 +461,37 @@ export function generateCrossBracing(
 
     for (const neighbor of neighbors) {
       if ((conns.get(i) ?? 0) >= maxConns || (conns.get(neighbor.index) ?? 0) >= maxConns) continue;
-      if (neighbor.dist > maxBraceDist || i > neighbor.index) continue;
+      if (neighbor.dist > maxBraceDist) continue;
+      const key = pairKey(i, neighbor.index);
+      if (visited.has(key)) continue;
+      visited.add(key);
+
       const s2 = neighbor.shaft;
       const overlapTop = Math.min(s1.topY, s2.topY);
       const overlapBottom = Math.max(s1.bottomY, s2.bottomY);
-      if (overlapTop - overlapBottom <= zInterval) continue;
+      const hDist = neighbor.dist;
+      // vertical rise = horizontal distance → 45° angle
+      const vRise = hDist;
+      const margin = pillarRadius * 2;
+      if (overlapTop - overlapBottom <= vRise + margin) continue;
 
-      let yStart = overlapBottom + zInterval / 3;
-      let dir = 1;
       let added = false;
-      while (yStart + zInterval < overlapTop) {
-        const yEnd = yStart + zInterval;
-        const p1 = new THREE.Vector3(s1.x, dir === 1 ? yStart : yEnd, s1.z);
-        const p2 = new THREE.Vector3(s2.x, dir === 1 ? yEnd : yStart, s2.z);
-        if (segmentCollides(p1, p2, context, Math.max(clearance, pillarRadius * 2))) {
-          yStart += zInterval;
-          dir *= -1;
-          continue;
+      let y = overlapBottom + margin;
+      while (y + vRise <= overlapTop - margin) {
+        // Cross pair: two diagonals forming an X
+        const a1 = new THREE.Vector3(s1.x, y, s1.z);
+        const a2 = new THREE.Vector3(s2.x, y + vRise, s2.z);
+        const b1 = new THREE.Vector3(s1.x, y + vRise, s1.z);
+        const b2 = new THREE.Vector3(s2.x, y, s2.z);
+        const minClearance = Math.max(clearance, pillarRadius * 2);
+        const aOk = !segmentCollides(a1, a2, context, minClearance);
+        const bOk = !segmentCollides(b1, b2, context, minClearance);
+        if (aOk || bOk) {
+          if (aOk) geometries.push(makeBraceCylinder(a1, a2, braceRadius));
+          if (bOk) geometries.push(makeBraceCylinder(b1, b2, braceRadius));
+          added = true;
         }
-        const braceLength = p1.distanceTo(p2);
-        const braceGeo = new THREE.CylinderGeometry(
-          braceRadius,
-          braceRadius,
-          braceLength,
-          Math.max(3, SUPPORT_SEGMENTS),
-        );
-        const bDir = new THREE.Vector3().subVectors(p2, p1).normalize();
-        braceGeo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(UP, bDir));
-        braceGeo.translate((p1.x + p2.x) / 2, (p1.y + p2.y) / 2, (p1.z + p2.z) / 2);
-        geometries.push(braceGeo);
-        added = true;
-        yStart += zInterval;
-        dir *= -1;
+        y += (vRise + margin) * 2;
       }
       if (added) {
         conns.set(i, (conns.get(i) ?? 0) + 1);
@@ -498,6 +499,19 @@ export function generateCrossBracing(
       }
     }
   }
+}
+
+function makeBraceCylinder(
+  p1: THREE.Vector3,
+  p2: THREE.Vector3,
+  radius: number,
+): THREE.BufferGeometry {
+  const length = p1.distanceTo(p2);
+  const geo = new THREE.CylinderGeometry(radius, radius, length, Math.max(3, SUPPORT_SEGMENTS));
+  const dir = new THREE.Vector3().subVectors(p2, p1).normalize();
+  geo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(UP, dir));
+  geo.translate((p1.x + p2.x) / 2, (p1.y + p2.y) / 2, (p1.z + p2.z) / 2);
+  return geo;
 }
 
 // ---------------------------------------------------------------------------

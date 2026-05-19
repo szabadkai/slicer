@@ -66,6 +66,7 @@ export interface SceneObject {
   id: string;
   mesh: THREE.Mesh;
   supportsMesh: THREE.Mesh | null;
+  bracingMesh: THREE.Mesh | null;
   elevation: number;
   materialPreset: Record<string, unknown>;
   paintStrokes?: PaintStroke[];
@@ -131,7 +132,12 @@ export class ViewerCore {
     objectMatrices: { sel: SceneObject; matrix: THREE.Matrix4 }[];
   } | null = null;
   transformSupportState: {
-    items: { sel: SceneObject; meshPosition: THREE.Vector3; supportPosition: THREE.Vector3 }[];
+    items: {
+      sel: SceneObject;
+      meshPosition: THREE.Vector3;
+      supportPosition: THREE.Vector3;
+      bracingPosition: THREE.Vector3;
+    }[];
   } | null = null;
   paintToolEnabled = false;
   intentPaintMode = false;
@@ -357,7 +363,7 @@ export class ViewerCore {
     this.requestRender();
   }
   _setObjectSceneVisible(obj: SceneObject, visible: boolean): void {
-    [obj.mesh, obj.supportsMesh]
+    [obj.mesh, obj.supportsMesh, obj.bracingMesh]
       .filter((m): m is THREE.Mesh => m != null)
       .forEach((m) => {
         if (visible && !m.parent) this.scene.add(m);

@@ -10,11 +10,17 @@ export function estimateSupportVolume(
   const set = getPillarSet(modelId);
   if (set.legacyOpaque) return null;
   const supportStructures = set.supportStructures ?? [];
-  const bodyGeometry = rebuildSupportsMesh(modelId, modelBounds, { includeFoundation: false });
-  const bodyVolume = computeMeshVolume(bodyGeometry);
-  bodyGeometry.dispose();
+  const result = rebuildSupportsMesh(modelId, modelBounds, { includeFoundation: false });
+  const bodyVolume = computeMeshVolume(result.supports);
+  result.supports.dispose();
+  let bracingVolume = 0;
+  if (result.bracing) {
+    bracingVolume = computeMeshVolume(result.bracing);
+    result.bracing.dispose();
+  }
   return (
     bodyVolume +
+    bracingVolume +
     estimateSupportFoundationVolume(
       set.pillars,
       supportStructures,

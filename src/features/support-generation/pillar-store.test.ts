@@ -272,7 +272,7 @@ describe('findPillarNear', () => {
 
 describe('rebuildSupportsMesh', () => {
   it('returns empty geometry with no pillars', () => {
-    const geo = rebuildSupportsMesh('m1');
+    const { supports: geo } = rebuildSupportsMesh('m1');
     expect(geo.attributes.position?.count ?? 0).toBe(0);
   });
 
@@ -280,15 +280,15 @@ describe('rebuildSupportsMesh', () => {
     const p1 = makePillar('auto', { x: 0, y: 5, z: 0 });
     const p2 = makePillar('auto', { x: 5, y: 5, z: 0 });
     addManualPillarRecord('m1', p1);
-    const count1 = rebuildSupportsMesh('m1').attributes.position.count;
+    const count1 = rebuildSupportsMesh('m1').supports.attributes.position.count;
     addManualPillarRecord('m1', p2);
-    const count2 = rebuildSupportsMesh('m1').attributes.position.count;
+    const count2 = rebuildSupportsMesh('m1').supports.attributes.position.count;
     expect(count2).toBeGreaterThan(count1);
   });
 
   it('builds geometry for graph-only experimental support structures', () => {
     addSupportStructureRecord('m1', makeBranchingStructure());
-    const geo = rebuildSupportsMesh('m1');
+    const { supports: geo } = rebuildSupportsMesh('m1');
     expect(geo.attributes.position.count).toBeGreaterThan(0);
   });
 
@@ -296,12 +296,12 @@ describe('rebuildSupportsMesh', () => {
     addManualPillarRecord('m1', makePillar('auto', { x: 0, y: 5, z: 0 }));
     addManualPillarRecord('m1', makePillar('auto', { x: 12, y: 5, z: 0 }));
     addManualPillarRecord('m1', makePillar('auto', { x: 6, y: 5, z: 8 }));
-    const withoutBracing = rebuildSupportsMesh('m1').attributes.position.count;
+    const withoutBracing = rebuildSupportsMesh('m1').supports.attributes.position.count;
 
     updatePillarSettings('m1', {
       baseBracing: { radius: 0.8, maxDistance: 28 },
     });
-    const withBracing = rebuildSupportsMesh('m1').attributes.position.count;
+    const withBracing = rebuildSupportsMesh('m1').supports.attributes.position.count;
 
     expect(withBracing).toBeGreaterThan(withoutBracing);
     expect(withBracing - withoutBracing).toBeGreaterThan(100);
@@ -315,7 +315,7 @@ describe('rebuildSupportsMesh', () => {
       baseBracing: { radius: 0.8, maxDistance: 28 },
     });
 
-    const geo = rebuildSupportsMesh('m1');
+    const { supports: geo } = rebuildSupportsMesh('m1');
     geo.computeBoundingBox();
     const box = geo.boundingBox!;
 
@@ -400,7 +400,8 @@ describe('rebuildSupportsMesh', () => {
       baseBracing: { radius: 0.8, maxDistance: 28 },
     });
 
-    const renderedVolume = computeMeshVolume(rebuildSupportsMesh('m1'));
+    const result = rebuildSupportsMesh('m1');
+    const renderedVolume = computeMeshVolume(result.supports);
     const estimatedVolume = estimateSupportVolume('m1');
 
     expect(estimatedVolume).not.toBeNull();
@@ -410,10 +411,10 @@ describe('rebuildSupportsMesh', () => {
   it('omits disabled touchpoint branches from graph geometry', () => {
     const structure = makeBranchingStructure();
     addSupportStructureRecord('m1', structure);
-    const fullCount = rebuildSupportsMesh('m1').attributes.position.count;
+    const fullCount = rebuildSupportsMesh('m1').supports.attributes.position.count;
 
     updateSupportStructureTouchpoint('m1', 's1', 'n_tip_1', { enabled: false });
-    const reducedCount = rebuildSupportsMesh('m1').attributes.position.count;
+    const reducedCount = rebuildSupportsMesh('m1').supports.attributes.position.count;
 
     expect(reducedCount).toBeGreaterThan(0);
     expect(reducedCount).toBeLessThan(fullCount);
@@ -430,7 +431,7 @@ describe('rebuildSupportsMesh', () => {
       basePan: { margin: 4, thickness: 2, lipWidth: 1, lipHeight: 1 },
     });
 
-    const geo = rebuildSupportsMesh(
+    const { supports: geo } = rebuildSupportsMesh(
       'm1',
       new THREE.Box3(new THREE.Vector3(-100, 0, -100), new THREE.Vector3(100, 20, 100)),
     );

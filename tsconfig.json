@@ -18,7 +18,8 @@
     "checkJs": false,
     "paths": {
       "@core/*": ["./src/core/*"],
-      "@features/*": ["./src/features/*"]
+      "@features/*": ["./src/features/*"],
+      "@formats/*": ["./src/formats/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.js", "scripts/**/*.ts", "vite.config.ts"],

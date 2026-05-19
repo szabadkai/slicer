@@ -272,6 +272,7 @@ export function restoreSerializedObjects(viewer: Viewer, data: SerializedObject[
       id,
       mesh,
       supportsMesh,
+      bracingMesh: null,
       elevation: item.elevation,
       materialPreset: item.materialPreset,
       paintStrokes: item.paintStrokes?.map((stroke) => ({
