@@ -98,6 +98,7 @@ export function mountPreferences(
       'base-pan-thickness',
       'base-pan-lip-width',
       'base-pan-lip-height',
+      'sphere-connection-diameter',
       'branch-cluster-radius',
       'branch-max-tips',
     ];
@@ -109,6 +110,8 @@ export function mountPreferences(
       'auto-density',
       'auto-thickness',
       'cross-bracing',
+      'spherical-connection',
+      'base-bracing-enabled',
       'base-pan-enabled',
       'experimental-branching-supports',
     ];
@@ -222,12 +225,15 @@ export function mountPreferences(
     'support-clearance',
     'support-max-offset',
     'cross-bracing',
+    'spherical-connection',
+    'base-bracing-enabled',
     'base-pan-enabled',
     'experimental-branching-supports',
     'base-pan-margin',
     'base-pan-thickness',
     'base-pan-lip-width',
     'base-pan-lip-height',
+    'sphere-connection-diameter',
     'branch-cluster-radius',
     'branch-max-tips',
   ];

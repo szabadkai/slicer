@@ -153,7 +153,6 @@ export function mountSupportPanel(ctx: AppContext): void {
     setGroupOpacity(supportThicknessGroup, !autoT);
     syncPresetButtons();
     const panEnabled = basePanEnabled?.checked;
-    if (baseBracingEnabled && panEnabled) baseBracingEnabled.checked = false;
     [basePanMargin, basePanThickness, basePanLipWidth, basePanLipHeight].forEach((el) => {
       if (el) el.disabled = !panEnabled;
     });
@@ -264,13 +263,13 @@ export function mountSupportPanel(ctx: AppContext): void {
       modelClearance: parseFloat(supportClearance?.value ?? '0.3'),
       maxContactOffset: parseFloat(supportMaxOffset?.value ?? '5'),
       crossBracing: crossBracing?.checked ?? false,
-      baseBracingEnabled: baseBracingEnabled?.checked ?? false,
-      basePanEnabled: basePanEnabled?.checked ?? false,
+      baseBracingEnabled: baseBracingEnabled?.checked ?? true,
+      basePanEnabled: basePanEnabled?.checked ?? true,
       basePanMargin: parseFloat(basePanMargin?.value ?? '2'),
       basePanThickness: parseFloat(basePanThickness?.value ?? '2'),
       basePanLipWidth: parseFloat(basePanLipWidth?.value ?? '1'),
       basePanLipHeight: parseFloat(basePanLipHeight?.value ?? '0.5'),
-      sphericalConnection: sphericalConnection?.checked ?? false,
+      sphericalConnection: sphericalConnection?.checked ?? true,
       sphereConnectionDiameter: parseFloat(sphereConnectionDiameter?.value ?? '0.3'),
       detectMinima: detectMinima?.checked ?? true,
       detectStabilization: detectStabilization?.checked ?? true,
@@ -383,10 +382,7 @@ export function mountSupportPanel(ctx: AppContext): void {
     listen(el, 'input', markPresetCustom);
   });
   listen(basePanEnabled, 'change', syncUi);
-  listen(baseBracingEnabled, 'change', () => {
-    if (baseBracingEnabled?.checked && basePanEnabled) basePanEnabled.checked = false;
-    syncUi();
-  });
+  listen(baseBracingEnabled, 'change', syncUi);
   listen(sphericalConnection, 'change', syncUi);
   listen(detectReinforcements, 'change', syncUi);
   listen(detectStabilization, 'change', syncUi);
