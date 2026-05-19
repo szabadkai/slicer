@@ -25,6 +25,7 @@ import type {
   ProgressCallback,
 } from '@core/format-registry';
 import type { PrinterSpec } from '@core/types';
+import { yieldToBrowser } from './export-helpers';
 
 // ─── RLE Encoding ──────────────────────────────────────────
 
@@ -222,6 +223,7 @@ async function buildCtbBlob(
   const encodedLayers: Uint8Array[] = [];
   for (let i = 0; i < layerCount; i++) {
     onProgress?.(i + 1, layerCount, `Encoding layer ${i + 1} / ${layerCount}`);
+    await yieldToBrowser();
     const rgba = getLayerRGBA(i);
     encodedLayers.push(encodeCtbRle(rgba, resolutionX, resolutionY));
   }
@@ -375,10 +377,11 @@ async function buildCtbBlob(
     // Copy RLE data
     bytes.set(rle, layerDataStart + dataOffset);
     dataOffset += rle.byteLength;
+    if (i % 10 === 0) await yieldToBrowser();
   }
 
   onProgress?.(layerCount, layerCount, 'Building .ctb file...');
-  await new Promise((r) => setTimeout(r, 0));
+  await yieldToBrowser();
 
   return new Blob([buf], { type: 'application/octet-stream' });
 }

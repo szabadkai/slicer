@@ -10,6 +10,8 @@
  *   [LAYER TABLE] – 16-byte entries, one per layer, pointing into the data section
  *   [LAYER DATA]  – RLE-compressed 1-bit pixel data per layer
  */
+import { yieldToBrowser } from './formats/exporters/slice/export-helpers';
+
 // ─── Types ──────────────────────────────────────────────────
 
 interface SliceSettings {
@@ -262,6 +264,7 @@ export async function exportGooToBlob(
   let dataOffset = 0;
   for (let i = 0; i < layerCount; i++) {
     onProgress?.(i + 1, layerCount, `Encoding layer ${i + 1} / ${layerCount}`);
+    await yieldToBrowser();
     const rgba = getLayerRGBA(i);
     const rle = encodeGooRle(rgba, resolutionX, resolutionY);
     const rleSize = rle.length;
@@ -282,14 +285,16 @@ export async function exportGooToBlob(
 
   // ── Assemble final blob ─────────────────────────────────
   onProgress?.(layerCount, layerCount, 'Building .goo file...');
-  await new Promise((r) => setTimeout(r, 0));
+  await yieldToBrowser();
 
   const totalSize = parts.reduce((s, b) => s + b.byteLength, 0);
   const finalBuf = new Uint8Array(totalSize);
   let off = 0;
-  for (const part of parts) {
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
     finalBuf.set(part, off);
     off += part.byteLength;
+    if (i % 20 === 0) await yieldToBrowser();
   }
 
   return new Blob([finalBuf], { type: 'application/octet-stream' });

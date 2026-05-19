@@ -15,6 +15,7 @@ import type {
   ProgressCallback,
 } from '@core/format-registry';
 import type { PrinterSpec } from '@core/types';
+import { addPngFilesToZip, encodePixelLayersToPngs, yieldToBrowser } from './export-helpers';
 
 function buildGcode(settings: SliceSettings, printer: PrinterSpec, layerCount: number): string {
   const lines: string[] = [];
@@ -82,52 +83,30 @@ async function buildCwsBlob(
   const layerCount = source.kind === 'pixels' ? source.layers.length : source.pngs.length;
 
   if (source.kind === 'png') {
-    for (let i = 0; i < layerCount; i++) {
-      onProgress?.(i + 1, layerCount, `Packing layer ${i + 1} / ${layerCount}`);
-      const name = String(i).padStart(5, '0');
-      zip.file(`slice_${name}.png`, source.pngs[i], { compression: 'STORE' });
-    }
+    await addPngFilesToZip(
+      zip,
+      source.pngs,
+      (i) => `slice_${String(i).padStart(5, '0')}.png`,
+      onProgress,
+    );
   } else {
-    const { getSharedPngEncodePool } = await import('../../../png-encode-pool');
-    const pool = getSharedPngEncodePool();
     const { resolutionX, resolutionY } = printer;
-    const maxInFlight = 8;
-    const pngs: Uint8Array[] = new Array(layerCount);
-    let dispatched = 0;
-    let completed = 0;
-
-    await new Promise<void>((resolve, reject) => {
-      const dispatch = (): void => {
-        while (dispatched < layerCount && dispatched - completed < maxInFlight) {
-          const i = dispatched++;
-          const rgba = source.layers[i];
-          onProgress?.(completed + 1, layerCount, `Encoding layer ${i + 1} / ${layerCount}`);
-          pool
-            .encode(rgba, resolutionX, resolutionY)
-            .then((png) => {
-              pngs[i] = png;
-              completed++;
-              if (completed === layerCount) resolve();
-              else dispatch();
-            })
-            .catch(reject);
-        }
-      };
-      dispatch();
-    });
-
-    for (let i = 0; i < layerCount; i++) {
-      const name = String(i).padStart(5, '0');
-      zip.file(`slice_${name}.png`, pngs[i], { compression: 'STORE' });
-    }
+    const pngs = await encodePixelLayersToPngs(source, resolutionX, resolutionY, onProgress);
+    await addPngFilesToZip(zip, pngs, (i) => `slice_${String(i).padStart(5, '0')}.png`, onProgress);
   }
 
   zip.file('manifest.gcode', buildGcode(settings, printer, layerCount));
 
   onProgress?.(layerCount, layerCount, 'Building .cws archive...');
-  await new Promise((r) => setTimeout(r, 0));
+  await yieldToBrowser();
 
-  return zip.generateAsync({ type: 'blob', compression: 'STORE' });
+  return zip.generateAsync({ type: 'blob', compression: 'STORE' }, (metadata) => {
+    onProgress?.(
+      layerCount,
+      layerCount,
+      `Building .cws archive... ${metadata.percent.toFixed(0)}%`,
+    );
+  });
 }
 
 export const cwsSliceExporter: SliceExporter = {
