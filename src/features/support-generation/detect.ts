@@ -2,12 +2,12 @@
 // Pure functions operating on flat Float32Array geometry.
 
 export interface OverhangParams {
-  /** Overhang angle threshold in degrees (10–80, default 30) */
+  /** Overhang angle threshold in degrees (10–80, default 45) */
   angleDeg: number;
 }
 
 export const DEFAULT_OVERHANG_PARAMS: OverhangParams = {
-  angleDeg: 30,
+  angleDeg: 45,
 };
 
 export interface OverhangResult {

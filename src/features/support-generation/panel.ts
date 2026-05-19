@@ -136,7 +136,7 @@ export function mountSupportPanel(ctx: AppContext): void {
       }
     }
 
-    const angleDeg = parseFloat(overhangAngle?.value ?? '30');
+    const angleDeg = parseFloat(overhangAngle?.value ?? '45');
     viewer.showOverhangOverlay(obj.id, collectSupportContacts(obj.id, contacts), { angleDeg });
   }
 
@@ -251,7 +251,7 @@ export function mountSupportPanel(ctx: AppContext): void {
       : undefined;
 
     return {
-      overhangAngle: parseFloat(overhangAngle?.value ?? '30'),
+      overhangAngle: parseFloat(overhangAngle?.value ?? '45'),
       density: parseFloat(supportDensity?.value ?? '50'),
       autoDensity: autoDensity?.checked ?? true,
       tipDiameter: parseFloat(tipDiameter?.value ?? '0.4'),

@@ -86,6 +86,61 @@ function makeBranchingStructure(id = 's1'): SupportStructure {
   };
 }
 
+function offsetStructure(structure: SupportStructure, dx: number, dz = 0): SupportStructure {
+  return {
+    ...structure,
+    touchpoints: structure.touchpoints.map((touchpoint) => ({
+      ...touchpoint,
+      position: {
+        ...touchpoint.position,
+        x: touchpoint.position.x + dx,
+        z: touchpoint.position.z + dz,
+      },
+    })),
+    nodes: structure.nodes.map((node) => ({
+      ...node,
+      position: {
+        ...node.position,
+        x: node.position.x + dx,
+        z: node.position.z + dz,
+      },
+    })),
+  };
+}
+
+function tallStructure(id: string): SupportStructure {
+  const structure = makeBranchingStructure(id);
+  return {
+    ...structure,
+    touchpoints: structure.touchpoints.map((touchpoint) => ({
+      ...touchpoint,
+      position: { ...touchpoint.position, y: 10 },
+    })),
+    nodes: structure.nodes.map((node) =>
+      node.kind === 'tip'
+        ? { ...node, position: { ...node.position, y: 10 } }
+        : node.kind === 'branch'
+          ? { ...node, position: { ...node.position, y: 8 } }
+          : node,
+    ),
+  };
+}
+
+function makeCollisionFreeRouteContext() {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1));
+  mesh.position.set(1000, 1000, 1000);
+  mesh.updateMatrixWorld();
+  return {
+    mesh,
+    raycaster: new THREE.Raycaster(),
+    modelBounds: new THREE.Box3(
+      new THREE.Vector3(999, 999, 999),
+      new THREE.Vector3(1001, 1001, 1001),
+    ),
+    modelCenter: new THREE.Vector3(1000, 1000, 1000),
+  };
+}
+
 beforeEach(() => {
   _resetPillarStoreForTests();
 });
@@ -290,6 +345,20 @@ describe('rebuildSupportsMesh', () => {
     addSupportStructureRecord('m1', makeBranchingStructure());
     const { supports: geo } = rebuildSupportsMesh('m1');
     expect(geo.attributes.position.count).toBeGreaterThan(0);
+  });
+
+  it('adds cross-bracing between branching support trunks', () => {
+    addSupportStructureRecord('m1', tallStructure('s1'));
+    addSupportStructureRecord('m1', offsetStructure(tallStructure('s2'), 2));
+    updatePillarSettings('m1', {
+      crossBracing: true,
+      routeContext: makeCollisionFreeRouteContext(),
+    });
+
+    const { bracing } = rebuildSupportsMesh('m1');
+
+    expect(bracing).not.toBeNull();
+    expect(bracing!.attributes.position.count).toBeGreaterThan(0);
   });
 
   it('adds base bracing with a peelable outline between nearby support feet', () => {

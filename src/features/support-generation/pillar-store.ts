@@ -565,7 +565,12 @@ export function rebuildSupportsMesh(
     if (activeGraph) buildSupportGraphGeometry(activeGraph.nodes, activeGraph.edges, geometries);
   }
 
-  if (settings.crossBracing && pillars.length >= 2) {
+  const supportRoutes = [
+    ...pillars.map((pillar) => pillar.route),
+    ...supportStructures.flatMap((structure) => routesFromStructure(structure)),
+  ];
+
+  if (settings.crossBracing && supportRoutes.length >= 2) {
     let routeCtx = settings.routeContext;
     if (!routeCtx && options.modelGeometry && modelBounds) {
       routeCtx = buildRouteContextFromGeometry(options.modelGeometry, modelBounds);
@@ -575,7 +580,7 @@ export function rebuildSupportsMesh(
       const minTipHeight = pillars.reduce((m, p) => Math.min(m, p.tipHeight), Infinity);
       const minBaseHeight = pillars.reduce((m, p) => Math.min(m, p.baseHeight), Infinity);
       generateCrossBracing(
-        pillars.map((p) => p.route),
+        supportRoutes,
         bracingGeometries,
         Number.isFinite(minRadius) ? minRadius : 0.4,
         Number.isFinite(minBaseHeight) ? minBaseHeight : 0.6,

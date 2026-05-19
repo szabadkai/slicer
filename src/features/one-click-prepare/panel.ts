@@ -17,7 +17,7 @@ function readSupportOptions(
   onProgress: (fraction: number, text: string) => void,
 ): Record<string, unknown> {
   return {
-    overhangAngle: parseFloat(readInput('overhang-angle', '30')),
+    overhangAngle: parseFloat(readInput('overhang-angle', '45')),
     density: parseFloat(readInput('support-density', '50')),
     autoDensity: readChecked('auto-density', true),
     tipDiameter: parseFloat(readInput('tip-diameter', '0.4')),

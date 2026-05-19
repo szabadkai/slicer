@@ -99,7 +99,7 @@ export async function generateSupports(
   options: SupportOptions = {},
 ): Promise<GenerateSupportsResult> {
   const {
-    overhangAngle = 30,
+    overhangAngle = 45,
     density = 5,
     autoDensity = false,
     tipDiameter = 0.4,

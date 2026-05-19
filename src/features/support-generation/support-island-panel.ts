@@ -62,7 +62,7 @@ export function mountSupportIslandNavigator(
       positions.length / 9,
       collectSupportContacts(obj.id),
       {
-        overhangParams: { angleDeg: parseFloat(deps.overhangAngle?.value ?? '30') },
+        overhangParams: { angleDeg: parseFloat(deps.overhangAngle?.value ?? '45') },
         resolvedIds,
       },
     );
