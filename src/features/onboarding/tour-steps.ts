@@ -19,7 +19,7 @@ export const TOUR_STEPS: TourStep[] = [
   {
     id: 'welcome',
     title: 'Welcome to SliceLab',
-    body: "A d20 has been loaded so you have something to work with. SliceLab prepares resin models for SLA/DLP printing — right in your browser, with no install or account needed. Let's walk through the main workflow.",
+    body: "A dental arch has been loaded so you have something to work with. SliceLab prepares resin models for SLA/DLP printing — right in your browser, with no install or account needed. Let's walk through the main workflow.",
     targetSelector: '#viewport-container',
     panelName: 'plate',
     sampleModel: true,

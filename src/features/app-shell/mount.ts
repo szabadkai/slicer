@@ -291,7 +291,7 @@ async function restoreOrLoadDefault(
   // Fallback: load default model
   try {
     const base = (import.meta as unknown as { env: { BASE_URL: string } }).env.BASE_URL;
-    const resp = await fetch(base + 'models/d20v2_thick.stl');
+    const resp = await fetch(base + 'models/dental-arch.stl');
     if (!resp.ok) return;
     const buffer = await resp.arrayBuffer();
     viewer.loadSTL(buffer, 2);

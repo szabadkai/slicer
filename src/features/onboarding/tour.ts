@@ -130,7 +130,7 @@ async function ensureSampleModel(ctx: AppContext): Promise<void> {
   if (!isMaybeEmpty(ctx)) return;
   try {
     const base = (import.meta as unknown as { env: { BASE_URL: string } }).env.BASE_URL;
-    const resp = await fetch(base + 'models/d20v2_thick.stl');
+    const resp = await fetch(base + 'models/dental-arch.stl');
     if (!resp.ok) return;
     const buffer = await resp.arrayBuffer();
     ctx.viewer.loadSTL(buffer, 2);

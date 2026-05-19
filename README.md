@@ -29,7 +29,7 @@ This is a personal testbed for exploring SLA slicing workflows: orientation algo
 
 ## Typical workflow
 
-1. **Open** [the live version](https://szabadkai.github.io/slicer/) — a sample d20 loads automatically so you have something to work with right away.
+1. **Open** [the live version](https://szabadkai.github.io/slicer/) — a sample dental arch loads automatically so you have something to work with right away.
 2. **Load** your model — drag an STL onto the viewport or click **Load** and browse. STEP and IGES files are supported too.
 3. **Set your printer** from the dropdown in the top bar. This sets the build volume and resolution used for slicing.
 4. **Orient** — open the Orient panel, pick a preset. *Least Support* is a good default. The algorithm runs in seconds and repositions your model.
