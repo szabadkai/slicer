@@ -76,13 +76,13 @@ export function handleClick(core: ViewerCore, e: PointerEvent): void {
   );
   const allObjects = core.getAllObjects();
 
-  // Check support meshes — fire event for pillar inspection, but also select the owning model
-  const supportMeshes = allObjects
-    .flatMap((o) => [o.supportsMesh, o.bracingMesh])
-    .filter((m): m is THREE.Mesh => m !== null);
-
   let supportOwner: SceneObject | null = null;
-  if (supportMeshes.length > 0) {
+  if (shouldRaycastSupports(core.canvas)) {
+    // Check support meshes — fire event for pillar inspection, but also select the owning model.
+    // Dense generated supports are expensive to raycast, so keep this path for support-edit contexts.
+    const supportMeshes = allObjects
+      .flatMap((o) => [o.supportsMesh, o.bracingMesh])
+      .filter((m): m is THREE.Mesh => m !== null);
     const supportHits = core.raycaster.intersectObjects(supportMeshes, false);
     if (supportHits.length > 0) {
       const hit = supportHits[0];
@@ -124,7 +124,19 @@ export function handleClick(core: ViewerCore, e: PointerEvent): void {
   } else if (!multi) clearSelection(core);
 }
 
+function shouldRaycastSupports(canvas: HTMLCanvasElement): boolean {
+  if (canvas.classList.contains('support-node-dragging')) return true;
+  const supportsActive = document.getElementById('supports-btn')?.classList.contains('active');
+  if (!supportsActive) return false;
+  return (
+    document.getElementById('manual-support-btn')?.classList.contains('active') !== true &&
+    document.getElementById('manual-bridge-btn')?.classList.contains('active') !== true &&
+    document.getElementById('manual-branch-btn')?.classList.contains('active') !== true
+  );
+}
+
 export function handleSupportContextMenu(core: ViewerCore, e: MouseEvent): boolean {
+  if (!shouldRaycastSupports(core.canvas)) return false;
   const allObjects = core.getAllObjects();
   const supportMeshes = allObjects
     .flatMap((o) => [o.supportsMesh, o.bracingMesh])

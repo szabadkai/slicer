@@ -185,8 +185,10 @@ export function mountLayerPreview(ctx: AppContext, slicer: LegacySlicer): void {
   const inspectorIssuePos = document.getElementById('inspector-issue-pos');
   let currentQaIssues: SliceQaIssue[] = [];
   let activeQaIssueIndex = 0;
+  let pendingQaRun = 0;
 
   function runSliceQa(): SliceQaIssue[] {
+    pendingQaRun++;
     const layers = slicedLayers.value;
     if (layers.length === 0) return [];
 
@@ -198,6 +200,20 @@ export function mountLayerPreview(ctx: AppContext, slicer: LegacySlicer): void {
     renderQaSummary(issues, summarizeIslands(results));
     renderInspectorIssues();
     return issues;
+  }
+
+  function scheduleSliceQa(): void {
+    const runId = ++pendingQaRun;
+    const run = (): void => {
+      if (runId !== pendingQaRun) return;
+      runSliceQa();
+    };
+    const requestIdle = window.requestIdleCallback;
+    if (typeof requestIdle === 'function') {
+      requestIdle(run, { timeout: 750 });
+    } else {
+      setTimeout(run, 0);
+    }
   }
 
   function renderQaSummary(issues: SliceQaIssue[], islandSummary: string): void {
@@ -310,7 +326,7 @@ export function mountLayerPreview(ctx: AppContext, slicer: LegacySlicer): void {
       peelPeak.textContent = `Peak: ${currentPeelProfile.maxAreaMM2.toFixed(1)} mm² (L${currentPeelProfile.peakLayerIndex + 1})`;
     }
     if (peelCanvas) renderPeelForceChart(peelCanvas, currentPeelProfile);
-    runSliceQa();
+    scheduleSliceQa();
   }) as EventListener);
 
   // Highlight current layer on slider change
