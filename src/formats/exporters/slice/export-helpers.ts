@@ -1,5 +1,6 @@
 import type { LayerSource, ProgressCallback } from '@core/format-registry';
 import { cloneCompactGrayLayer, getSharedPngEncodePool } from '../../../png-encode-pool';
+import type { CompactGrayLayer } from '../../../png-encode-pool';
 
 const MAX_EXPORT_IN_FLIGHT_BYTES = 384 * 1024 * 1024;
 
@@ -131,6 +132,15 @@ export async function resolveLayerSourcePngs(
   if (source.kind === 'compact')
     return encodeCompactLayersToPngs(source, width, height, onProgress);
   return encodePixelLayersToPngs(source, width, height, onProgress);
+}
+
+export async function resolveLayerSourceCompactLayers(
+  source: LayerSource,
+  onProgress?: ProgressCallback,
+): Promise<CompactGrayLayer[] | null> {
+  if (source.kind === 'compact') return source.layers;
+  if (source.kind === 'compact-renderer') return source.renderCompactLayers(onProgress);
+  return null;
 }
 
 export async function addPngFilesToZip(

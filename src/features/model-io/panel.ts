@@ -66,7 +66,15 @@ export function mountExportPanel(
     return settings;
   }
 
-  function buildLayerSource(layerCount: number): LayerSource {
+  function buildLayerSource(layerCount: number, exporterId?: string): LayerSource {
+    const cachedCompact = slicedCompactLayers.value;
+    const compactCacheUsable =
+      cachedCompact.length === layerCount && cachedCompact.every((layer) => !!layer);
+
+    if (exporterId === 'goo' && compactCacheUsable) {
+      return { kind: 'compact', layers: cachedCompact };
+    }
+
     const cachedPngs = slicedLayerPngs.value;
     const cacheUsable =
       cachedPngs.length === layerCount && cachedPngs.every((p) => p && p.length > 0);
@@ -74,10 +82,6 @@ export function mountExportPanel(
     if (cacheUsable) {
       return { kind: 'png', pngs: cachedPngs };
     }
-
-    const cachedCompact = slicedCompactLayers.value;
-    const compactCacheUsable =
-      cachedCompact.length === layerCount && cachedCompact.every((layer) => !!layer);
 
     if (compactCacheUsable) {
       return { kind: 'compact', layers: cachedCompact };
@@ -178,7 +182,7 @@ export function mountExportPanel(
     if (!exporter) return;
 
     const settings = buildSettingsWithVolumes();
-    const source = buildLayerSource(layerCount);
+    const source = buildLayerSource(layerCount, exporterId);
 
     ctx.showProgress(`Exporting .${exporter.extension}...`);
     await new Promise((r) => setTimeout(r, 50));
