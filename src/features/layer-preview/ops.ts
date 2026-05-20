@@ -2,6 +2,7 @@ import { signal, computed } from '@preact/signals-core';
 import type { SliceParams } from '@core/types';
 import { sliceParams } from '@core/state';
 import { countWhitePixels } from '@core/pixel-utils';
+import type { CompactGrayLayer } from '../../png-encode-pool';
 
 // ─── Feature-local state ───────────────────────────────────
 
@@ -9,6 +10,9 @@ export const slicedLayers = signal<Uint8Array[]>([]);
 // PNG-encoded layer bytes, populated by the slice pass via the worker pool.
 // When non-empty and matching layerCount, the export path skips re-slicing.
 export const slicedLayerPngs = signal<Uint8Array[]>([]);
+export const slicedLayerPngCacheStatus = signal<'idle' | 'encoding' | 'ready' | 'skipped'>('idle');
+export const slicedCompactLayers = signal<CompactGrayLayer[]>([]);
+export const exportCacheMode = signal<'fast-slice' | 'fast-export' | 'balanced'>('balanced');
 export const currentLayerIndex = signal(0);
 
 export const layerCount = computed(() => slicedLayers.value.length);

@@ -52,10 +52,32 @@ interface DrawRange {
 
 interface SliceOptions {
   collect?: boolean;
-  onLayer?: (pixels: Uint8Array, index: number) => void;
+  onLayer?: (pixels: Uint8Array, index: number, region?: SliceLayerRegion) => void;
+  onTiming?: (timing: SliceTiming) => void;
 }
 
 type ProgressCallback = (current: number, total: number) => void;
+type SlicerGl = WebGLRenderingContext | WebGL2RenderingContext;
+
+export interface SliceTiming {
+  layerCount: number;
+  renderMs: number;
+  readbackMs: number;
+  paintMs: number;
+  totalMs: number;
+  asyncReadback?: boolean;
+  croppedReadback?: boolean;
+  readbackPixels?: number;
+}
+
+export interface SliceLayerRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fullWidth: number;
+  fullHeight: number;
+}
 
 export interface PaintSliceMark {
   x: number;
@@ -74,7 +96,7 @@ export interface PaintTextureConfig {
 export class Slicer {
   printer: PrinterSpec;
   canvas: HTMLCanvasElement;
-  gl: WebGLRenderingContext;
+  gl: SlicerGl;
   meshProgram!: WebGLProgram;
   quadProgram!: WebGLProgram;
   quadBuffer!: WebGLBuffer;
@@ -83,6 +105,10 @@ export class Slicer {
   drawRanges: DrawRange[] = [];
   minY = 0;
   maxY = 0;
+  minX = 0;
+  maxX = 0;
+  minZ = 0;
+  maxZ = 0;
   instanceCount = 0;
   instanceMatrix: Float32Array | null = null;
   paintSliceMarks: PaintSliceMark[] = [];
@@ -98,11 +124,14 @@ export class Slicer {
     this.canvas = document.createElement('canvas');
     this.canvas.width = this.printer.resolutionX;
     this.canvas.height = this.printer.resolutionY;
-    const gl = this.canvas.getContext('webgl', {
+    const contextOptions: WebGLContextAttributes = {
       stencil: true,
       preserveDrawingBuffer: true,
       antialias: false,
-    });
+    };
+    const gl =
+      this.canvas.getContext('webgl2', contextOptions) ??
+      this.canvas.getContext('webgl', contextOptions);
     if (!gl) throw new Error('WebGL not available');
     this.gl = gl;
     this._initShaders();
@@ -149,7 +178,7 @@ export class Slicer {
     gl.bufferData(gl.ARRAY_BUFFER, quadVerts, gl.STATIC_DRAW);
   }
 
-  private _createProgram(gl: WebGLRenderingContext, vsSrc: string, fsSrc: string): WebGLProgram {
+  private _createProgram(gl: SlicerGl, vsSrc: string, fsSrc: string): WebGLProgram {
     const vs = gl.createShader(gl.VERTEX_SHADER);
     if (!vs) throw new Error('Failed to create vertex shader');
     gl.shaderSource(vs, vsSrc);
@@ -193,14 +222,29 @@ export class Slicer {
     gl.bindBuffer(gl.ARRAY_BUFFER, this.meshBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
 
-    let minY = 0;
-    let maxY = 0;
-    for (let i = 1; i < data.length; i += 3) {
-      if (data[i] < minY) minY = data[i];
-      if (data[i] > maxY) maxY = data[i];
+    let minX = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+    let minZ = Number.POSITIVE_INFINITY;
+    let maxZ = Number.NEGATIVE_INFINITY;
+    for (let i = 0; i < data.length; i += 3) {
+      const x = data[i];
+      const y = data[i + 1];
+      const z = data[i + 2];
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+      if (z < minZ) minZ = z;
+      if (z > maxZ) maxZ = z;
     }
-    this.minY = minY;
-    this.maxY = maxY;
+    this.minX = Number.isFinite(minX) ? minX : 0;
+    this.maxX = Number.isFinite(maxX) ? maxX : 0;
+    this.minY = Number.isFinite(minY) ? minY : 0;
+    this.maxY = Number.isFinite(maxY) ? maxY : 0;
+    this.minZ = Number.isFinite(minZ) ? minZ : 0;
+    this.maxZ = Number.isFinite(maxZ) ? maxZ : 0;
   }
 
   private _appendGeometryPositions(
@@ -340,18 +384,43 @@ export class Slicer {
     const layerCount = Math.ceil(totalHeight / layerHeightMM);
     const layers: Uint8Array[] | null = collect ? [] : null;
     const pixelByteCount = this.printer.resolutionX * this.printer.resolutionY * 4;
+    if (!collect && this._isWebGL2(gl)) {
+      return this._sliceWithAsyncReadback(
+        gl,
+        layerHeightMM,
+        layerCount,
+        onProgress,
+        onLayer,
+        options,
+      );
+    }
+
     const reusable = collect ? null : new Uint8Array(pixelByteCount);
+    const timing: SliceTiming = {
+      layerCount,
+      renderMs: 0,
+      readbackMs: 0,
+      paintMs: 0,
+      totalMs: 0,
+      asyncReadback: false,
+      croppedReadback: false,
+      readbackPixels: this.printer.resolutionX * this.printer.resolutionY * layerCount,
+    };
+    const sliceStart = performance.now();
 
     // Pre-allocate a single reusable promise resolver for yielding
     const yieldFrame = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
     for (let i = 0; i < layerCount; i++) {
       const z = this.minY + (i + 0.5) * layerHeightMM;
+      const renderStart = performance.now();
       this._renderSlice(z);
+      timing.renderMs += performance.now() - renderStart;
 
       const pixels = collect
         ? new Uint8Array(pixelByteCount)
         : (reusable ?? new Uint8Array(pixelByteCount));
+      const readbackStart = performance.now();
       gl.readPixels(
         0,
         0,
@@ -361,7 +430,10 @@ export class Slicer {
         gl.UNSIGNED_BYTE,
         pixels,
       );
+      timing.readbackMs += performance.now() - readbackStart;
+      const paintStart = performance.now();
       this._applyPaintSliceMarks(pixels, z, layerHeightMM);
+      timing.paintMs += performance.now() - paintStart;
       if (collect && layers) layers.push(pixels);
       if (onLayer) onLayer(pixels, i);
 
@@ -373,7 +445,177 @@ export class Slicer {
       }
     }
 
+    timing.totalMs = performance.now() - sliceStart;
+    options.onTiming?.(timing);
     return layers;
+  }
+
+  private _isWebGL2(gl: SlicerGl): gl is WebGL2RenderingContext {
+    return typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext;
+  }
+
+  private async _sliceWithAsyncReadback(
+    gl: WebGL2RenderingContext,
+    layerHeightMM: number,
+    layerCount: number,
+    onProgress: ProgressCallback | undefined,
+    onLayer: ((pixels: Uint8Array, index: number, region?: SliceLayerRegion) => void) | undefined,
+    options: SliceOptions,
+  ): Promise<null> {
+    interface PendingReadback {
+      index: number;
+      z: number;
+      buffer: WebGLBuffer;
+      sync: WebGLSync;
+    }
+
+    const maxPending = 3;
+    const region = this._getSliceReadbackRegion();
+    const readbackPixelByteCount = region.width * region.height * 4;
+    const isCropped =
+      region.x !== 0 ||
+      region.y !== 0 ||
+      region.width !== this.printer.resolutionX ||
+      region.height !== this.printer.resolutionY;
+    const freeBuffers: WebGLBuffer[] = [];
+    const pending: PendingReadback[] = [];
+    const timing: SliceTiming = {
+      layerCount,
+      renderMs: 0,
+      readbackMs: 0,
+      paintMs: 0,
+      totalMs: 0,
+      asyncReadback: true,
+      croppedReadback: isCropped,
+      readbackPixels: region.width * region.height * layerCount,
+    };
+    const sliceStart = performance.now();
+    const yieldFrame = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+
+    const createReadbackBuffer = (): WebGLBuffer => {
+      const buffer = gl.createBuffer();
+      if (!buffer) throw new Error('Failed to create WebGL readback buffer');
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, buffer);
+      gl.bufferData(gl.PIXEL_PACK_BUFFER, readbackPixelByteCount, gl.STREAM_READ);
+      return buffer;
+    };
+
+    for (let i = 0; i < maxPending; i++) freeBuffers.push(createReadbackBuffer());
+
+    const waitForReadback = async (item: PendingReadback): Promise<Uint8Array> => {
+      const waitStart = performance.now();
+      while (true) {
+        const status = gl.clientWaitSync(item.sync, 0, 0);
+        if (status === gl.CONDITION_SATISFIED || status === gl.ALREADY_SIGNALED) break;
+        if (status === gl.WAIT_FAILED) throw new Error('WebGL async readback failed');
+        await yieldFrame();
+      }
+
+      const pixels = new Uint8Array(readbackPixelByteCount);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, item.buffer);
+      gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, pixels);
+      gl.deleteSync(item.sync);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+      timing.readbackMs += performance.now() - waitStart;
+      freeBuffers.push(item.buffer);
+      return pixels;
+    };
+
+    const consumeOldest = async (): Promise<void> => {
+      const item = pending.shift();
+      if (!item) return;
+      const pixels = await waitForReadback(item);
+      const paintStart = performance.now();
+      if (isCropped) {
+        // Paint displacement needs full-frame neighbor lookups, so crop is disabled
+        // whenever paint marks are present.
+      } else {
+        this._applyPaintSliceMarks(pixels, item.z, layerHeightMM);
+      }
+      timing.paintMs += performance.now() - paintStart;
+      onLayer?.(pixels, item.index, region);
+      onProgress?.(item.index + 1, layerCount);
+    };
+
+    try {
+      for (let i = 0; i < layerCount; i++) {
+        if (freeBuffers.length === 0) await consumeOldest();
+
+        const z = this.minY + (i + 0.5) * layerHeightMM;
+        const renderStart = performance.now();
+        this._renderSlice(z);
+        timing.renderMs += performance.now() - renderStart;
+
+        const buffer = freeBuffers.pop();
+        if (!buffer) throw new Error('No WebGL readback buffer available');
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, buffer);
+        const enqueueStart = performance.now();
+        gl.readPixels(
+          region.x,
+          region.y,
+          region.width,
+          region.height,
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          0,
+        );
+        const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+        if (!sync) throw new Error('Failed to create WebGL readback sync');
+        gl.flush();
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+        timing.readbackMs += performance.now() - enqueueStart;
+        pending.push({ index: i, z, buffer, sync });
+
+        if (pending.length >= maxPending) await consumeOldest();
+        if (i % 5 === 0) await yieldFrame();
+      }
+
+      while (pending.length > 0) await consumeOldest();
+    } finally {
+      for (const item of pending) {
+        gl.deleteSync(item.sync);
+        freeBuffers.push(item.buffer);
+      }
+      pending.length = 0;
+      for (const buffer of freeBuffers) gl.deleteBuffer(buffer);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    }
+
+    timing.totalMs = performance.now() - sliceStart;
+    options.onTiming?.(timing);
+    return null;
+  }
+
+  private _getSliceReadbackRegion(): SliceLayerRegion {
+    const fullWidth = this.printer.resolutionX;
+    const fullHeight = this.printer.resolutionY;
+    const fullRegion = { x: 0, y: 0, width: fullWidth, height: fullHeight, fullWidth, fullHeight };
+
+    if (this.paintSliceMarks.length > 0 || this.instanceCount > 0) return fullRegion;
+    if (
+      !Number.isFinite(this.minX) ||
+      !Number.isFinite(this.maxX) ||
+      !Number.isFinite(this.minZ) ||
+      !Number.isFinite(this.maxZ) ||
+      this.maxX <= this.minX ||
+      this.maxZ <= this.minZ
+    ) {
+      return fullRegion;
+    }
+
+    const padPx = 4;
+    const halfW = this.printer.buildWidthMM / 2;
+    const halfD = this.printer.buildDepthMM / 2;
+    const x0 = Math.floor(((this.minX + halfW) / this.printer.buildWidthMM) * fullWidth) - padPx;
+    const x1 = Math.ceil(((this.maxX + halfW) / this.printer.buildWidthMM) * fullWidth) + padPx;
+    const y0 = Math.floor(((this.minZ + halfD) / this.printer.buildDepthMM) * fullHeight) - padPx;
+    const y1 = Math.ceil(((this.maxZ + halfD) / this.printer.buildDepthMM) * fullHeight) + padPx;
+    const x = Math.max(0, Math.min(fullWidth - 1, x0));
+    const y = Math.max(0, Math.min(fullHeight - 1, y0));
+    const right = Math.max(x + 1, Math.min(fullWidth, x1));
+    const top = Math.max(y + 1, Math.min(fullHeight, y1));
+
+    return { x, y, width: right - x, height: top - y, fullWidth, fullHeight };
   }
 
   /**

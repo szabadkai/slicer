@@ -6,7 +6,7 @@
  */
 
 import * as THREE from 'three';
-import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
+import { ensureGeometryBoundsTree, ensureBvhRaycast } from './geometry-bvh';
 import {
   type RouteWaypoint,
   type ContactPoint,
@@ -20,6 +20,7 @@ import {
   type PillarSetSettings,
   type SupportStructure,
 } from './features/support-generation/pillar-store';
+import { DEFAULT_OVERHANG_PARAMS } from './features/support-generation/detect';
 import {
   ROUTE_DIRECTIONS,
   deduplicatePoints,
@@ -38,9 +39,7 @@ import { isExteriorContact } from './supports-exterior';
 import { findBridgeRoute } from './supports-bridge';
 import { clusterPillarsIntoBranchStructures } from './supports-branching';
 
-THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
-THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
-THREE.Mesh.prototype.raycast = acceleratedRaycast;
+ensureBvhRaycast();
 
 export type { RouteWaypoint, ContactPoint, RouteContext, RouteOptions };
 
@@ -99,7 +98,7 @@ export async function generateSupports(
   options: SupportOptions = {},
 ): Promise<GenerateSupportsResult> {
   const {
-    overhangAngle = 45,
+    overhangAngle = DEFAULT_OVERHANG_PARAMS.angleDeg,
     density = 5,
     autoDensity = false,
     tipDiameter = 0.4,
@@ -157,7 +156,7 @@ export async function generateSupports(
     onProgress(0.05, 'Building bounds tree...');
     await yieldThread();
   }
-  if (!(geometry as unknown as { boundsTree: unknown }).boundsTree) geometry.computeBoundsTree();
+  ensureGeometryBoundsTree(geometry);
   const tempMesh = new THREE.Mesh(
     geometry,
     new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }),

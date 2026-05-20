@@ -4,6 +4,7 @@
  * flow through the same store → rebuild path so settings apply uniformly.
  */
 import * as THREE from 'three';
+import { ensureGeometryBoundsTree } from '../../geometry-bvh';
 import {
   type RouteWaypoint,
   type RouteContext,
@@ -166,12 +167,7 @@ export function addManualPillar(
 
   // Try auto-routing around geometry if we have the model mesh
   if (modelGeometry) {
-    if (
-      !(modelGeometry as unknown as { boundsTree: unknown }).boundsTree &&
-      typeof modelGeometry.computeBoundsTree === 'function'
-    ) {
-      modelGeometry.computeBoundsTree();
-    }
+    ensureGeometryBoundsTree(modelGeometry);
 
     const contactPoint: ContactPoint = {
       position: localPosition.clone(),
@@ -292,12 +288,7 @@ export function addBridgePillar(
 
   // Validate route against model geometry if available.
   if (modelGeometry) {
-    if (
-      !(modelGeometry as unknown as { boundsTree: unknown }).boundsTree &&
-      typeof modelGeometry.computeBoundsTree === 'function'
-    ) {
-      modelGeometry.computeBoundsTree();
-    }
+    ensureGeometryBoundsTree(modelGeometry);
     const tempMesh = new THREE.Mesh(
       modelGeometry,
       new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }),

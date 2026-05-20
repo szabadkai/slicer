@@ -7,6 +7,7 @@ import {
   type CutAxis,
 } from './features/model-transform/cut';
 import { cutGeometryByManifoldPlane } from './features/model-transform/manifold-cut';
+import { disposeGeometry } from './geometry-bvh';
 import { saveUndoState } from './viewer-undo';
 
 function axisComponent(vector: THREE.Vector3, axis: CutAxis): number {
@@ -160,16 +161,16 @@ async function cutObjectByPlane(
 
 function disposeSceneObject(viewer: Viewer, obj: SceneObject): void {
   viewer.scene.remove(obj.mesh);
-  obj.mesh.geometry.dispose();
+  disposeGeometry(obj.mesh.geometry);
   (obj.mesh.material as THREE.Material).dispose();
   if (obj.supportsMesh) {
     viewer.scene.remove(obj.supportsMesh);
-    obj.supportsMesh.geometry.dispose();
+    disposeGeometry(obj.supportsMesh.geometry);
     (obj.supportsMesh.material as THREE.Material).dispose();
   }
   if (obj.bracingMesh) {
     viewer.scene.remove(obj.bracingMesh);
-    obj.bracingMesh.geometry.dispose();
+    disposeGeometry(obj.bracingMesh.geometry);
     (obj.bracingMesh.material as THREE.Material).dispose();
   }
 }

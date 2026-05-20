@@ -23,6 +23,7 @@ import {
 import { computeAdaptiveLayers, formatAdaptiveSummary } from './adaptive-layers';
 import { compensationFactors, setCompensation, formatCompensation } from './compensation';
 import { exposureProfile, setExposureProfile, formatExposureMultiplier } from './exposure-regions';
+import { exportCacheMode } from '@features/layer-preview/ops';
 
 export function mountSlicePanel(
   ctx: AppContext,
@@ -42,10 +43,14 @@ export function mountSlicePanel(
   const bottomExposureInput = document.getElementById('bottom-exposure') as HTMLInputElement | null;
   const liftHeightInput = document.getElementById('lift-height') as HTMLInputElement | null;
   const liftSpeedInput = document.getElementById('lift-speed') as HTMLInputElement | null;
+  const exportCacheModeSelect = document.getElementById(
+    'export-cache-mode',
+  ) as HTMLSelectElement | null;
   const summaryPanel = document.getElementById('summary-panel');
   const printEstimate = document.getElementById('print-estimate');
   const layerPreviewPanel = document.getElementById('layer-preview-panel');
   const layerSlider = document.getElementById('layer-slider') as HTMLInputElement | null;
+  if (exportCacheModeSelect) exportCacheModeSelect.value = exportCacheMode.value;
 
   function getSettings(): {
     layerHeight: number;
@@ -189,6 +194,12 @@ export function mountSlicePanel(
   });
   listen(sliceAllBtn, 'click', () => {
     void handleSliceAll();
+  });
+  listen(exportCacheModeSelect, 'change', () => {
+    const next = exportCacheModeSelect?.value;
+    if (next === 'fast-slice' || next === 'fast-export' || next === 'balanced') {
+      exportCacheMode.value = next;
+    }
   });
 
   // Settings change → update estimate

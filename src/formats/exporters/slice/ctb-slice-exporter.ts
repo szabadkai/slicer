@@ -26,6 +26,7 @@ import type {
 } from '@core/format-registry';
 import type { PrinterSpec } from '@core/types';
 import { yieldToBrowser } from './export-helpers';
+import { getLayerSourceCount, resolveLayerSourcePngs } from './export-helpers';
 
 // ─── RLE Encoding ──────────────────────────────────────────
 
@@ -152,26 +153,28 @@ async function buildCtbBlob(
   onProgress?: ProgressCallback,
 ): Promise<Blob> {
   const { resolutionX, resolutionY } = printer;
-  const layerCount = source.kind === 'pixels' ? source.layers.length : source.pngs.length;
+  const layerCount = getLayerSourceCount(source);
 
   // Decode PNGs to RGBA if needed
   const rgbas: Uint8Array[] =
     source.kind === 'pixels'
       ? source.layers
       : await Promise.all(
-          source.pngs.map(async (png) => {
-            const blob = new Blob([png.slice(0).buffer as ArrayBuffer], { type: 'image/png' });
-            const bitmap = await createImageBitmap(blob);
-            const canvas = document.createElement('canvas');
-            canvas.width = resolutionX;
-            canvas.height = resolutionY;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) throw new Error('Failed to get 2D context for image decoding');
-            ctx.drawImage(bitmap, 0, 0);
-            bitmap.close();
-            const imgData = ctx.getImageData(0, 0, resolutionX, resolutionY);
-            return new Uint8Array(imgData.data);
-          }),
+          (await resolveLayerSourcePngs(source, resolutionX, resolutionY, onProgress)).map(
+            async (png) => {
+              const blob = new Blob([png.slice(0).buffer as ArrayBuffer], { type: 'image/png' });
+              const bitmap = await createImageBitmap(blob);
+              const canvas = document.createElement('canvas');
+              canvas.width = resolutionX;
+              canvas.height = resolutionY;
+              const ctx = canvas.getContext('2d');
+              if (!ctx) throw new Error('Failed to get 2D context for image decoding');
+              ctx.drawImage(bitmap, 0, 0);
+              bitmap.close();
+              const imgData = ctx.getImageData(0, 0, resolutionX, resolutionY);
+              return new Uint8Array(imgData.data);
+            },
+          ),
         );
   const getLayerRGBA = (i: number): Uint8Array => rgbas[i];
 

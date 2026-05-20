@@ -9,6 +9,7 @@ export function createPlate(index: number): LegacyPlate {
     originX: 0,
     originZ: 0,
     slicedLayers: null,
+    slicedCompactLayers: null,
     slicedLayerCount: 0,
     slicedVolumes: null,
     dirty: true,
@@ -18,6 +19,7 @@ export function createPlate(index: number): LegacyPlate {
 export function clearPlateSlice(plate: LegacyPlate | null): void {
   if (!plate) return;
   plate.slicedLayers = null;
+  plate.slicedCompactLayers = null;
   plate.slicedLayerCount = 0;
   plate.slicedVolumes = null;
   plate.dirty = true;

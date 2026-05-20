@@ -244,6 +244,31 @@ decision:
     compensation tests, and lift/rest timing helpers. These belong in the Slice
     workflow because they tune the same settings used at export time.
 
+23. **Cropped slice readback and layer payloads**
+
+    Reduce full-frame slicing work by reading, scanning, caching, and encoding
+    only the active model/support footprint when it occupies a subset of the LCD.
+    This should build on the current WebGL2 async readback path rather than
+    replacing it.
+
+    The cropped layer payload should carry full printer dimensions plus crop
+    metadata: `x`, `y`, `width`, and `height`. Workers and exporters must
+    reconstruct full-size printer layers when producing PNG ZIP, CWS, SL1, CTB,
+    or GOO output, so printer-facing output remains dimensionally identical.
+
+    Design constraints:
+
+    - Compute a conservative plate-space XY footprint from model and support
+      bounds, with padding for paint/displacement effects.
+    - Keep full-frame `renderLayer()` available for layer preview, QA, and
+      fallback export until all consumers understand cropped payloads.
+    - Make cache strategy explicit: cache cheap cropped/empty/sparse layers
+      during slicing, skip dense/heavy layers when fast slicing is preferred,
+      and render missing layers on export.
+    - Track timings separately for cropped readback, cropped compacting, full
+      reconstruction, and exporter fallback so the performance tradeoff is
+      measurable.
+
 ## Licensing And Integration Notes
 
 Runebrace and UVtools are useful product benchmarks, but SliceLab should not copy

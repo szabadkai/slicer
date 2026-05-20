@@ -16,6 +16,7 @@ import {
   Issue,
   InspectionReport,
 } from './inspector-types';
+import { DEFAULT_OVERHANG_PARAMS } from './features/support-generation/detect';
 
 // Re-export so callers can keep a single import site.
 export { Severity, IssueTypes, Issue, InspectionReport };
@@ -65,7 +66,7 @@ export class ModelInspector {
       weldTolerance: options.weldTolerance ?? 0.001,
       thinFeatureThreshold: options.thinFeatureThreshold ?? 0.3,
       smallComponentThreshold: options.smallComponentThreshold ?? 1.0,
-      overhangAngle: options.overhangAngle ?? 45,
+      overhangAngle: options.overhangAngle ?? DEFAULT_OVERHANG_PARAMS.angleDeg,
       printerSpec: options.printerSpec ?? null,
     };
   }

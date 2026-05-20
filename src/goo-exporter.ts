@@ -10,7 +10,12 @@
  *   [LAYER TABLE] – 16-byte entries, one per layer, pointing into the data section
  *   [LAYER DATA]  – RLE-compressed 1-bit pixel data per layer
  */
-import { yieldToBrowser } from './formats/exporters/slice/export-helpers';
+import {
+  getLayerSourceCount,
+  resolveLayerSourcePngs,
+  yieldToBrowser,
+} from './formats/exporters/slice/export-helpers';
+import type { LayerSource } from './core/format-registry';
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -38,10 +43,6 @@ interface PrinterSpecLike {
 }
 
 type ProgressCallback = (current: number, total: number, extra?: string) => void;
-
-export type LayerSource =
-  | { kind: 'pixels'; layers: Uint8Array[] }
-  | { kind: 'png'; pngs: Uint8Array[] };
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -136,7 +137,7 @@ export async function exportGooToBlob(
   onProgress?: ProgressCallback,
 ): Promise<Blob> {
   const { resolutionX, resolutionY } = printerSpec;
-  const layerCount = source.kind === 'pixels' ? source.layers.length : source.pngs.length;
+  const layerCount = getLayerSourceCount(source);
 
   // ── Obtain synchronous RGBA layer accessor ─────────────────
   // Pre-decode PNGs to RGBA upfront so the remainder can be synchronous.
@@ -144,19 +145,21 @@ export async function exportGooToBlob(
     source.kind === 'pixels'
       ? source.layers
       : await Promise.all(
-          source.pngs.map(async (png) => {
-            const blob = new Blob([png.slice(0).buffer as ArrayBuffer], { type: 'image/png' });
-            const bitmap = await createImageBitmap(blob);
-            const canvas = document.createElement('canvas');
-            canvas.width = resolutionX;
-            canvas.height = resolutionY;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) throw new Error('Failed to get 2D context for image decoding');
-            ctx.drawImage(bitmap, 0, 0);
-            bitmap.close();
-            const imgData = ctx.getImageData(0, 0, resolutionX, resolutionY);
-            return new Uint8Array(imgData.data);
-          }),
+          (await resolveLayerSourcePngs(source, resolutionX, resolutionY, onProgress)).map(
+            async (png) => {
+              const blob = new Blob([png.slice(0).buffer as ArrayBuffer], { type: 'image/png' });
+              const bitmap = await createImageBitmap(blob);
+              const canvas = document.createElement('canvas');
+              canvas.width = resolutionX;
+              canvas.height = resolutionY;
+              const ctx = canvas.getContext('2d');
+              if (!ctx) throw new Error('Failed to get 2D context for image decoding');
+              ctx.drawImage(bitmap, 0, 0);
+              bitmap.close();
+              const imgData = ctx.getImageData(0, 0, resolutionX, resolutionY);
+              return new Uint8Array(imgData.data);
+            },
+          ),
         );
   const getLayerRGBA = (i: number): Uint8Array => rgbas[i];
 
@@ -307,7 +310,7 @@ export async function exportGoo(
   onProgress?: ProgressCallback,
 ): Promise<void> {
   const blob = await exportGooToBlob(source, settings, printerSpec, onProgress);
-  const layerCount = source.kind === 'pixels' ? source.layers.length : source.pngs.length;
+  const layerCount = getLayerSourceCount(source);
   const safeName = printerSpec.name.replace(/\s+/g, '-').toLowerCase();
   downloadBlob(blob, `${safeName}_${layerCount}layers.goo`);
 }

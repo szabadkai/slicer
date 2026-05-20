@@ -5,6 +5,7 @@
 import type { AppContext, PrinterSpec, ProjectState } from '@core/types';
 import type { LegacyPlate, SlicedVolumes } from '@core/legacy-types';
 import { slicedLayerCount, slicedVolumes, inspectorAreaData } from '@core/state';
+import { slicedCompactLayers, slicedLayerPngs } from '@features/layer-preview/ops';
 import { mountShell } from './shell';
 import { mountContextMenu, mountViewportContextMenu } from './context-menu';
 import { mountFileHandling } from './file-handling';
@@ -63,12 +64,16 @@ export function mountApp(ctx: AppContext, PRINTERS: Record<string, PrinterSpec>)
     const plate = getActivePlate();
     plate.slicedLayerCount = slicedLayerCount.value;
     plate.slicedLayers = slicedLayerCount.value > 0 ? [] : null;
+    plate.slicedCompactLayers =
+      slicedCompactLayers.value.length > 0 ? slicedCompactLayers.value : null;
     plate.slicedVolumes = slicedVolumes.value;
   }
 
   function syncSliceRefsFromActivePlate(): void {
     const plate = getActivePlate();
     slicedLayerCount.value = plate.slicedLayerCount ?? 0;
+    slicedCompactLayers.value = plate.slicedCompactLayers ?? [];
+    slicedLayerPngs.value = [];
     slicedVolumes.value = plate.slicedVolumes ?? null;
     inspectorAreaData.value = null;
   }
@@ -79,8 +84,11 @@ export function mountApp(ctx: AppContext, PRINTERS: Record<string, PrinterSpec>)
     inspectorAreaData.value = null;
     const plate = getActivePlate();
     plate.slicedLayers = null;
+    plate.slicedCompactLayers = null;
     plate.slicedLayerCount = 0;
     plate.slicedVolumes = null;
+    slicedCompactLayers.value = [];
+    slicedLayerPngs.value = [];
     plate.dirty = true;
     const layerPanel = document.getElementById('layer-preview-panel');
     if (layerPanel) layerPanel.hidden = true;
@@ -272,6 +280,7 @@ async function restoreOrLoadDefault(
         originZ: sp.originZ,
         dirty: true,
         slicedLayers: null,
+        slicedCompactLayers: null,
         slicedVolumes: null,
       }));
       project.plates = restoredPlates;

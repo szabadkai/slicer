@@ -35,6 +35,7 @@ export function mountPlatePanel(
       originZ: 0,
       dirty: false,
       slicedLayers: null,
+      slicedCompactLayers: null,
       slicedLayerCount: 0,
       slicedVolumes: null,
     };

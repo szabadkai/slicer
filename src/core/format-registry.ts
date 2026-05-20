@@ -1,5 +1,6 @@
 import type { PrinterSpec } from './types';
 import type { ParsedGeometry } from '@features/model-io/load';
+import type { CompactGrayLayer } from '../png-encode-pool';
 
 // ─── Importer ──────────────────────────────────────────────
 
@@ -35,7 +36,18 @@ export interface MeshExporter {
 
 export type LayerSource =
   | { kind: 'pixels'; layers: Uint8Array[] }
-  | { kind: 'png'; pngs: Uint8Array[] };
+  | { kind: 'compact'; layers: CompactGrayLayer[] }
+  | { kind: 'png'; pngs: Uint8Array[] }
+  | {
+      kind: 'png-renderer';
+      layerCount: number;
+      renderPngs: (onProgress?: ProgressCallback) => Promise<Uint8Array[]>;
+    }
+  | {
+      kind: 'compact-renderer';
+      layerCount: number;
+      renderCompactLayers: (onProgress?: ProgressCallback) => Promise<CompactGrayLayer[]>;
+    };
 
 export type ProgressCallback = (current: number, total: number, extra?: string) => void;
 

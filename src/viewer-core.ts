@@ -4,6 +4,7 @@
  */
 
 import * as THREE from 'three';
+import type { CompactGrayLayer } from './png-encode-pool';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import type { PrimitiveParams, PrimitiveTransform } from '@core/primitives';
@@ -95,6 +96,7 @@ export interface PlateState {
   originZ: number;
   dirty: boolean;
   slicedLayers?: Uint8Array[] | null;
+  slicedCompactLayers?: CompactGrayLayer[] | null;
   slicedVolumes?: unknown;
 }
 

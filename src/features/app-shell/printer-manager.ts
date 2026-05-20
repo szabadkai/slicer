@@ -69,6 +69,7 @@ export function createPrinterManager(deps: PrinterManagerDeps): PrinterManager {
     if (resetSlice) {
       project.plates.forEach((p: LegacyPlate) => {
         p.slicedLayers = null;
+        p.slicedCompactLayers = null;
         p.slicedVolumes = null;
         p.dirty = true;
       });

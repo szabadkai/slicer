@@ -3,6 +3,7 @@
  */
 import type { AppContext } from '@core/types';
 import { listen } from '@features/app-shell/utils';
+import { DEFAULT_OVERHANG_PARAMS } from '@features/support-generation/detect';
 
 function readInput(id: string, fallback: string): string {
   return (document.getElementById(id) as HTMLInputElement | null)?.value ?? fallback;
@@ -17,7 +18,9 @@ function readSupportOptions(
   onProgress: (fraction: number, text: string) => void,
 ): Record<string, unknown> {
   return {
-    overhangAngle: parseFloat(readInput('overhang-angle', '45')),
+    overhangAngle: parseFloat(
+      readInput('overhang-angle', String(DEFAULT_OVERHANG_PARAMS.angleDeg)),
+    ),
     density: parseFloat(readInput('support-density', '50')),
     autoDensity: readChecked('auto-density', true),
     tipDiameter: parseFloat(readInput('tip-diameter', '0.4')),

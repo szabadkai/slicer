@@ -6,6 +6,7 @@
 
 import type { PrinterSpec, ResinMaterial } from './types';
 import type { PrimitiveParams, PrimitiveTransform } from './primitives';
+import type { CompactGrayLayer } from '../png-encode-pool';
 
 // ─── Geometry-like plain objects (avoids THREE.js imports) ──
 
@@ -246,6 +247,7 @@ export interface LegacyPlate {
   originZ: number;
   dirty: boolean;
   slicedLayers?: Uint8Array[] | null;
+  slicedCompactLayers?: CompactGrayLayer[] | null;
   slicedLayerCount?: number;
   slicedVolumes?: SlicedVolumes | null;
 }
@@ -283,7 +285,31 @@ export interface LegacySlicer {
   slice(
     layerHeightMM: number,
     onProgress: (current: number, total: number) => void,
-    options?: { collect?: boolean; onLayer?: (pixels: Uint8Array, index: number) => void },
+    options?: {
+      collect?: boolean;
+      onLayer?: (
+        pixels: Uint8Array,
+        index: number,
+        region?: {
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+          fullWidth: number;
+          fullHeight: number;
+        },
+      ) => void;
+      onTiming?: (timing: {
+        layerCount: number;
+        renderMs: number;
+        readbackMs: number;
+        paintMs: number;
+        totalMs: number;
+        asyncReadback?: boolean;
+        croppedReadback?: boolean;
+        readbackPixels?: number;
+      }) => void;
+    },
   ): Promise<Uint8Array[] | null>;
   renderLayer(layerIndex: number, layerHeightMM: number, target?: Uint8Array): Uint8Array;
   getPrinterSpec(): PrinterSpec;

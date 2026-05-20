@@ -4,6 +4,7 @@
 /* eslint-disable no-restricted-imports */
 import * as THREE from 'three';
 import type { AppContext } from '@core/types';
+import { disposeGeometry, ensureGeometryBoundsTree } from '../../geometry-bvh';
 
 export function getScene(viewer: AppContext['viewer']): THREE.Scene {
   return (viewer as unknown as { scene: THREE.Scene }).scene;
@@ -24,7 +25,8 @@ export function setMeshGeometry(viewer: AppContext['viewer'], geo: THREE.BufferG
   const sel = viewer.selected[0];
   if (!sel) return;
   const mesh = sel.mesh as unknown as THREE.Mesh;
-  mesh.geometry.dispose();
+  disposeGeometry(mesh.geometry);
+  ensureGeometryBoundsTree(geo);
   mesh.geometry = geo;
   mesh.geometry.computeBoundingBox();
   mesh.geometry.computeVertexNormals();
@@ -76,16 +78,16 @@ export function removeSceneObjectById(viewer: AppContext['viewer'], id: string):
   const obj = legacy.objects.find((item) => item.id === id);
   if (!obj) return;
   legacy.scene.remove(obj.mesh);
-  obj.mesh.geometry.dispose();
+  disposeGeometry(obj.mesh.geometry);
   disposeMaterial(obj.mesh.material);
   if (obj.supportsMesh) {
     legacy.scene.remove(obj.supportsMesh);
-    obj.supportsMesh.geometry.dispose();
+    disposeGeometry(obj.supportsMesh.geometry);
     disposeMaterial(obj.supportsMesh.material);
   }
   if (obj.bracingMesh) {
     legacy.scene.remove(obj.bracingMesh);
-    obj.bracingMesh.geometry.dispose();
+    disposeGeometry(obj.bracingMesh.geometry);
     disposeMaterial(obj.bracingMesh.material);
   }
   legacy.objects = legacy.objects.filter((item) => item.id !== id);

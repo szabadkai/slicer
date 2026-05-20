@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { disposeGeometryBoundsTree, ensureGeometryBoundsTree } from '../../geometry-bvh';
 
 export interface HollowResult {
   hollowGeo: THREE.BufferGeometry; // outer + inner merged — replaces mesh.geometry
@@ -148,7 +149,7 @@ export function checkThinWalls(
 
   const ray = new THREE.Raycaster();
   const tempMesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ side: THREE.BackSide }));
-  (tempMesh.geometry as unknown as { computeBoundsTree?: () => void }).computeBoundsTree?.();
+  ensureGeometryBoundsTree(tempMesh.geometry);
 
   for (let i = 0; i < total; i += step) {
     const origin = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i));
@@ -162,7 +163,7 @@ export function checkThinWalls(
     }
   }
 
-  (tempMesh.geometry as unknown as { disposeBoundsTree?: () => void }).disposeBoundsTree?.();
+  disposeGeometryBoundsTree(tempMesh.geometry);
 
   return {
     hasThinWalls: minThickness < wallThickness * 0.7,

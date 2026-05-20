@@ -6,6 +6,7 @@ import {
   setPillarSet,
   type ModelPillarSet,
 } from './features/support-generation/pillar-store';
+import { disposeGeometry, ensureGeometryBoundsTree } from './geometry-bvh';
 
 interface PillarEditEntry {
   type: 'pillar-edit';
@@ -52,6 +53,37 @@ function snapshotPillarEdit(modelId: string): PillarEditEntry {
 function restorePillarEdit(viewer: Viewer, entry: PillarEditEntry): void {
   setPillarSet(entry.modelId, clonePillarSet(entry.previousPillarSet));
   viewer.rebuildSupportsFromStore(entry.modelId);
+}
+
+function disposeSceneObject(viewer: Viewer, obj: SceneObject): void {
+  viewer.scene.remove(obj.mesh);
+  disposeGeometry(obj.mesh.geometry);
+  (obj.mesh.material as THREE.Material).dispose();
+  if (obj.supportsMesh) {
+    viewer.scene.remove(obj.supportsMesh);
+    disposeGeometry(obj.supportsMesh.geometry);
+    (obj.supportsMesh.material as THREE.Material).dispose();
+  }
+  if (obj.bracingMesh) {
+    viewer.scene.remove(obj.bracingMesh);
+    disposeGeometry(obj.bracingMesh.geometry);
+    (obj.bracingMesh.material as THREE.Material).dispose();
+  }
+}
+
+function restoreSnapshotMesh(s: {
+  geometry: THREE.BufferGeometry;
+  material: THREE.Material;
+  position: THREE.Vector3;
+  rotation: THREE.Euler;
+  scale: THREE.Vector3;
+}): THREE.Mesh {
+  ensureGeometryBoundsTree(s.geometry);
+  const mesh = new THREE.Mesh(s.geometry, s.material);
+  mesh.position.copy(s.position);
+  mesh.rotation.copy(s.rotation);
+  mesh.scale.copy(s.scale);
+  return mesh;
 }
 
 // ---- undo / clipboard -----------------------------------------------------
@@ -179,29 +211,12 @@ export function undo(viewer: Viewer): void {
       scale: THREE.Vector3;
       elevation: number;
     }[];
-    viewer.objects.forEach((o) => {
-      viewer.scene.remove(o.mesh);
-      o.mesh.geometry.dispose();
-      (o.mesh.material as THREE.Material).dispose();
-      if (o.supportsMesh) {
-        viewer.scene.remove(o.supportsMesh);
-        o.supportsMesh.geometry.dispose();
-        (o.supportsMesh.material as THREE.Material).dispose();
-      }
-      if (o.bracingMesh) {
-        viewer.scene.remove(o.bracingMesh);
-        o.bracingMesh.geometry.dispose();
-        (o.bracingMesh.material as THREE.Material).dispose();
-      }
-    });
+    viewer.objects.forEach((o) => disposeSceneObject(viewer, o));
     viewer.objects = [];
     viewer.activePlate.objects = viewer.objects;
     viewer.selected = [];
     snap.forEach((s) => {
-      const mesh = new THREE.Mesh(s.geometry, s.material);
-      mesh.position.copy(s.position);
-      mesh.rotation.copy(s.rotation);
-      mesh.scale.copy(s.scale);
+      const mesh = restoreSnapshotMesh(s);
       const id = 'obj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
       mesh.userData.id = id;
       viewer.scene.add(mesh);
@@ -242,19 +257,7 @@ function undoMultiPlate(
   const plateMap = new Map(viewer.plates.map((pl) => [pl.id, pl]));
   for (const pl of viewer.plates) {
     for (const o of pl.objects) {
-      viewer.scene.remove(o.mesh);
-      o.mesh.geometry.dispose();
-      (o.mesh.material as THREE.Material).dispose();
-      if (o.supportsMesh) {
-        viewer.scene.remove(o.supportsMesh);
-        o.supportsMesh.geometry.dispose();
-        (o.supportsMesh.material as THREE.Material).dispose();
-      }
-      if (o.bracingMesh) {
-        viewer.scene.remove(o.bracingMesh);
-        o.bracingMesh.geometry.dispose();
-        (o.bracingMesh.material as THREE.Material).dispose();
-      }
+      disposeSceneObject(viewer, o);
     }
     pl.objects = [];
   }
@@ -262,10 +265,7 @@ function undoMultiPlate(
     const plate = plateMap.get(plateSnap.plateId);
     if (!plate) continue;
     for (const s of plateSnap.objects) {
-      const mesh = new THREE.Mesh(s.geometry, s.material);
-      mesh.position.copy(s.position);
-      mesh.rotation.copy(s.rotation);
-      mesh.scale.copy(s.scale);
+      const mesh = restoreSnapshotMesh(s);
       mesh.userData.id = s.id;
       viewer.scene.add(mesh);
       plate.objects.push({
@@ -320,29 +320,12 @@ export function redo(viewer: Viewer): void {
       scale: THREE.Vector3;
       elevation: number;
     }[];
-    viewer.objects.forEach((o) => {
-      viewer.scene.remove(o.mesh);
-      o.mesh.geometry.dispose();
-      (o.mesh.material as THREE.Material).dispose();
-      if (o.supportsMesh) {
-        viewer.scene.remove(o.supportsMesh);
-        o.supportsMesh.geometry.dispose();
-        (o.supportsMesh.material as THREE.Material).dispose();
-      }
-      if (o.bracingMesh) {
-        viewer.scene.remove(o.bracingMesh);
-        o.bracingMesh.geometry.dispose();
-        (o.bracingMesh.material as THREE.Material).dispose();
-      }
-    });
+    viewer.objects.forEach((o) => disposeSceneObject(viewer, o));
     viewer.objects = [];
     viewer.activePlate.objects = viewer.objects;
     viewer.selected = [];
     snap.forEach((s) => {
-      const mesh = new THREE.Mesh(s.geometry, s.material);
-      mesh.position.copy(s.position);
-      mesh.rotation.copy(s.rotation);
-      mesh.scale.copy(s.scale);
+      const mesh = restoreSnapshotMesh(s);
       const id = 'obj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
       mesh.userData.id = id;
       viewer.scene.add(mesh);

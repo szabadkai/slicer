@@ -1,9 +1,13 @@
 import JSZip from 'jszip';
 import {
   addPngFilesToZip,
+  encodeCompactLayersToPngs,
   encodePixelLayersToPngs,
+  getLayerSourceCount,
+  resolveLayerSourcePngs,
   yieldToBrowser,
 } from './formats/exporters/slice/export-helpers';
+import type { CompactGrayLayer } from './png-encode-pool';
 
 interface Vec3 {
   x: number;
@@ -264,7 +268,18 @@ type ProgressCallback = (current: number, total: number, extra?: string) => void
  */
 export type LayerSource =
   | { kind: 'pixels'; layers: Uint8Array[] }
-  | { kind: 'png'; pngs: Uint8Array[] };
+  | { kind: 'compact'; layers: CompactGrayLayer[] }
+  | { kind: 'png'; pngs: Uint8Array[] }
+  | {
+      kind: 'png-renderer';
+      layerCount: number;
+      renderPngs: (onProgress?: ProgressCallback) => Promise<Uint8Array[]>;
+    }
+  | {
+      kind: 'compact-renderer';
+      layerCount: number;
+      renderCompactLayers: (onProgress?: ProgressCallback) => Promise<CompactGrayLayer[]>;
+    };
 
 /**
  * Export sliced layers as a ZIP of PNG images.
@@ -280,7 +295,7 @@ export async function exportZipToBlob(
 ): Promise<Blob> {
   const zip = new JSZip();
   const { resolutionX, resolutionY } = printerSpec;
-  const layerCount = source.kind === 'pixels' ? source.layers.length : source.pngs.length;
+  const layerCount = getLayerSourceCount(source);
 
   if (source.kind === 'png') {
     await addPngFilesToZip(
@@ -289,8 +304,14 @@ export async function exportZipToBlob(
       (i) => `layer_${String(i).padStart(5, '0')}.png`,
       onProgress,
     );
-  } else {
+  } else if (source.kind === 'pixels') {
     const pngs = await encodePixelLayersToPngs(source, resolutionX, resolutionY, onProgress);
+    await addPngFilesToZip(zip, pngs, (i) => `layer_${String(i).padStart(5, '0')}.png`, onProgress);
+  } else if (source.kind === 'compact') {
+    const pngs = await encodeCompactLayersToPngs(source, resolutionX, resolutionY, onProgress);
+    await addPngFilesToZip(zip, pngs, (i) => `layer_${String(i).padStart(5, '0')}.png`, onProgress);
+  } else {
+    const pngs = await resolveLayerSourcePngs(source, resolutionX, resolutionY, onProgress);
     await addPngFilesToZip(zip, pngs, (i) => `layer_${String(i).padStart(5, '0')}.png`, onProgress);
   }
 
@@ -331,7 +352,7 @@ export async function exportZip(
   onProgress?: ProgressCallback,
 ): Promise<void> {
   const content = await exportZipToBlob(source, settings, printerSpec, onProgress);
-  const layerCount = source.kind === 'pixels' ? source.layers.length : source.pngs.length;
+  const layerCount = getLayerSourceCount(source);
   const safeName = printerSpec.name.replace(/\s+/g, '-').toLowerCase();
   downloadBlob(content, `${safeName}_${layerCount}layers.zip`);
 }

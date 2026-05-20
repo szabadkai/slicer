@@ -13,7 +13,12 @@ import type {
   ProgressCallback,
 } from '@core/format-registry';
 import type { PrinterSpec } from '@core/types';
-import { addPngFilesToZip, encodePixelLayersToPngs, yieldToBrowser } from './export-helpers';
+import {
+  addPngFilesToZip,
+  getLayerSourceCount,
+  resolveLayerSourcePngs,
+  yieldToBrowser,
+} from './export-helpers';
 
 function buildConfigIni(settings: SliceSettings, layerCount: number): string {
   const lines: string[] = [
@@ -58,7 +63,7 @@ async function buildSl1Blob(
 ): Promise<Blob> {
   const JSZip = (await import('jszip')).default;
   const zip = new JSZip();
-  const layerCount = source.kind === 'pixels' ? source.layers.length : source.pngs.length;
+  const layerCount = getLayerSourceCount(source);
 
   if (source.kind === 'png') {
     await addPngFilesToZip(
@@ -69,7 +74,7 @@ async function buildSl1Blob(
     );
   } else {
     const { resolutionX, resolutionY } = printer;
-    const pngs = await encodePixelLayersToPngs(source, resolutionX, resolutionY, onProgress);
+    const pngs = await resolveLayerSourcePngs(source, resolutionX, resolutionY, onProgress);
     await addPngFilesToZip(zip, pngs, (i) => `${String(i).padStart(5, '0')}.png`, onProgress);
   }
 

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Viewer } from './viewer';
 import type { SceneObject, PlateState } from './viewer-core';
+import { ensureGeometryBoundsTree } from './geometry-bvh';
 
 export const DEFAULT_ARRANGE_ELEVATION = 10;
 
@@ -124,10 +125,9 @@ export function replaceActiveObjects(viewer: Viewer, objects: SceneObject[]): vo
 export function duplicateObjectsForPlate(viewer: Viewer, objects?: SceneObject[]): SceneObject[] {
   const objs = objects ?? viewer.objects;
   return objs.map((src) => {
-    const mesh = new THREE.Mesh(
-      src.mesh.geometry.clone(),
-      (src.mesh.material as THREE.Material).clone(),
-    );
+    const geometry = src.mesh.geometry.clone();
+    ensureGeometryBoundsTree(geometry);
+    const mesh = new THREE.Mesh(geometry, (src.mesh.material as THREE.Material).clone());
     mesh.position.copy(src.mesh.position);
     mesh.rotation.copy(src.mesh.rotation);
     mesh.scale.copy(src.mesh.scale);
@@ -136,8 +136,10 @@ export function duplicateObjectsForPlate(viewer: Viewer, objects?: SceneObject[]
     mesh.updateMatrixWorld(true);
     let supportsMesh: THREE.Mesh | null = null;
     if (src.supportsMesh) {
+      const supportGeometry = src.supportsMesh.geometry.clone();
+      ensureGeometryBoundsTree(supportGeometry);
       supportsMesh = new THREE.Mesh(
-        src.supportsMesh.geometry.clone(),
+        supportGeometry,
         (src.supportsMesh.material as THREE.Material).clone(),
       );
       supportsMesh.position.copy(src.supportsMesh.position);
@@ -147,8 +149,10 @@ export function duplicateObjectsForPlate(viewer: Viewer, objects?: SceneObject[]
     }
     let bracingMesh: THREE.Mesh | null = null;
     if (src.bracingMesh) {
+      const bracingGeometry = src.bracingMesh.geometry.clone();
+      ensureGeometryBoundsTree(bracingGeometry);
       bracingMesh = new THREE.Mesh(
-        src.bracingMesh.geometry.clone(),
+        bracingGeometry,
         (src.bracingMesh.material as THREE.Material).clone(),
       );
       bracingMesh.position.copy(src.bracingMesh.position);
@@ -222,9 +226,11 @@ function moveObjectToPlate(viewer: Viewer, obj: SceneObject, target: PlateState)
   if (idx !== -1) cur.objects.splice(idx, 1);
   target.objects.push(obj);
   cur.slicedLayers = null;
+  cur.slicedCompactLayers = null;
   cur.slicedVolumes = null;
   cur.dirty = true;
   target.slicedLayers = null;
+  target.slicedCompactLayers = null;
   target.slicedVolumes = null;
   target.dirty = true;
 }

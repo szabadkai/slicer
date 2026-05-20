@@ -17,6 +17,7 @@ import {
   removePillar as removePillarFromStore,
   rebuildSupportsMesh,
 } from './features/support-generation/pillar-store';
+import { disposeGeometry, ensureGeometryBoundsTree } from './geometry-bvh';
 
 interface ViewerLike {
   scene: THREE.Scene;
@@ -61,13 +62,13 @@ export function setSupportsMesh(
   if (!obj) return;
   if (obj.supportsMesh) {
     viewer.scene.remove(obj.supportsMesh);
-    obj.supportsMesh.geometry.dispose();
+    disposeGeometry(obj.supportsMesh.geometry);
     (obj.supportsMesh.material as THREE.Material).dispose();
     obj.supportsMesh = null;
   }
   if (obj.bracingMesh) {
     viewer.scene.remove(obj.bracingMesh);
-    obj.bracingMesh.geometry.dispose();
+    disposeGeometry(obj.bracingMesh.geometry);
     (obj.bracingMesh.material as THREE.Material).dispose();
     obj.bracingMesh = null;
   }
@@ -78,12 +79,14 @@ export function setSupportsMesh(
     viewer.activePlate.originZ || 0,
   );
   if (geo && (geo.attributes.position?.count ?? 0) > 0) {
+    ensureGeometryBoundsTree(geo);
     const mesh = new THREE.Mesh(geo, SUPPORT_MATERIAL());
     mesh.position.copy(platePos);
     obj.supportsMesh = mesh;
     viewer.scene.add(mesh);
   }
   if (bracingGeo && (bracingGeo.attributes.position?.count ?? 0) > 0) {
+    ensureGeometryBoundsTree(bracingGeo);
     const mesh = new THREE.Mesh(bracingGeo, BRACING_MATERIAL());
     mesh.position.copy(platePos);
     obj.bracingMesh = mesh;
@@ -96,13 +99,13 @@ export function clearSupports(viewer: ViewerLike): void {
   viewer.selected.forEach((s) => {
     if (s.supportsMesh) {
       viewer.scene.remove(s.supportsMesh);
-      s.supportsMesh.geometry.dispose();
+      disposeGeometry(s.supportsMesh.geometry);
       (s.supportsMesh.material as THREE.Material).dispose();
       s.supportsMesh = null;
     }
     if (s.bracingMesh) {
       viewer.scene.remove(s.bracingMesh);
-      s.bracingMesh.geometry.dispose();
+      disposeGeometry(s.bracingMesh.geometry);
       (s.bracingMesh.material as THREE.Material).dispose();
       s.bracingMesh = null;
     }

@@ -6,6 +6,7 @@ import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import type { ViewerCore, SceneObject } from './viewer-core';
 import { createResinMaterial } from './viewer-core';
 import { syncPaintMaterial } from './viewer-core-paint';
+import { disposeGeometry, ensureBvhRaycast, ensureGeometryBoundsTree } from './geometry-bvh';
 
 export function loadSTL(core: ViewerCore, buffer: ArrayBuffer, scale = 1): void {
   const geo = new STLLoader().parse(buffer);
@@ -66,6 +67,8 @@ export function addModelRaw(
   material: THREE.Material | null,
   elevation: number,
 ): SceneObject {
+  ensureBvhRaycast();
+  ensureGeometryBoundsTree(geometry);
   const preset = core.defaultMaterialPreset;
   if (!material) material = createResinMaterial(preset);
   const mesh = new THREE.Mesh(geometry, material);
@@ -120,16 +123,16 @@ export function removeSelected(core: ViewerCore): void {
   core.objects.forEach((o) => {
     if (ids.has(o.id)) {
       core.scene.remove(o.mesh);
-      o.mesh.geometry.dispose();
+      disposeGeometry(o.mesh.geometry);
       (o.mesh.material as THREE.Material).dispose();
       if (o.supportsMesh) {
         core.scene.remove(o.supportsMesh);
-        o.supportsMesh.geometry.dispose();
+        disposeGeometry(o.supportsMesh.geometry);
         (o.supportsMesh.material as THREE.Material).dispose();
       }
       if (o.bracingMesh) {
         core.scene.remove(o.bracingMesh);
-        o.bracingMesh.geometry.dispose();
+        disposeGeometry(o.bracingMesh.geometry);
         (o.bracingMesh.material as THREE.Material).dispose();
       }
     }
@@ -147,16 +150,16 @@ export function clearPlate(core: ViewerCore): void {
   core.transformControl.detach();
   core.objects.forEach((o) => {
     core.scene.remove(o.mesh);
-    o.mesh.geometry.dispose();
+    disposeGeometry(o.mesh.geometry);
     (o.mesh.material as THREE.Material).dispose();
     if (o.supportsMesh) {
       core.scene.remove(o.supportsMesh);
-      o.supportsMesh.geometry.dispose();
+      disposeGeometry(o.supportsMesh.geometry);
       (o.supportsMesh.material as THREE.Material).dispose();
     }
     if (o.bracingMesh) {
       core.scene.remove(o.bracingMesh);
-      o.bracingMesh.geometry.dispose();
+      disposeGeometry(o.bracingMesh.geometry);
       (o.bracingMesh.material as THREE.Material).dispose();
     }
   });

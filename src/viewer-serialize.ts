@@ -7,6 +7,7 @@ import {
   setPillarSet,
   type ModelPillarSet,
 } from './features/support-generation/pillar-store';
+import { ensureGeometryBoundsTree } from './geometry-bvh';
 
 function serializeMeshGeo(mesh: THREE.Mesh): {
   positions: ArrayBuffer;
@@ -62,6 +63,7 @@ function restoreMesh(
     geo.computeVertexNormals();
   }
   geo.computeBoundingBox();
+  ensureGeometryBoundsTree(geo);
   const mesh = new THREE.Mesh(geo, material);
   mesh.position.set(data.position[0], data.position[1], data.position[2]);
   mesh.rotation.set(

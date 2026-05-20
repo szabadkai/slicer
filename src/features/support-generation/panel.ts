@@ -19,6 +19,7 @@ import { overhangOverlayVisible } from './store';
 import { collectSupportContacts, mountSupportIslandNavigator } from './support-island-panel';
 import { mountSupportEditGizmo } from './support-edit-gizmo';
 import { getSupportPreset, SUPPORT_PRESETS, type SupportPresetId } from './support-presets';
+import { DEFAULT_OVERHANG_PARAMS } from './detect';
 
 export function mountSupportPanel(ctx: AppContext): void {
   const { viewer } = ctx;
@@ -136,7 +137,9 @@ export function mountSupportPanel(ctx: AppContext): void {
       }
     }
 
-    const angleDeg = parseFloat(overhangAngle?.value ?? '45');
+    const angleDeg = parseFloat(
+      overhangAngle?.value ?? String(DEFAULT_OVERHANG_PARAMS.angleDeg),
+    );
     viewer.showOverhangOverlay(obj.id, collectSupportContacts(obj.id, contacts), { angleDeg });
   }
 
@@ -251,7 +254,9 @@ export function mountSupportPanel(ctx: AppContext): void {
       : undefined;
 
     return {
-      overhangAngle: parseFloat(overhangAngle?.value ?? '45'),
+      overhangAngle: parseFloat(
+        overhangAngle?.value ?? String(DEFAULT_OVERHANG_PARAMS.angleDeg),
+      ),
       density: parseFloat(supportDensity?.value ?? '50'),
       autoDensity: autoDensity?.checked ?? true,
       tipDiameter: parseFloat(tipDiameter?.value ?? '0.4'),

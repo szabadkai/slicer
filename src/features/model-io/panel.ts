@@ -3,13 +3,14 @@ import type { LegacySlicer } from '@core/legacy-types';
 import { formatRegistry } from '@core/format-registry';
 import type { LayerSource, SliceSettings, ProgressCallback } from '@core/format-registry';
 import { listen } from '@features/app-shell/utils';
+import { makeCompactGrayLayer, withCompactGrayLayerCrop } from '../../png-encode-pool';
 import {
   showContextMenu,
   hideContextMenu,
   getActiveMenuContext,
 } from '@features/app-shell/context-menu';
 import { getSlicedLayerCount, getSlicedVolumes } from '@features/app-shell/mount';
-import { slicedLayerPngs } from '@features/layer-preview/ops';
+import { slicedCompactLayers, slicedLayerPngs } from '@features/layer-preview/ops';
 
 function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
@@ -74,10 +75,50 @@ export function mountExportPanel(
       return { kind: 'png', pngs: cachedPngs };
     }
 
+    const cachedCompact = slicedCompactLayers.value;
+    const compactCacheUsable =
+      cachedCompact.length === layerCount && cachedCompact.every((layer) => !!layer);
+
+    if (compactCacheUsable) {
+      return { kind: 'compact', layers: cachedCompact };
+    }
+
     const spec = slicer.getPrinterSpec();
     const layerHeight = Number.parseFloat(
       (document.getElementById('layer-height') as HTMLInputElement | null)?.value ?? '0.05',
     );
+    if (typeof slicer.slice === 'function') {
+      return {
+        kind: 'compact-renderer',
+        layerCount,
+        renderCompactLayers: async (onProgress?: ProgressCallback) => {
+          const compactLayers: ReturnType<typeof makeCompactGrayLayer>[] = new Array(layerCount);
+          await slicer.slice(
+            layerHeight,
+            (current, total) => {
+              onProgress?.(current, total, `Rendering layer ${current} / ${total}`);
+            },
+            {
+              collect: false,
+              onLayer: (pixels, layerIndex, region) => {
+                const layerWidth = region?.width ?? spec.resolutionX;
+                compactLayers[layerIndex] = withCompactGrayLayerCrop(
+                  makeCompactGrayLayer(pixels, layerWidth),
+                  region ?? null,
+                );
+                onProgress?.(
+                  layerIndex + 1,
+                  layerCount,
+                  `Prepared layer ${layerIndex + 1} / ${layerCount}`,
+                );
+              },
+            },
+          );
+          return compactLayers;
+        },
+      };
+    }
+
     const pixelByteCount = spec.resolutionX * spec.resolutionY * 4;
     const layerProvider: Uint8Array[] = new Proxy([] as Uint8Array[], {
       get(target, prop) {

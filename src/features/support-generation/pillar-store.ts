@@ -12,7 +12,6 @@
  */
 
 import * as THREE from 'three';
-import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
 import {
   buildSupportGeometry,
   generateCrossBracing,
@@ -26,6 +25,7 @@ import {
   type SupportGraphNode,
   type SupportGraphEdge,
 } from '../../supports-graph-geometry';
+import { ensureGeometryBoundsTree, ensureBvhRaycast } from '../../geometry-bvh';
 
 export interface Pillar {
   id: string;
@@ -497,11 +497,7 @@ function squaredDistanceToSegment(
 // ---------------------------------------------------------------------------
 
 function ensureBVHPatched(): void {
-  if (typeof THREE.BufferGeometry.prototype.computeBoundsTree !== 'function') {
-    THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
-    THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
-    THREE.Mesh.prototype.raycast = acceleratedRaycast;
-  }
+  ensureBvhRaycast();
 }
 
 function buildRouteContextFromGeometry(
@@ -509,9 +505,7 @@ function buildRouteContextFromGeometry(
   bounds: THREE.Box3,
 ): RouteContext {
   ensureBVHPatched();
-  if (!(geometry as unknown as { boundsTree: unknown }).boundsTree) {
-    geometry.computeBoundsTree();
-  }
+  ensureGeometryBoundsTree(geometry);
   const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
   mesh.updateMatrixWorld(true);
   const raycaster = new THREE.Raycaster();
